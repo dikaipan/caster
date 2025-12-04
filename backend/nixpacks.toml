@@ -1,0 +1,18 @@
+# Nixpacks configuration for Railway
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "npm-9_x"]
+
+[phases.install]
+cmds = [
+  "npm ci",
+  "npm run prisma:generate"
+]
+
+[phases.build]
+cmds = [
+  "npm run build"
+]
+
+[start]
+cmd = "npm run start:prod"
+
