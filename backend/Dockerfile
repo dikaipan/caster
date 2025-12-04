@@ -29,9 +29,14 @@ COPY package*.json ./
 # Install all dependencies (including devDependencies untuk build)
 RUN npm ci
 
-# Copy all source code (including prisma folder)
-# Railway build context should include prisma folder from git
+# Copy prisma folder explicitly (must exist before generate)
+COPY prisma ./prisma/
+
+# Copy rest of source code
 COPY . .
+
+# Verify prisma schema exists before generate
+RUN test -f prisma/schema.prisma || (echo "ERROR: prisma/schema.prisma not found!" && ls -la prisma/ && exit 1)
 
 # Generate Prisma Client
 RUN npx prisma generate
