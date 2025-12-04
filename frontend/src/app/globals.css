@@ -137,7 +137,7 @@
   /* Better text contrast for body text */
   body {
     color: hsl(var(--foreground));
-    font-size: 0.9375rem; /* 15px - optimal for readability */
+    font-size: 1rem; /* 16px - consistent base size */
     line-height: 1.65; /* Improved line height for better readability */
     letter-spacing: -0.011em; /* Slightly tighter for Inter font */
   }
@@ -181,7 +181,7 @@
   
   /* Table text readability */
   table {
-    font-size: 0.9375rem; /* 15px */
+    font-size: 1rem; /* 16px - consistent with body */
     line-height: 1.6;
   }
   
@@ -238,6 +238,10 @@
   html {
     scroll-behavior: smooth;
     font-size: 16px; /* Base font size - prevents browser zoom scaling */
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   
   /* Prevent browser zoom scaling issues */
@@ -245,8 +249,17 @@
     box-sizing: border-box;
   }
   
-  /* Ensure consistent font rendering */
+  /* Ensure consistent font rendering across all browsers */
   body {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    font-size: 1rem !important; /* Force consistent base size */
+  }
+  
+  /* Prevent any scaling on all elements */
+  * {
     -webkit-text-size-adjust: 100%;
     -moz-text-size-adjust: 100%;
     -ms-text-size-adjust: 100%;
