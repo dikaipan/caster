@@ -1,11 +1,5 @@
-// Fix for @nestjs/schedule: Ensure crypto is available globally BEFORE any imports
-import * as crypto from 'crypto';
-if (typeof globalThis.crypto === 'undefined') {
-  (globalThis as any).crypto = crypto;
-}
-if (typeof (globalThis as any).crypto.randomUUID === 'undefined') {
-  (globalThis as any).crypto.randomUUID = () => crypto.randomUUID();
-}
+// Import polyfills FIRST before any other imports
+import './polyfills';
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
