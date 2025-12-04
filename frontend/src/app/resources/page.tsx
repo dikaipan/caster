@@ -279,8 +279,8 @@ export default function ResourcesPage() {
     return matchesSearch && matchesStatus;
   });
 
-  // Paginate cassettes
-  const cassetteTotalPages = Math.ceil(filteredCassettes.length / cassetteItemsPerPage);
+  // Paginate cassettes (use filtered length for local pagination)
+  const filteredCassetteTotalPages = Math.ceil(filteredCassettes.length / cassetteItemsPerPage);
   const cassetteStartIndex = (cassetteCurrentPage - 1) * cassetteItemsPerPage;
   const cassetteEndIndex = cassetteStartIndex + cassetteItemsPerPage;
   const paginatedCassettes = filteredCassettes.slice(cassetteStartIndex, cassetteEndIndex);
@@ -504,7 +504,7 @@ export default function ResourcesPage() {
                   </div>
 
                   {/* Pagination */}
-                  {cassetteTotalPages > 1 && (
+                  {filteredCassetteTotalPages > 1 && (
                     <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/20">
                       <div className="text-sm text-muted-foreground">
                         Showing <span className="font-medium">{cassetteStartIndex + 1}</span> to{' '}
@@ -522,13 +522,13 @@ export default function ResourcesPage() {
                           Previous
                         </Button>
                         <div className="text-sm font-medium px-4">
-                          Page {cassetteCurrentPage} of {cassetteTotalPages}
+                          Page {cassetteCurrentPage} of {filteredCassetteTotalPages}
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setCassetteCurrentPage(cassetteCurrentPage + 1)}
-                          disabled={cassetteCurrentPage >= cassetteTotalPages}
+                          disabled={cassetteCurrentPage >= filteredCassetteTotalPages}
                         >
                           Next
                           <ChevronRight className="h-4 w-4 ml-1" />
