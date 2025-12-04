@@ -649,7 +649,9 @@ export default function PMDetailPage() {
                         </div>
                         <div>
                           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">{pm.pmNumber}</h1>
-                          <p className="text-slate-700 dark:text-slate-300 text-sm font-medium mt-0.5">{pm.title || 'Preventive Maintenance'}</p>
+                          <p className="text-slate-700 dark:text-slate-300 text-sm font-medium mt-0.5">
+                            {typeLabels[pm.type] || 'Preventive Maintenance'}
+                          </p>
                         </div>
                       </div>
                       
