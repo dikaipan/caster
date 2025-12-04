@@ -427,7 +427,7 @@ export default function ReceiveReturnPage() {
                     </div>
                   )}
 
-                  {/* Actions */}
+                  {/* Actions - Form only shown when message.type !== 'success' */}
                   <div className="space-y-2 pt-3">
                     <Button
                       type="submit"
