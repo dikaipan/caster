@@ -427,16 +427,6 @@ export default function ReceiveReturnPage() {
                     </div>
                   )}
 
-                  {/* Success */}
-                  {message && message.type === 'success' && (
-                    <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-500/50 rounded-lg p-3">
-                      <p className="text-sm text-green-700 dark:text-green-300 flex items-center gap-2 font-semibold">
-                        <CheckCircle2 className="h-4 w-4" />
-                        {message.text}
-                      </p>
-                    </div>
-                  )}
-
                   {/* Actions */}
                   <div className="space-y-2 pt-3">
                     <Button
