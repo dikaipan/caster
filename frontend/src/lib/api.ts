@@ -2,8 +2,11 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'; // Backend API
 
+// Remove trailing slash from API_URL to avoid double slashes
+const cleanApiUrl = API_URL.replace(/\/+$/, '');
+
 export const api = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: `${cleanApiUrl}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
