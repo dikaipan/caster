@@ -3,12 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 model CustomerBank {
-  id                   String                    @id @default(uuid()) @db.Uuid
+  id                   String                    @id @default(uuid()) @db.Char(36)
   bankCode             String                    @unique @map("bank_code") @db.VarChar(20)
   bankName             String                    @map("bank_name") @db.VarChar(255)
   status               OrganizationStatus        @default(ACTIVE)
@@ -26,7 +26,7 @@ model CustomerBank {
 }
 
 model Pengelola {
-  id                         String                    @id @default(uuid()) @db.Uuid
+  id                         String                    @id @default(uuid()) @db.Char(36)
   pengelolaCode              String                    @unique @map("pengelola_code") @db.VarChar(50)
   companyName                String                    @map("company_name") @db.VarChar(255)
   companyAbbreviation        String                    @map("company_abbreviation") @db.VarChar(50)
@@ -50,9 +50,9 @@ model Pengelola {
 }
 
 model BankPengelolaAssignment {
-  id                     String             @id @default(uuid()) @db.Uuid
-  customerBankId         String             @map("customer_bank_id") @db.Uuid
-  pengelolaId            String             @map("pengelola_id") @db.Uuid
+  id                     String             @id @default(uuid()) @db.Char(36)
+  customerBankId         String             @map("customer_bank_id") @db.Char(36)
+  pengelolaId            String             @map("pengelola_id") @db.Char(36)
   contractNumber         String?            @map("contract_number") @db.VarChar(100)
   contractStartDate      DateTime?          @map("contract_start_date") @db.Date
   contractEndDate        DateTime?          @map("contract_end_date") @db.Date
@@ -72,8 +72,8 @@ model BankPengelolaAssignment {
 }
 
 model PengelolaUser {
-  id                 String                  @id @default(uuid()) @db.Uuid
-  pengelolaId        String                  @map("pengelola_id") @db.Uuid
+  id                 String                  @id @default(uuid()) @db.Char(36)
+  pengelolaId        String                  @map("pengelola_id") @db.Char(36)
   username           String                  @unique @db.VarChar(100)
   email              String                  @unique @db.VarChar(255)
   passwordHash       String                  @map("password_hash") @db.VarChar(255)
@@ -100,7 +100,7 @@ model PengelolaUser {
 }
 
 model HitachiUser {
-  id                 String                  @id @default(uuid()) @db.Uuid
+  id                 String                  @id @default(uuid()) @db.Char(36)
   username           String                  @unique @db.VarChar(100)
   email              String                  @unique @db.VarChar(255)
   passwordHash       String                  @map("password_hash") @db.VarChar(255)
@@ -125,9 +125,9 @@ model HitachiUser {
 }
 
 model Machine {
-  id                       String                     @id @default(uuid()) @db.Uuid
-  customerBankId           String                     @map("customer_bank_id") @db.Uuid
-  pengelolaId              String                     @map("pengelola_id") @db.Uuid
+  id                       String                     @id @default(uuid()) @db.Char(36)
+  customerBankId           String                     @map("customer_bank_id") @db.Char(36)
+  pengelolaId              String                     @map("pengelola_id") @db.Char(36)
   machineCode              String                     @unique @map("machine_code") @db.VarChar(100)
   modelName                String                     @map("model_name") @db.VarChar(255)
   serialNumberManufacturer String                     @map("serial_number_manufacturer") @db.VarChar(255)
@@ -160,8 +160,8 @@ model Machine {
 }
 
 model MachineIdentifierHistory {
-  id             String         @id @default(uuid()) @db.Uuid
-  machineId      String         @map("machine_id") @db.Uuid
+  id             String         @id @default(uuid()) @db.Char(36)
+  machineId      String         @map("machine_id") @db.Char(36)
   identifierType IdentifierType @map("identifier_type")
   oldValue       String?        @map("old_value") @db.VarChar(255)
   newValue       String         @map("new_value") @db.VarChar(255)
@@ -174,7 +174,7 @@ model MachineIdentifierHistory {
 }
 
 model CassetteType {
-  id          String           @id @default(uuid()) @db.Uuid
+  id          String           @id @default(uuid()) @db.Char(36)
   typeCode    CassetteTypeCode @unique @map("type_code")
   machineType String           @map("machine_type") @db.VarChar(100) // SR or VS - machine compatibility
   description String?
@@ -186,16 +186,16 @@ model CassetteType {
 }
 
 model Cassette {
-  id                    String                 @id @default(uuid()) @db.Uuid
+  id                    String                 @id @default(uuid()) @db.Char(36)
   serialNumber          String                 @unique @map("serial_number") @db.VarChar(100)
-  cassetteTypeId        String                 @map("cassette_type_id") @db.Uuid
-  customerBankId        String                 @map("customer_bank_id") @db.Uuid
+  cassetteTypeId        String                 @map("cassette_type_id") @db.Char(36)
+  customerBankId        String                 @map("customer_bank_id") @db.Char(36)
   status                CassetteStatus         @default(OK)
   usageType             CassetteUsageType?     @map("usage_type")
-  machineId             String?                @map("machine_id") @db.Uuid
+  machineId             String?                @map("machine_id") @db.Char(36)
   notes                 String?
-  replacedCassetteId    String?                @map("replaced_cassette_id") @db.Uuid // NEW: Track replacement - kaset baru menggantikan kaset ini
-  replacementTicketId   String?                @map("replacement_ticket_id") @db.Uuid // NEW: Link to replacement ticket
+  replacedCassetteId    String?                @map("replaced_cassette_id") @db.Char(36) // NEW: Track replacement - kaset baru menggantikan kaset ini
+  replacementTicketId   String?                @map("replacement_ticket_id") @db.Char(36) // NEW: Link to replacement ticket
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
   deliveries            CassetteDelivery[]
@@ -225,11 +225,11 @@ model Cassette {
 }
 
 model RepairTicket {
-  id                String                    @id @default(uuid()) @db.Uuid
-  cassetteId        String                    @map("cassette_id") @db.Uuid
+  id                String                    @id @default(uuid()) @db.Char(36)
+  cassetteId        String                    @map("cassette_id") @db.Char(36)
   reportedIssue     String                    @map("reported_issue")
   receivedAtRc      DateTime                  @map("received_at_rc")
-  repairedBy        String?                   @map("repaired_by") @db.Uuid
+  repairedBy        String?                   @map("repaired_by") @db.Char(36)
   repairActionTaken String?                   @map("repair_action_taken")
   partsReplaced     Json?                     @map("parts_replaced")
   qcPassed          Boolean?                  @map("qc_passed")
@@ -245,10 +245,10 @@ model RepairTicket {
   warrantyClaimed      Boolean                @default(false) @map("warranty_claimed")
   warrantyClaimCount   Int                    @default(0) @map("warranty_claim_count")
   isWarrantyRepair     Boolean                @default(false) @map("is_warranty_repair")
-  originalRepairId     String?                @map("original_repair_id") @db.Uuid
+  originalRepairId     String?                @map("original_repair_id") @db.Char(36)
   warrantyClaimReason  String?                @map("warranty_claim_reason")
   deletedAt            DateTime?               @map("deleted_at") // Soft delete timestamp
-  deletedBy            String?                 @map("deleted_by") @db.Uuid // User who deleted the repair ticket
+  deletedBy            String?                 @map("deleted_by") @db.Char(36) // User who deleted the repair ticket
   createdAt         DateTime                  @default(now()) @map("created_at")
   updatedAt         DateTime                  @updatedAt @map("updated_at")
   cassette          Cassette                  @relation(fields: [cassetteId], references: [id])
@@ -275,11 +275,11 @@ model RepairTicket {
 }
 
 model ProblemTicket {
-  id                   String                 @id @default(uuid()) @db.Uuid
+  id                   String                 @id @default(uuid()) @db.Char(36)
   ticketNumber         String                 @unique @map("ticket_number") @db.VarChar(50)
-  cassetteId           String?                @map("cassette_id") @db.Uuid // Keep for backward compatibility (primary cassette)
-  machineId            String?                @map("machine_id") @db.Uuid
-  reportedBy           String                 @map("reported_by") @db.Uuid
+  cassetteId           String?                @map("cassette_id") @db.Char(36) // Keep for backward compatibility (primary cassette)
+  machineId            String?                @map("machine_id") @db.Char(36)
+  reportedBy           String                 @map("reported_by") @db.Char(36)
   title                String                 @db.VarChar(255)
   description          String
   priority             ProblemTicketPriority  @default(MEDIUM)
@@ -295,7 +295,7 @@ model ProblemTicket {
   resolvedAt           DateTime?              @map("resolved_at")
   closedAt             DateTime?              @map("closed_at")
   deletedAt            DateTime?              @map("deleted_at") // Soft delete timestamp
-  deletedBy            String?                @map("deleted_by") @db.Uuid // User who deleted the ticket
+  deletedBy            String?                @map("deleted_by") @db.Char(36) // User who deleted the ticket
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
   cassetteDelivery     CassetteDelivery?
@@ -318,9 +318,9 @@ model ProblemTicket {
 
 // NEW MODEL: Junction table untuk detail per cassette dalam 1 ticket
 model TicketCassetteDetail {
-  id                 String                @id @default(uuid()) @db.Uuid
-  ticketId           String                @map("ticket_id") @db.Uuid
-  cassetteId         String                @map("cassette_id") @db.Uuid
+  id                 String                @id @default(uuid()) @db.Char(36)
+  ticketId           String                @map("ticket_id") @db.Char(36)
+  cassetteId         String                @map("cassette_id") @db.Char(36)
   title              String                @db.VarChar(255)
   description        String
   priority           ProblemTicketPriority @default(MEDIUM)
@@ -340,16 +340,16 @@ model TicketCassetteDetail {
 }
 
 model CassetteDelivery {
-  id                 String        @id @default(uuid()) @db.Uuid
-  ticketId           String        @unique @map("ticket_id") @db.Uuid
-  cassetteId         String        @map("cassette_id") @db.Uuid
-  sentBy             String        @map("sent_by") @db.Uuid
+  id                 String        @id @default(uuid()) @db.Char(36)
+  ticketId           String        @unique @map("ticket_id") @db.Char(36)
+  cassetteId         String        @map("cassette_id") @db.Char(36)
+  sentBy             String        @map("sent_by") @db.Char(36)
   shippedDate        DateTime      @map("shipped_date")
   courierService     String?       @map("courier_service") @db.VarChar(255)
   trackingNumber     String?       @map("tracking_number") @db.VarChar(100)
   estimatedArrival   DateTime?     @map("estimated_arrival")
   receivedAtRc       DateTime?     @map("received_at_rc")
-  receivedBy         String?       @map("received_by") @db.Uuid
+  receivedBy         String?       @map("received_by") @db.Char(36)
   notes              String?
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
@@ -369,16 +369,16 @@ model CassetteDelivery {
 }
 
 model CassetteReturn {
-  id                  String         @id @default(uuid()) @db.Uuid
-  ticketId            String         @unique @map("ticket_id") @db.Uuid
-  cassetteId          String         @map("cassette_id") @db.Uuid
-  sentBy              String         @map("sent_by") @db.Uuid
+  id                  String         @id @default(uuid()) @db.Char(36)
+  ticketId            String         @unique @map("ticket_id") @db.Char(36)
+  cassetteId          String         @map("cassette_id") @db.Char(36)
+  sentBy              String         @map("sent_by") @db.Char(36)
   shippedDate         DateTime       @map("shipped_date")
   courierService      String?        @map("courier_service") @db.VarChar(255)
   trackingNumber      String?        @map("tracking_number") @db.VarChar(100)
   estimatedArrival    DateTime?      @map("estimated_arrival")
   receivedAtPengelola DateTime?      @map("received_at_pengelola")
-  receivedBy          String?        @map("received_by") @db.Uuid
+  receivedBy          String?        @map("received_by") @db.Char(36)
   notes               String?
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
@@ -391,7 +391,7 @@ model CassetteReturn {
 }
 
 model PreventiveMaintenance {
-  id                   String                        @id @default(uuid()) @db.Uuid
+  id                   String                        @id @default(uuid()) @db.Char(36)
   pmNumber             String                        @unique @map("pm_number") @db.VarChar(50)
   type                 PreventiveMaintenanceType     @default(ROUTINE)
   location             PreventiveMaintenanceLocation @default(PENGELOLA_LOCATION)
@@ -410,9 +410,9 @@ model PreventiveMaintenance {
   recommendations      String? // Recommendations for next PM
   nextPmDate           DateTime?                     @map("next_pm_date")
   nextPmInterval       Int?                          @map("next_pm_interval") // Days until next PM
-  assignedEngineer     String?                       @map("assigned_engineer") @db.Uuid
-  requestedByPengelola String?                       @map("requested_by_pengelola") @db.Uuid
-  requestedByHitachi   String?                       @map("requested_by_hitachi") @db.Uuid
+  assignedEngineer     String?                       @map("assigned_engineer") @db.Char(36)
+  requestedByPengelola String?                       @map("requested_by_pengelola") @db.Char(36)
+  requestedByHitachi   String?                       @map("requested_by_hitachi") @db.Char(36)
   requestedByType      String?                       @map("requested_by_type") @db.VarChar(20) // "PENGELOLA" or "HITACHI" or "BANK"
   contactName          String?                       @map("contact_name") @db.VarChar(255)
   contactPhone         String?                       @map("contact_phone") @db.VarChar(50)
@@ -422,12 +422,12 @@ model PreventiveMaintenance {
   locationPostalCode   String?                       @map("location_postal_code") @db.VarChar(20)
   notes                String?
   cancelledReason      String?                       @map("cancelled_reason")
-  cancelledBy          String?                       @map("cancelled_by") @db.Uuid
+  cancelledBy          String?                       @map("cancelled_by") @db.Char(36)
   cancelledAt          DateTime?                     @map("cancelled_at")
-  completedBy          String?                       @map("completed_by") @db.Uuid
+  completedBy          String?                       @map("completed_by") @db.Char(36)
   completedAt          DateTime?                     @map("completed_at")
   deletedAt            DateTime?                     @map("deleted_at") // Soft delete timestamp
-  deletedBy            String?                       @map("deleted_by") @db.Uuid // User who deleted the PM
+  deletedBy            String?                       @map("deleted_by") @db.Char(36) // User who deleted the PM
   createdAt            DateTime                      @default(now()) @map("created_at")
   updatedAt            DateTime                      @updatedAt @map("updated_at")
   cassetteDetails      PMCassetteDetail[] // Multiple cassettes per PM
@@ -454,9 +454,9 @@ model PreventiveMaintenance {
 
 // Junction table untuk multiple cassettes dalam 1 PM
 model PMCassetteDetail {
-  id            String                @id @default(uuid()) @db.Uuid
-  pmId          String                @map("pm_id") @db.Uuid
-  cassetteId    String                @map("cassette_id") @db.Uuid
+  id            String                @id @default(uuid()) @db.Char(36)
+  pmId          String                @map("pm_id") @db.Char(36)
+  cassetteId    String                @map("cassette_id") @db.Char(36)
   checklist     Json? // Per-cassette checklist
   findings      String? // Per-cassette findings
   actionsTaken  String?               @map("actions_taken") // Per-cassette actions
@@ -587,9 +587,9 @@ enum WarrantyType {
 
 // Security: Refresh Token for JWT session management
 model RefreshToken {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(uuid()) @db.Char(36)
   token     String   @unique @db.VarChar(500)
-  userId    String   @map("user_id") @db.Uuid
+  userId    String   @map("user_id") @db.Char(36)
   userType  String   @map("user_type") @db.VarChar(50) // 'HITACHI' or 'PENGELOLA'
   expiresAt DateTime @map("expires_at")
   revoked   Boolean  @default(false)
@@ -604,8 +604,8 @@ model RefreshToken {
 }
 
 model WarrantyConfiguration {
-  id                    String        @id @default(uuid()) @db.Uuid
-  customerBankId        String        @map("customer_bank_id") @db.Uuid
+  id                    String        @id @default(uuid()) @db.Char(36)
+  customerBankId        String        @map("customer_bank_id") @db.Char(36)
   warrantyType          WarrantyType  @map("warranty_type")
   
   // Konfigurasi periode garansi (dalam hari)
@@ -633,3 +633,4 @@ model WarrantyConfiguration {
   @@index([isActive])
   @@map("warranty_configurations")
 }
+
