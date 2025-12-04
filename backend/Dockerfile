@@ -29,14 +29,18 @@ COPY package*.json ./
 # Install all dependencies (including devDependencies untuk build)
 RUN npm ci
 
-# Copy prisma folder explicitly (must exist before generate)
-COPY prisma ./prisma/
-
-# Copy rest of source code
+# Copy all source code first (this should include prisma folder)
 COPY . .
 
-# Verify prisma schema exists before generate
-RUN test -f prisma/schema.prisma || (echo "ERROR: prisma/schema.prisma not found!" && ls -la prisma/ && exit 1)
+# Verify prisma schema exists, if not, show error with directory listing
+RUN if [ ! -f prisma/schema.prisma ]; then \
+      echo "ERROR: prisma/schema.prisma not found!"; \
+      echo "Current directory contents:"; \
+      ls -la; \
+      echo "Prisma directory contents:"; \
+      ls -la prisma/ 2>/dev/null || echo "prisma/ directory does not exist"; \
+      exit 1; \
+    fi
 
 # Generate Prisma Client
 RUN npx prisma generate
