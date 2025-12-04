@@ -49,8 +49,13 @@ async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
   const corsOrigin = process.env.CORS_ORIGIN;
   
+  // Support multiple origins (comma-separated)
+  const corsOrigins = corsOrigin 
+    ? corsOrigin.split(',').map(origin => origin.trim()).filter(origin => origin)
+    : [];
+  
   const allowedOrigins = isProduction
-    ? (corsOrigin ? [corsOrigin] : [])
+    ? corsOrigins
     : [
         'http://localhost:3000',
         'http://localhost:3001',
@@ -58,11 +63,8 @@ async function bootstrap() {
         'http://localhost:3003',
         'http://localhost:3004',
         'http://localhost:3005',
+        ...corsOrigins,
       ];
-  
-  if (corsOrigin && !isProduction) {
-    allowedOrigins.push(corsOrigin);
-  }
   
   // Log CORS configuration for debugging
   console.log('🔒 CORS Configuration:');
