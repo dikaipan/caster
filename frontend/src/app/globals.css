@@ -237,6 +237,20 @@
   /* Smooth scroll behavior */
   html {
     scroll-behavior: smooth;
+    font-size: 16px; /* Base font size - prevents browser zoom scaling */
+  }
+  
+  /* Prevent browser zoom scaling issues */
+  * {
+    box-sizing: border-box;
+  }
+  
+  /* Ensure consistent font rendering */
+  body {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   /* ===== DARK MODE TEXT COLORS ===== */

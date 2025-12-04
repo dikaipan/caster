@@ -15,6 +15,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "HITACHI Cassette Management",
   description: "Sistem manajemen cassette AC Hitachi yang terintegrasi untuk memudahkan tracking, maintenance, dan pelaporan inventori Anda",
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
 };
 
 export default function RootLayout({
