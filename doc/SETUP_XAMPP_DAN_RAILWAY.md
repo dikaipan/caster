@@ -38,7 +38,25 @@ Panduan lengkap untuk menggunakan XAMPP di local development dan Railway untuk p
    - Collation: `utf8mb4_unicode_ci`
    - Klik **"Create"**
 
-### Step 2: Setup Environment Variables untuk Development
+### Step 2: Setup Prisma untuk MySQL
+
+**PENTING:** Project ini menggunakan MySQL untuk XAMPP. Pastikan menggunakan schema MySQL:
+
+1. **Copy schema MySQL:**
+   ```bash
+   cd backend
+   cp prisma/schema.mysql.prisma prisma/schema.prisma
+   ```
+
+2. **Atau edit `prisma/schema.prisma`** untuk menggunakan MySQL:
+   ```prisma
+   datasource db {
+     provider = "mysql"
+     url      = env("DATABASE_URL")
+   }
+   ```
+
+### Step 3: Setup Environment Variables untuk Development
 
 Di folder `backend/`, buat file `.env`:
 
@@ -65,7 +83,7 @@ CORS_ORIGIN=http://localhost:3001
 - Jika ada password, format: `mysql://root:password@localhost:3306/hcm_development`
 - Port `3306` adalah default MySQL di XAMPP
 
-### Step 3: Run Migrations di Local
+### Step 4: Run Migrations di Local
 
 ```bash
 cd backend
@@ -80,7 +98,7 @@ npm run prisma:migrate dev
 npm run prisma:seed
 ```
 
-### Step 4: Run Backend di Local
+### Step 5: Run Backend di Local
 
 ```bash
 cd backend
