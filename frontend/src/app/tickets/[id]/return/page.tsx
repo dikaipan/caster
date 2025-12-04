@@ -205,7 +205,7 @@ export default function ReturnDeliveryPage() {
         status: err.response?.status,
         payload: {
           ticketId,
-          notes: notes.trim() || undefined,
+          notes: notes?.trim() || undefined,
         },
       });
 
