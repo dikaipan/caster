@@ -18,7 +18,21 @@ Frontend (Vercel) → Backend (Railway/Render) → Database (MySQL/PostgreSQL)
 
 ---
 
+## ⚠️ Catatan Penting
+
+**Railway dan Render mungkin tidak tersedia atau tidak bisa digunakan.** Jika mengalami masalah dengan Railway/Render, gunakan alternatif berikut:
+
+- **Fly.io** - Recommended (tidak sleep, gratis, MySQL support)
+- **Koyeb** - Paling mudah (tidak sleep, gratis, MySQL support)
+- **Cyclic** - Serverless (tidak sleep, gratis, PostgreSQL only)
+
+Lihat [ALTERNATIF_DEPLOY_BACKEND.md](./ALTERNATIF_DEPLOY_BACKEND.md) untuk panduan lengkap alternatif platform.
+
+---
+
 ## 🚀 Opsi 1: Railway (Recommended - Paling Mudah)
+
+**⚠️ Jika Railway tidak bisa digunakan, skip ke Opsi 4 (Fly.io) atau lihat [ALTERNATIF_DEPLOY_BACKEND.md](./ALTERNATIF_DEPLOY_BACKEND.md)**
 
 ### Step 1: Setup Railway Account
 
