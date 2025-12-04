@@ -442,7 +442,7 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
         { icon: History, label: 'SO History', link: '/history' },
       ],
     },
-  ], [pendingReturnCount, pendingConfirmationCount, newSOCount, pmTasksCount, replacementRequestCount]);
+  ], [pendingReturnCount, pendingConfirmationCount, newSOCount, pmTasksCount]);
 
   // Filter menu groups berdasarkan permissions
   const filteredGroups = menuGroups
