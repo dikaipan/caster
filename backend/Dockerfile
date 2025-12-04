@@ -23,11 +23,18 @@ WORKDIR /app
 # Set production environment
 ENV NODE_ENV=production
 
-# Copy package files
+# Copy package files (including package-lock.json)
 COPY package*.json ./
+COPY package-lock.json* ./
 
 # Install all dependencies (including devDependencies untuk build)
-RUN npm ci
+# Use npm install if package-lock.json doesn't exist, otherwise use npm ci
+RUN if [ -f package-lock.json ]; then \
+      npm ci; \
+    else \
+      echo "WARNING: package-lock.json not found, using npm install"; \
+      npm install; \
+    fi
 
 # Copy all source code first (this should include prisma folder)
 COPY . .
