@@ -29,11 +29,8 @@ COPY package*.json ./
 # Install all dependencies (including devDependencies untuk build)
 RUN npm ci
 
-# Copy prisma folder explicitly first (before other files)
-# This ensures prisma folder exists even if .dockerignore or build context has issues
-COPY prisma ./prisma/
-
-# Copy rest of source code
+# Copy all source code (including prisma folder)
+# Railway build context should include prisma folder from git
 COPY . .
 
 # Generate Prisma Client
