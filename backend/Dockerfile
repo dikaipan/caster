@@ -29,12 +29,12 @@ COPY package*.json ./
 # Install all dependencies (including devDependencies untuk build)
 RUN npm ci
 
-# Copy everything (including prisma folder)
-# This ensures prisma folder is included in build context
-COPY . .
+# Copy prisma folder explicitly first (before other files)
+# This ensures prisma folder exists even if .dockerignore or build context has issues
+COPY prisma ./prisma/
 
-# Verify prisma folder exists (for debugging)
-RUN ls -la prisma/ || (echo "ERROR: prisma folder not found!" && exit 1)
+# Copy rest of source code
+COPY . .
 
 # Generate Prisma Client
 RUN npx prisma generate
