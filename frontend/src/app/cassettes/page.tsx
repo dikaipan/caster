@@ -886,7 +886,7 @@ export default function CassettesPage() {
       {/* Modern Table */}
       <Card className="border-0 shadow-lg">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Disc className="h-5 w-5 text-primary" />
@@ -899,24 +899,26 @@ export default function CassettesPage() {
                 Klik header kolom untuk mengurutkan data
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={fetchCassettes}
                 disabled={loading}
+                className="flex-shrink-0"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
+                <span className="hidden sm:inline">Refresh</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={exportToCSV}
                 disabled={paginatedCassettes.length === 0}
+                className="flex-shrink-0"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Export CSV
+                <span className="hidden sm:inline">Export CSV</span>
               </Button>
               {canManageCassettes && (
                 <Button
@@ -926,10 +928,11 @@ export default function CassettesPage() {
                     setAddCassetteDialogOpen(true);
                     loadDropdownData();
                   }}
-                  className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 text-white"
+                  className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 text-white flex-shrink-0"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Cassette
+                  <span className="hidden sm:inline">Add Cassette</span>
+                  <span className="sm:hidden">Add</span>
                 </Button>
               )}
             </div>
