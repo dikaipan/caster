@@ -24,7 +24,6 @@
 - ✅ **Manajemen Inventory** - Tracking kaset real-time dengan status dan lokasi
 - ✅ **Service Order Management** - Alur kerja lengkap untuk repair dan replacement
 - ✅ **Repair Tracking** - Monitoring perbaikan kaset dari awal hingga selesai
-- ✅ **Preventive Maintenance** - Penjadwalan dan tracking maintenance rutin
 - ✅ **Multi-User Support** - Role-based access untuk Pengelola, RC Staff, dan Hitachi Admin
 
 ---
@@ -50,11 +49,6 @@
   - Status: RECEIVED → IN_PROGRESS → COMPLETED
   - Integration dengan service order
 
-- **📅 Preventive Maintenance**
-  - Auto-scheduling untuk PM rutin
-  - On-demand PM request
-  - Checklist per kaset
-  - Reschedule dan cancellation support
 
 - **👥 User Management**
   - Multi-role: PENGELOLA, RC_STAFF, RC_MANAGER, SUPER_ADMIN
@@ -172,7 +166,7 @@ Setelah seed database, gunakan credentials default:
 1. **Create Service Order**
    - Login sebagai Pengelola
    - Navigate ke "Service Orders" → "Create"
-   - Pilih tipe: Repair, Replacement, atau PM
+   - Pilih tipe: Repair, Replacement
    - Isi detail dan submit
 
 2. **Process Repair**
@@ -279,7 +273,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 Untuk pertanyaan atau support:
-- 📧 Email: [your-email@example.com]
+- 📧 Email: [.]
 - 🐛 Issues: [GitHub Issues](https://github.com/dikaipan/casper/issues)
 - 📖 Documentation: [Full Documentation](./doc/README.md)
 
