@@ -61,6 +61,35 @@ export class CassettesService {
       }
     }
 
+    // Apply explicit customer bank filter (for admin or pengelola-specified requests)
+    if (customerBankId) {
+      if (whereClause.customerBankId?.in) {
+        const allowedBanks = (whereClause.customerBankId.in as string[]).filter(id => id === customerBankId);
+
+        // If pengelola is not assigned to this bank, return empty result immediately
+        if (allowedBanks.length === 0) {
+          return {
+            cassettes: [],
+            count: 0,
+            data: [],
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              totalPages: 0,
+            },
+            statistics: {
+              statusCounts: {},
+            },
+          };
+        }
+
+        whereClause.customerBankId = { in: allowedBanks };
+      } else {
+        whereClause.customerBankId = customerBankId;
+      }
+    }
+
     // Search filters
     const searchConditions: any[] = [];
     let machineBasedBankIds: string[] | null = null;
@@ -995,7 +1024,8 @@ export class CassettesService {
 
     // Statuses that indicate cassette is in repair process
     // But if return is received, cassette is available even if status is still in repair process
-    const repairStatuses = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'READY_FOR_PICKUP'];
+    // READY_FOR_PICKUP means repair is complete; do not treat as in-process
+    const repairStatuses = ['IN_TRANSIT_TO_RC', 'IN_REPAIR'];
     const isInRepairProcess = cassette && repairStatuses.includes(cassette.status) && !returnReceived;
 
     // Cassette is available if:
