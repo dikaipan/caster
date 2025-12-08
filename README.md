@@ -167,24 +167,39 @@ Setelah seed database, gunakan credentials default:
 - **RC Staff**: `rcstaff@example.com` / `password123`
 - **Super Admin**: `admin@example.com` / `password123`
 
+### Flow Update (Des 2025)
+
+- **Pickup RC-only**: Konfirmasi pickup dilakukan oleh RC saja (mewakili Pengelola) dengan tanda tangan digital serta input nama & nomor HP penerima.
+- **Repair flow**: QC Passed → `READY_FOR_PICKUP`, QC Failed → `SCRAPPED` (tetap di RC, bisa ditutup tanpa pickup).
+- **Replacement flow**: Hanya kaset `SCRAPPED` yang bisa diganti; tidak ada disposal; pickup dilakukan dari RC; dialog pickup menampilkan mapping SN lama → SN baru.
+- **Active SO**: Tab Repair dan Replacement dipisah; CLOSED hanya muncul di History.
+- **History**: Tidak ada label “REPLACEMENT”; hanya tiket CLOSED yang ditampilkan.
+- **Settings**: Semua pengaturan (banks, pengelola, assignments, users, bulk import, data management) dipusatkan di halaman `Settings`.
+- **PDF Report**: Menampilkan nama & HP penerima, tanda tangan pickup, serta informasi replacement (SN lama ↔ baru). Tidak ada disposal certificate untuk replacement.
+
 ### Main Workflows
 
 1. **Create Service Order**
    - Login sebagai Pengelola
-   - Navigate ke "Service Orders" → "Create"
-   - Pilih tipe: Repair, Replacement, atau PM
+   - Buka “Service Orders” → “Create”
+   - Pilih tipe: Repair atau Replacement (PM sedang dinonaktifkan)
    - Isi detail dan submit
 
 2. **Process Repair**
-   - RC Staff menerima kaset di RC
-   - Buat repair ticket
-   - Update diagnosis dan action taken
-   - Mark as completed
+   - RC Staff menerima kaset di RC (status kaset menjadi `IN_REPAIR`)
+   - Lakukan diagnosis & perbaikan; QC:
+     - Lolos QC → kaset menjadi `READY_FOR_PICKUP`
+     - Gagal QC → kaset menjadi `SCRAPPED` (tetap di RC)
 
-3. **Confirm Pickup**
-   - Setelah repair selesai, Pengelola pickup di RC
-   - RC Staff konfirmasi pickup
-   - Kaset status kembali ke OK
+3. **Process Replacement**
+   - Hanya kaset `SCRAPPED` yang dapat diajukan replacement
+   - RC input SN baru (kaset baru status `OK`)
+   - Tidak ada langkah return/disposal terpisah
+
+4. **Confirm Pickup (RC-only)**
+   - RC membuka tiket (repair atau replacement)
+   - Isi nama & nomor HP penerima, tanda tangan digital, dan catatan
+   - Submit: tiket menjadi `CLOSED`; status kaset OK (pickup) atau tetap SCRAPPED (gagal QC)
 
 ---
 
