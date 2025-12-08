@@ -18,7 +18,7 @@
 
 **CASTER - Cassette Tracking & Retrieval System** adalah sistem manajemen kaset ATM yang komprehensif untuk membantu bank dan vendor mengelola seluruh lifecycle kaset, dari inventory hingga maintenance. Sistem ini dirancang untuk meningkatkan efisiensi operasional, mengurangi downtime, dan memastikan kaset selalu dalam kondisi optimal.
 
-### 🎯 Tujuan Utama
+### 🎯 Expectation
 
 - ✅ **Manajemen Inventory** - Tracking kaset real-time dengan status dan lokasi
 - ✅ **Service Order Management** - Alur kerja lengkap untuk repair dan replacement
