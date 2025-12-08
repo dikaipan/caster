@@ -20,7 +20,7 @@ export interface CassetteData {
   serialNumber: string;
   cassetteTypeCode?: string; // Optional: will be auto-detected from serial number if not provided
   customerBankCode: string;
-  status?: 'OK' | 'BAD' | 'IN_TRANSIT_TO_RC' | 'IN_REPAIR' | 'IN_TRANSIT_TO_PENGELOLA' | 'SCRAPPED';
+  status?: 'OK' | 'BAD' | 'IN_TRANSIT_TO_RC' | 'IN_REPAIR' | 'READY_FOR_PICKUP' | 'IN_TRANSIT_TO_PENGELOLA' | 'SCRAPPED';
   notes?: string;
 }
 
@@ -315,6 +315,7 @@ export class ImportService {
         if (normalized === 'BROKEN' || normalized === 'BAD') return 'BAD';
         if (normalized === 'IN_TRANSIT_TO_RC' || normalized === 'IN_TRANSIT') return 'IN_TRANSIT_TO_RC';
         if (normalized === 'IN_REPAIR' || normalized === 'REPAIR' || normalized === 'UNDER_REPAIR') return 'IN_REPAIR';
+        if (normalized === 'READY_FOR_PICKUP' || normalized === 'READY' || normalized === 'READY_PICKUP' || normalized === 'PICKUP') return 'READY_FOR_PICKUP';
         if (normalized === 'IN_TRANSIT_TO_PENGELOLA' || normalized === 'RETURNING') return 'IN_TRANSIT_TO_PENGELOLA';
         if (normalized === 'SCRAPPED') return 'SCRAPPED';
         return normalized as any;
@@ -640,7 +641,7 @@ export class ImportService {
                     customerBankId: bank.id,
                     pengelolaId: Pengelola.id,
                     machineCode,
-                    modelName: 'Hitachi SR-M100', // Default model
+                    modelName: 'SR7500VS', // Default model (options: SR7500 or SR7500VS)
                     serialNumberManufacturer: machineSN,
                     physicalLocation: `Bank ${bank.bankName}`,
                     status: 'OPERATIONAL',
@@ -1179,7 +1180,7 @@ export class ImportService {
                 customerBankId: bank.id,
                 pengelolaId: Pengelola.id,
                 machineCode,
-                modelName: 'Hitachi SR-M100',
+                modelName: 'SR7500VS',
                 physicalLocation: `Bank ${bank.bankName}`,
                 status: 'OPERATIONAL',
               },
@@ -1190,7 +1191,7 @@ export class ImportService {
                 customerBankId: bank.id,
                 pengelolaId: Pengelola.id,
                 machineCode,
-                modelName: 'Hitachi SR-M100',
+                modelName: 'SR7500VS',
                 serialNumberManufacturer: machineSerialNumber,
                 physicalLocation: `Bank ${bank.bankName}`,
                 status: 'OPERATIONAL',

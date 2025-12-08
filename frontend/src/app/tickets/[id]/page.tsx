@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
 import PageLayout from '@/components/layout/PageLayout';
@@ -18,6 +18,16 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { SignaturePad } from '@/components/ui/signature-pad';
+import PDFDownloadButton from '@/components/reports/PDFDownloadButton';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -35,17 +45,21 @@ import {
   Building2,
   Monitor,
   ArrowLeft,
+  ArrowRight,
   XCircle,
   Inbox,
   Truck as TruckIcon,
   Trash2,
   MapPin,
   RefreshCw,
+  Eye,
+  Download,
 } from 'lucide-react';
 
 export default function TicketDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const ticketId = params.id as string;
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
@@ -57,10 +71,19 @@ export default function TicketDetailPage() {
   const [creatingRepairs, setCreatingRepairs] = useState(false);
   const [showPickupDialog, setShowPickupDialog] = useState(false);
   const [pickupNotes, setPickupNotes] = useState('');
+  const [pickupDate, setPickupDate] = useState(new Date().toISOString().split('T')[0]);
+  const [pickupTime, setPickupTime] = useState(new Date().toTimeString().slice(0, 5));
+  const [pickupCondition, setPickupCondition] = useState<string>('GOOD');
+  const [pickupSignature, setPickupSignature] = useState<string | null>(null);
+  const [showSignaturePreview, setShowSignaturePreview] = useState(false);
+  const [pickupConfirmed, setPickupConfirmed] = useState(false);
+  const [pickupRecipientName, setPickupRecipientName] = useState('');
+  const [pickupRecipientPhone, setPickupRecipientPhone] = useState('');
   const [confirmingPickup, setConfirmingPickup] = useState(false);
   const [showReceiveDialog, setShowReceiveDialog] = useState(false);
   const [receiveNotes, setReceiveNotes] = useState('');
   const [receiving, setReceiving] = useState(false);
+  const [showStartRepairDialog, setShowStartRepairDialog] = useState(false);
 
   const isHitachi = user?.userType === 'HITACHI';
   const isPengelola = user?.userType === 'PENGELOLA';
@@ -194,7 +217,16 @@ export default function TicketDetailPage() {
     try {
       await api.delete(`/tickets/${ticketId}`);
       alert('Service Order berhasil dihapus. Status cassette telah dikembalikan ke OK.');
-      router.push('/tickets');
+      // Check if user came from history page (via query param or referrer) or if ticket is CLOSED
+      const fromHistory = searchParams.get('from') === 'history' || 
+                          (typeof window !== 'undefined' && document.referrer.includes('/history')) ||
+                          ticket?.status === 'CLOSED';
+      
+      if (fromHistory) {
+        router.push('/history');
+      } else {
+        router.push('/tickets');
+      }
     } catch (error: any) {
       console.error('Error deleting ticket:', error);
       alert(error.response?.data?.message || 'Gagal menghapus Service Order');
@@ -205,20 +237,89 @@ export default function TicketDetailPage() {
   };
 
   const handleConfirmPickup = async () => {
+    // Check if this is disposal confirmation for SCRAPPED cassettes
+    // IMPORTANT: Replacement tickets NEVER have disposal flow - SCRAPPED cassettes are replaced with new ones
+    const readyForPickup = allCassettes.filter((c: any) => c.status === 'READY_FOR_PICKUP');
+    const isDisposal = !isReplacementTicket && hasScrappedCassettes && !hasReplacementForScrapped && readyForPickup.length === 0;
+    
+    if (!pickupConfirmed) {
+      toast({
+        title: 'Konfirmasi Diperlukan',
+        description: isDisposal
+          ? 'Silakan centang konfirmasi bahwa kaset SCRAPPED telah dikonfirmasi untuk disposal.'
+          : 'Silakan centang konfirmasi bahwa kaset telah diambil dengan kondisi baik.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Only require signature for pickup flow, not disposal
+    if (!isDisposal && !pickupSignature) {
+      toast({
+        title: 'Tanda Tangan Diperlukan',
+        description: 'Silakan berikan tanda tangan digital untuk konfirmasi pickup.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!isDisposal && (!pickupRecipientName.trim() || !pickupRecipientPhone.trim())) {
+      toast({
+        title: 'Data Pengambil Diperlukan',
+        description: 'Silakan isi nama pengambil dan nomor HP.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setConfirmingPickup(true);
     try {
-      await api.post('/tickets/return', {
+      const pickupDateTime = `${pickupDate}T${pickupTime}:00`;
+      
+      const notes = isDisposal
+        ? [
+            `Tanggal/Waktu Konfirmasi Disposal: ${new Date(pickupDateTime).toLocaleString('id-ID')}`,
+            `Status Kaset: SCRAPPED (Tidak bisa diperbaiki, tidak lolos QC)`,
+            `Kaset tetap di RC untuk disposal`,
+            `Dikonfirmasi oleh: ${user?.fullName || user?.username || 'N/A'}`,
+            pickupNotes.trim() ? `Catatan: ${pickupNotes.trim()}` : null,
+          ].filter(Boolean).join('\n')
+        : [
+            `Tanggal/Waktu Pickup: ${new Date(pickupDateTime).toLocaleString('id-ID')}`,
+            `Kondisi Kaset: ${pickupCondition === 'GOOD' ? 'Baik' : pickupCondition === 'MINOR_DAMAGE' ? 'Ada kerusakan minor' : 'Ada kerusakan'}`,
+            `Nama Pengambil: ${pickupRecipientName.trim()}`,
+            `No. HP Pengambil: ${pickupRecipientPhone.trim()}`,
+            `Dikonfirmasi oleh: ${user?.fullName || user?.username || 'N/A'}`,
+            pickupNotes.trim() ? `Catatan: ${pickupNotes.trim()}` : null,
+            `Tanda Tangan: [Digital Signature Attached]`,
+          ].filter(Boolean).join('\n');
+
+      // Send signature (RC staff confirms pickup on behalf of Pengelola)
+      const payload: any = {
         ticketId: ticketId,
-        notes: pickupNotes.trim() || undefined,
-      });
+        notes: notes || undefined,
+        rcSignature: isDisposal ? undefined : (pickupSignature || undefined),
+        signature: isDisposal ? undefined : (pickupSignature || undefined), // For backward compatibility
+      };
+
+      await api.post('/tickets/return', payload);
       
       toast({
         title: 'Berhasil',
-        description: 'Pickup berhasil dikonfirmasi. Status kaset langsung berubah menjadi OK.',
+        description: isDisposal
+          ? 'Disposal berhasil dikonfirmasi. Kaset tetap di RC untuk disposal dan ticket menjadi CLOSED.'
+          : 'Konfirmasi pickup berhasil. Ticket menjadi CLOSED.',
       });
       
       setShowPickupDialog(false);
       setPickupNotes('');
+      setPickupDate(new Date().toISOString().split('T')[0]);
+      setPickupTime(new Date().toTimeString().slice(0, 5));
+      setPickupCondition('GOOD');
+      setPickupSignature(null);
+      setPickupConfirmed(false);
+      setPickupRecipientName('');
+      setPickupRecipientPhone('');
       
       // Refresh ticket data
       const response = await api.get(`/tickets/${ticketId}`);
@@ -268,13 +369,6 @@ export default function TicketDetailPage() {
   };
 
   const handleStartRepair = async () => {
-    if (!confirm(isMultiCassette 
-      ? `Mulai repair untuk ${cassetteCount} kaset?\n\nIni akan membuat ${cassetteCount} repair tickets dan mengubah status SO menjadi IN_PROGRESS.`
-      : 'Mulai repair untuk kaset ini?\n\nIni akan membuat repair ticket dan mengubah status SO menjadi IN_PROGRESS.'
-    )) {
-      return;
-    }
-
     setCreatingRepairs(true);
     try {
       const response = await api.post(`/repairs/bulk-from-ticket/${ticketId}`);
@@ -284,6 +378,9 @@ export default function TicketDetailPage() {
         description: `${response.data.count} repair ticket telah dibuat. Silakan lihat di halaman Repairs untuk mengelola repair.`,
         variant: 'default',
       });
+      
+      // Close dialog
+      setShowStartRepairDialog(false);
       
       // Refresh ticket data
       const ticketResponse = await api.get(`/tickets/${ticketId}`);
@@ -300,10 +397,29 @@ export default function TicketDetailPage() {
       }
     } catch (error: any) {
       console.error('Error creating repairs:', error);
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
+      
+      // Extract error message from various possible locations
+      let errorMessage = 'Terjadi kesalahan saat membuat repair tickets. Silakan coba lagi.';
+      
+      if (error.response?.data) {
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: 'Gagal Membuat Repair Tickets',
-        description: error.response?.data?.message || 'Terjadi kesalahan saat membuat repair tickets. Silakan coba lagi.',
+        description: errorMessage,
         variant: 'destructive',
+        duration: 8000,
       });
     } finally {
       setCreatingRepairs(false);
@@ -345,8 +461,15 @@ export default function TicketDetailPage() {
   // Check if all repair tickets are completed (only for non-replacement tickets)
   const completedRepairs = repairs.filter((r: any) => r.status === 'COMPLETED');
   const completedCount = completedRepairs.length;
+  
+  // Count only repairs that are completed AND passed QC (READY_FOR_PICKUP), not SCRAPPED
+  const successfullyRepairedCount = allCassettes.filter((c: any) => c.status === 'READY_FOR_PICKUP').length;
+  const scrappedCount = allCassettes.filter((c: any) => c.status === 'SCRAPPED').length;
+  
+  // All repairs are completed when all cassettes are either READY_FOR_PICKUP or SCRAPPED
   const allRepairsCompleted = repairs.length > 0 && repairs.length === cassetteCount && 
-    repairs.every((r: any) => r.status === 'COMPLETED');
+    repairs.every((r: any) => r.status === 'COMPLETED') &&
+    allCassettes.every((c: any) => c.status === 'READY_FOR_PICKUP' || c.status === 'SCRAPPED');
   
   // Effective status untuk keperluan UI (progress bar + cards)
   const effectiveStatus =
@@ -366,19 +489,46 @@ export default function TicketDetailPage() {
   // Handle case where status is not in steps (shouldn't happen, but safety check)
   const validStepIndex = currentStepIndex >= 0 ? currentStepIndex : 0;
 
+  // Check if any cassettes are SCRAPPED (for disposal confirmation)
+  const hasScrappedCassettes = allCassettes.some((c: any) => c.status === 'SCRAPPED');
+  const allCassettesScrapped = allCassettes.length > 0 && allCassettes.every((c: any) => c.status === 'SCRAPPED');
+  const hasReplacementForScrapped = allCassettesScrapped && isReplacementTicket;
+  
+  // For pickup: only count cassettes that are READY_FOR_PICKUP (not SCRAPPED)
+  // For disposal: count all SCRAPPED cassettes
+  const readyForPickupCassettes = allCassettes.filter((c: any) => c.status === 'READY_FOR_PICKUP');
+  const scrappedCassettes = allCassettes.filter((c: any) => c.status === 'SCRAPPED');
+  
+  // Determine if this is a disposal confirmation or pickup confirmation
+  // Priority: if there are READY_FOR_PICKUP cassettes, it's a pickup (even if there are also SCRAPPED)
+  // Only show disposal if ALL cassettes are SCRAPPED (and not replacement ticket)
+  // IMPORTANT: Replacement tickets NEVER show disposal - SCRAPPED cassettes are replaced with new ones
+  const isDisposalFlow = !isReplacementTicket && hasScrappedCassettes && !hasReplacementForScrapped && readyForPickupCassettes.length === 0;
+  
+  const pickupCassetteCount = isDisposalFlow
+    ? scrappedCassettes.length 
+    : readyForPickupCassettes.length;
+  const isMultiPickup = pickupCassetteCount > 1;
+
   // For replacement tickets: only check if status is RESOLVED (replacement already done)
   // For repair tickets: check if effectiveStatus is RESOLVED (which already considers allRepairsCompleted)
+  // For SCRAPPED cassettes: allow disposal confirmation (kaset tidak bisa diperbaiki, tetap di RC)
   // Use effectiveStatus instead of ticket.status to handle cases where backend hasn't synced yet
   // Flow baru: pickup-based (Pengelola pickup di RC), bukan shipping-based
+  // Only RC staff can confirm pickup (on behalf of Pengelola)
+  const hasReturnRecord = !!ticket.cassetteReturn;
+  
+  // RC can confirm if ticket is RESOLVED and pickup hasn't been confirmed yet
   const canConfirmPickup = effectiveStatus === 'RESOLVED' && 
-    (isReplacementTicket || allRepairsCompleted) &&
-    !ticket.cassetteReturn;
+    (isReplacementTicket || allRepairsCompleted || (hasScrappedCassettes && !hasReplacementForScrapped)) &&
+    !hasReturnRecord &&
+    (isHitachi || isSuperAdmin);
 
   return (
     <PageLayout>
       <div className="max-w-7xl mx-auto">
         {/* Back Button */}
-      <div className="mb-6">
+        <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
         <Button
           variant="ghost"
           size="sm"
@@ -388,6 +538,16 @@ export default function TicketDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Kembali
         </Button>
+          
+          {/* Download PDF Report */}
+          {ticket && repairs && (
+            <PDFDownloadButton 
+              ticket={ticket} 
+              repairs={repairs} 
+              user={user} 
+              disabled={ticket.status !== 'CLOSED'}
+            />
+          )}
         </div>
 
         {/* Header Card - Compact */}
@@ -491,9 +651,9 @@ export default function TicketDetailPage() {
                       {status === 'OPEN' ? 'Buat SO' :
                        status === 'IN_DELIVERY' ? 'Kirim RC' :
                        status === 'RECEIVED' ? 'Terima RC' :
-                       status === 'IN_PROGRESS' ? 'Repair' :
-                       status === 'RESOLVED' ? 'Selesai' :
-                       status === 'RETURN_SHIPPED' ? 'Kirim' : 'Tutup'}
+                       status === 'IN_PROGRESS' ? (isReplacementTicket ? 'Replace' : 'Repair') :
+                       status === 'RESOLVED' ? 'Siap Pickup' :
+                       status === 'CLOSED' ? 'Selesai' : 'Tutup'}
                     </span>
                   </div>
                 );
@@ -668,31 +828,153 @@ export default function TicketDetailPage() {
                           <CheckCircle2 className="h-5 w-5" />
                           <span className="text-sm uppercase tracking-wider">Pickup di RC</span>
                       </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                          <InfoItem 
-                            label="Tanggal Pickup" 
-                            value={ticket.cassetteReturn.shippedDate 
-                              ? formatDateTime(ticket.cassetteReturn.shippedDate).split(',')[0]
-                              : '-'} 
-                            isDark={false} 
-                          />
-                          <InfoItem 
-                            label="Dikonfirmasi oleh RC" 
-                            value={ticket.cassetteReturn.receivedAtPengelola 
-                              ? formatDateTime(ticket.cassetteReturn.receivedAtPengelola).split(',')[0]
-                              : '-'}
-                            valueClass={ticket.cassetteReturn.receivedAtPengelola 
-                              ? '' 
-                              : 'text-slate-500 dark:text-slate-500'}
-                            isDark={false} 
-                          />
-                          {ticket.cassetteReturn.notes && (
-                            <InfoItem 
-                              label="Catatan" 
-                              value={ticket.cassetteReturn.notes}
-                              isDark={false} 
-                            />
+                        <div className="space-y-4">
+                          {/* Pickup Confirmation Info */}
+                          {ticket.cassetteReturn.confirmedByRc && (
+                            <div className="p-3 rounded-lg border-2 bg-green-100 dark:bg-green-900/40 border-green-400 dark:border-green-600">
+                              <div className="flex items-center gap-2 mb-1">
+                                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  Konfirmasi Pickup
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-600 dark:text-slate-400">
+                                <p className="font-semibold">Dikonfirmasi oleh: {ticket.cassetteReturn.rcConfirmer?.fullName || 'RC Staff'}</p>
+                                <p>Tanggal: {ticket.cassetteReturn.rcConfirmedAt ? formatDateTime(ticket.cassetteReturn.rcConfirmedAt) : '-'}</p>
+                              </div>
+                            </div>
                           )}
+                          
+                          {/* Pickup Details - Parse from notes */}
+                          {(() => {
+                            const notes = ticket.cassetteReturn.notes || '';
+                            
+                            // Parse pickup information from notes (handle various formats)
+                            const pickupDateTimeMatch = notes.match(/Tanggal\/Waktu\s+Pickup[:\s]+([^\n]+)/i);
+                            const kondisiMatch = notes.match(/Kondisi\s+Kaset[:\s]+([^\n]+)/i);
+                            const namaPengambilMatch = notes.match(/Nama\s+Pengambil[:\s]+([^\n]+)/i);
+                            const noHpMatch = notes.match(/No\.?\s*HP\s+Pengambil[:\s]+([^\n]+)/i);
+                            const dikonfirmasiMatch = notes.match(/Dikonfirmasi\s+oleh[:\s]+([^\n]+)/i);
+                            const catatanMatch = notes.match(/Catatan[:\s]+([^\n]+)/i);
+                            
+                            const pickupDateTime = pickupDateTimeMatch ? pickupDateTimeMatch[1].trim() : null;
+                            const kondisiKaset = kondisiMatch ? kondisiMatch[1].trim() : null;
+                            const namaPengambil = namaPengambilMatch ? namaPengambilMatch[1].trim() : null;
+                            const noHp = noHpMatch ? noHpMatch[1].trim() : null;
+                            const dikonfirmasiOleh = dikonfirmasiMatch ? dikonfirmasiMatch[1].trim() : null;
+                            const catatanTambahan = catatanMatch ? catatanMatch[1].trim() : null;
+                            
+                            // Check if we have any structured data
+                            const hasStructuredData = pickupDateTime || kondisiKaset || namaPengambil || noHp || dikonfirmasiOleh;
+                            
+                            if (!hasStructuredData && !notes) {
+                              return null;
+                            }
+                            
+                            return (
+                              <div className="space-y-4">
+                                {/* Information Grid */}
+                                {hasStructuredData && (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {pickupDateTime && (
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                          Tanggal/Waktu Pickup
+                                        </p>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                          {pickupDateTime}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {kondisiKaset && (
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                          Kondisi Kaset
+                                        </p>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                          {kondisiKaset}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {namaPengambil && (
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                          Nama Pengambil
+                                        </p>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                          {namaPengambil}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {noHp && (
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                          No. HP Pengambil
+                                        </p>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                          {noHp}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {dikonfirmasiOleh && (
+                                      <div className="space-y-1 md:col-span-2">
+                                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                          Dikonfirmasi Oleh
+                                        </p>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                          {dikonfirmasiOleh}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                
+                                {/* Digital Signature Section */}
+                                {ticket.cassetteReturn.signature && (
+                                  <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                      Tanda Tangan Digital
+                                    </p>
+                                    <div className="inline-block border-2 border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 p-3">
+                                      <img 
+                                        src={ticket.cassetteReturn.signature} 
+                                        alt="Tanda Tangan Digital" 
+                                        className="h-auto max-h-32 object-contain"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Catatan Tambahan */}
+                                {catatanTambahan && (
+                                  <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2">
+                                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                      Catatan Tambahan
+                                    </p>
+                                    <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                                      <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                                        {catatanTambahan}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Fallback: Show raw notes if no structured data found */}
+                                {!hasStructuredData && notes && (
+                                  <div className="space-y-2">
+                                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                      Catatan
+                                    </p>
+                                    <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                                      <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                                        {notes}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                       </div>
                     </div>
                   )}
@@ -782,7 +1064,7 @@ export default function TicketDetailPage() {
                       </span>
                     </div>
                     <Button 
-                      onClick={handleStartRepair}
+                      onClick={() => setShowStartRepairDialog(true)}
                       disabled={creatingRepairs}
                       className="w-full bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:from-teal-600 dark:to-teal-700 dark:hover:from-teal-700 dark:hover:to-teal-800 text-white font-bold"
                       size="lg"
@@ -835,7 +1117,11 @@ export default function TicketDetailPage() {
                         {isReplacementTicket 
                           ? (ticket.status === 'RESOLVED' ? 'Replacement selesai' : 'Replacement dalam proses')
                           : (allRepairsCompleted 
-                            ? (isMultiCassette ? `${cassetteCount} kaset selesai diperbaiki` : 'Kaset selesai diperbaiki')
+                            ? (isMultiCassette 
+                                ? `${successfullyRepairedCount} kaset selesai diperbaiki${scrappedCount > 0 ? `, ${scrappedCount} kaset SCRAPPED` : ''}` 
+                                : successfullyRepairedCount > 0 
+                                  ? 'Kaset selesai diperbaiki' 
+                                  : 'Kaset SCRAPPED')
                             : (isMultiCassette ? `${completedCount}/${cassetteCount} kaset selesai diperbaiki` : 'Kaset sedang diperbaiki')
                           )
                         }
@@ -858,16 +1144,34 @@ export default function TicketDetailPage() {
                     ) : allRepairsCompleted ? (
                       <div className="bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-500/50 rounded p-3">
                         <p className="text-xs text-green-800 dark:text-green-300">
-                        ✅ Repair & QC selesai. Siap untuk di-pickup oleh Pengelola di RC.
+                        ✅ Repair & QC selesai. 
+                        {successfullyRepairedCount > 0 && scrappedCount > 0 ? (
+                          <>
+                            {successfullyRepairedCount} kaset siap untuk di-pickup oleh Pengelola di RC. {scrappedCount} kaset SCRAPPED akan tetap di RC untuk disposal.
+                          </>
+                        ) : successfullyRepairedCount > 0 ? (
+                          <>
+                            {successfullyRepairedCount} kaset siap untuk di-pickup oleh Pengelola di RC.
+                          </>
+                        ) : scrappedCount > 0 ? (
+                          <>
+                            {scrappedCount} kaset SCRAPPED. Konfirmasi disposal untuk kaset yang tidak bisa diperbaiki.
+                          </>
+                        ) : (
+                          'Siap untuk di-pickup oleh Pengelola di RC.'
+                        )}
                       </p>
                     </div>
                     ) : (
                       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-500/50 rounded p-3">
                         <p className="text-xs text-yellow-800 dark:text-yellow-300">
-                          ⏳ Menunggu semua {cassetteCount} kaset selesai diperbaiki ({completedCount}/{cassetteCount} selesai). Tombol akan aktif setelah semua repair tickets selesai.
+                          ⏳ Menunggu semua {cassetteCount} kaset selesai diperbaiki ({completedCount}/{cassetteCount} repair selesai{successfullyRepairedCount > 0 ? `, ${successfullyRepairedCount} berhasil` : ''}{scrappedCount > 0 ? `, ${scrappedCount} SCRAPPED` : ''}). Tombol akan aktif setelah semua repair tickets selesai.
                         </p>
                       </div>
                     )}
+                    {/* For replacement tickets, pickup confirmation is handled in replacement page */}
+                    {!isReplacementTicket && (
+                      <>
                     {canConfirmPickup ? (
                       <Button 
                         onClick={() => setShowPickupDialog(true)}
@@ -875,7 +1179,7 @@ export default function TicketDetailPage() {
                         size="lg"
                       >
                         <CheckCircle2 className="h-5 w-5 mr-2" />
-                        {isMultiCassette ? `Konfirmasi Pickup ${cassetteCount} Kaset` : 'Konfirmasi Pickup'}
+                            {isMultiPickup ? `Konfirmasi Pickup ${pickupCassetteCount} Kaset` : 'Konfirmasi Pickup'}
                       </Button>
                     ) : (
                       <Button 
@@ -884,8 +1188,21 @@ export default function TicketDetailPage() {
                         disabled
                       >
                         <Package className="h-5 w-5 mr-2" />
-                        {isMultiCassette ? `Konfirmasi Pickup ${cassetteCount} Kaset` : 'Konfirmasi Pickup'}
+                            {isMultiPickup ? `Konfirmasi Pickup ${pickupCassetteCount} Kaset` : 'Konfirmasi Pickup'}
                       </Button>
+                        )}
+                      </>
+                    )}
+                    {isReplacementTicket && ticket.status === 'RESOLVED' && (
+                      <Link href={`/tickets/${ticket.id}/replacement`} className="w-full block">
+                        <Button 
+                          className="w-full bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:from-teal-600 dark:to-teal-700 dark:hover:from-teal-700 dark:hover:to-teal-800 text-white font-semibold" 
+                          size="lg"
+                        >
+                          <Package className="h-5 w-5 mr-2" />
+                          Konfirmasi Pickup di Halaman Replacement
+                        </Button>
+                      </Link>
                     )}
                   </div>
                 </ActionCard>
@@ -916,7 +1233,19 @@ export default function TicketDetailPage() {
                     <p className="text-lg font-bold text-slate-800 dark:text-slate-200">SO Selesai</p>
                     <p className="text-xs text-slate-600 dark:text-slate-300">
                       Service Order telah selesai dan ditutup.
-                      {isMultiCassette && ` ${cassetteCount} kaset telah kembali ke pengelola.`}
+                      {isMultiCassette && (() => {
+                        const returnedCount = allCassettes.filter((c: any) => c.status === 'OK').length;
+                        const scrappedCount = allCassettes.filter((c: any) => c.status === 'SCRAPPED').length;
+                        if (returnedCount > 0 && scrappedCount > 0) {
+                          return ` ${returnedCount} kaset telah kembali ke pengelola, ${scrappedCount} kaset SCRAPPED tetap di RC.`;
+                        } else if (returnedCount > 0) {
+                          return ` ${returnedCount} kaset telah kembali ke pengelola.`;
+                        } else if (scrappedCount > 0) {
+                          return ` ${scrappedCount} kaset SCRAPPED tetap di RC untuk disposal.`;
+                        } else {
+                          return ` ${cassetteCount} kaset telah kembali ke pengelola.`;
+                        }
+                      })()}
                     </p>
                   </div>
                 </ActionCard>
@@ -1064,12 +1393,6 @@ export default function TicketDetailPage() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-              <p className="text-sm text-blue-800 dark:text-blue-300">
-                <strong>Info:</strong> Setelah konfirmasi, status ticket berubah menjadi RECEIVED dan Anda dapat mulai membuat repair ticket untuk diagnosa.
-              </p>
-            </div>
-            
             <div className="space-y-2">
               <Label htmlFor="receive-notes">Catatan (Opsional)</Label>
               <Textarea
@@ -1114,36 +1437,372 @@ export default function TicketDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Pickup Dialog */}
+      {/* Confirm Pickup/Disposal Dialog - Only for RC staff */}
+      {isHitachi || isSuperAdmin ? (
       <Dialog open={showPickupDialog} onOpenChange={setShowPickupDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
-              <CheckCircle2 className="h-5 w-5" />
-              Konfirmasi Pickup
+            <DialogTitle className={`flex items-center gap-2 ${isDisposalFlow ? 'text-red-600 dark:text-red-400' : 'text-teal-600 dark:text-teal-400'}`}>
+              {isDisposalFlow ? <Trash2 className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+              {isDisposalFlow 
+                ? 'Konfirmasi Disposal Kaset' 
+                : 'Konfirmasi Pickup Kaset'}
             </DialogTitle>
             <DialogDescription>
-              Konfirmasi bahwa Pengelola telah mengambil {isMultiCassette ? `${cassetteCount} kaset` : 'kaset'} di RC. 
-              Status kaset akan langsung berubah menjadi OK.
+              {isDisposalFlow
+                ? `Konfirmasi disposal untuk ${isMultiPickup ? `${pickupCassetteCount} kaset` : 'kaset'} dengan status SCRAPPED (tidak bisa diperbaiki, tidak lolos QC). Kaset tetap di RC untuk disposal.`
+                : `Lengkapi informasi pickup untuk ${isMultiPickup ? `${pickupCassetteCount} kaset` : 'kaset'} yang telah diambil di RC.`}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
+            {/* Info Banner */}
+            {isDisposalFlow ? (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-800 dark:text-red-300 mb-2">
+                      ⚠️ Kaset Tidak Bisa Diperbaiki (SCRAPPED)
+                    </p>
+                    <ul className="text-sm text-red-700 dark:text-red-400 space-y-1 list-disc list-inside">
+                      <li>Kaset tidak lolos Quality Control setelah perbaikan</li>
+                      <li>Kaset tetap di RC untuk disposal (tidak dikembalikan ke Pengelola)</li>
+                      <li>Setelah konfirmasi, ticket akan menjadi CLOSED</li>
+                      <li>PDF Disposal Certificate akan tersedia untuk bukti ke Pengelola</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
               <p className="text-sm text-blue-800 dark:text-blue-300">
                 <strong>Info:</strong> Setelah konfirmasi, status kaset langsung berubah menjadi OK dan ticket menjadi CLOSED.
               </p>
             </div>
+            )}
+
+            {/* Summary Info */}
+            <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                {isDisposalFlow 
+                  ? 'Kaset yang akan dikonfirmasi disposal:' 
+                  : 'Kaset yang akan di-pickup:'}
+              </p>
+              {isDisposalFlow ? (
+                // Disposal: show only SCRAPPED cassettes
+                isMultiPickup ? (
+                  <ul className="list-disc list-inside text-sm text-slate-600 dark:text-slate-400 space-y-1">
+                    {scrappedCassettes.map((c: any, idx: number) => (
+                      <li key={c.id} className="font-mono">
+                        {c.serialNumber}
+                        <Badge variant="destructive" className="ml-2 text-xs">SCRAPPED</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-mono text-slate-600 dark:text-slate-400">
+                      {scrappedCassettes[0]?.serialNumber}
+                    </p>
+                    <Badge variant="destructive" className="text-xs">SCRAPPED</Badge>
+                  </div>
+                )
+              ) : (
+                // Pickup: show READY_FOR_PICKUP cassettes
+                // For replacement tickets: show replacement mapping (old → new) and new cassettes
+                // For repair tickets: show READY_FOR_PICKUP cassettes, and also show SCRAPPED if any
+                <>
+                  {/* For replacement tickets: show ALL replacement mappings */}
+                  {isReplacementTicket && (() => {
+                    // Get all cassettes that are marked for replacement
+                    const replacementCassettes = ticket.cassetteDetails
+                      ?.filter((detail: any) => detail.requestReplacement === true)
+                      .map((detail: any) => detail.cassette)
+                      .filter((c: any) => c !== null) || [];
+                    
+                    if (replacementCassettes.length === 0) return null;
+                    
+                    return (
+                      <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <p className="text-sm font-bold text-blue-900 dark:text-blue-100 mb-3">
+                          📋 Informasi Replacement - Semua Kaset yang Diganti:
+                        </p>
+                        <div className="space-y-2.5">
+                          {replacementCassettes.map((oldCassette: any, index: number) => {
+                            // Check if this old cassette has been replaced
+                            // Backend now includes replacementFor relation
+                            const newCassette = oldCassette.replacementFor && oldCassette.replacementFor.length > 0
+                              ? oldCassette.replacementFor[0]
+                              : null;
+                            
+                            return (
+                              <div 
+                                key={oldCassette.id} 
+                                className="p-3 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-lg shadow-sm"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                                    <span className="text-xs font-bold text-blue-700 dark:text-blue-400">{index + 1}</span>
+                                  </div>
+                                  <div className="flex-1 space-y-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Serial Number Lama:</span>
+                                        <span className="font-mono text-sm px-2.5 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md border border-red-200 dark:border-red-800 font-semibold">
+                                          {oldCassette.serialNumber}
+                                        </span>
+                                        <span className="text-xs text-red-600 dark:text-red-400 font-semibold bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded">SCRAPPED</span>
+                                      </div>
+                                    </div>
+                                    {newCassette ? (
+                                      <>
+                                        <div className="flex items-center gap-2">
+                                          <ArrowRight className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0 ml-8" />
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap ml-8">
+                                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Serial Number Baru:</span>
+                                          <span className="font-mono text-sm px-2.5 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md border border-green-200 dark:border-green-800 font-semibold">
+                                            {newCassette.serialNumber}
+                                          </span>
+                                          <span className="text-xs text-green-600 dark:text-green-400 font-semibold bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded">READY FOR PICKUP</span>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="ml-8">
+                                        <span className="text-xs text-yellow-600 dark:text-yellow-400 font-medium bg-yellow-50 dark:bg-yellow-900/20 px-2 py-1 rounded">
+                                          ⏳ Belum di-replace - Menunggu input SN baru dari RC
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  {readyForPickupCassettes.length > 0 && (
+                    <div className={isReplacementTicket && scrappedCassettes.length > 0 ? "mt-3 pt-3 border-t border-slate-300 dark:border-slate-600" : "mb-2"}>
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-1">
+                        {isReplacementTicket 
+                          ? `Kaset baru siap pickup (${readyForPickupCassettes.length}):`
+                          : `Kaset siap pickup (${readyForPickupCassettes.length}):`}
+                      </p>
+                      {readyForPickupCassettes.length > 1 ? (
+                        <ul className="list-disc list-inside text-sm text-slate-600 dark:text-slate-400 space-y-1">
+                          {readyForPickupCassettes.map((c: any) => (
+                            <li key={c.id} className="font-mono">{c.serialNumber}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm font-mono text-slate-600 dark:text-slate-400">
+                          {readyForPickupCassettes[0]?.serialNumber}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* Only show SCRAPPED info for repair tickets, not replacement tickets */}
+                  {!isReplacementTicket && scrappedCassettes.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-300 dark:border-slate-600">
+                      <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">
+                        Kaset SCRAPPED - tidak di-pickup ({scrappedCassettes.length}):
+                      </p>
+                      {scrappedCassettes.length > 1 ? (
+                        <ul className="list-disc list-inside text-sm text-slate-600 dark:text-slate-400 space-y-1">
+                          {scrappedCassettes.map((c: any) => (
+                            <li key={c.id} className="font-mono">
+                              {c.serialNumber}
+                              <Badge variant="destructive" className="ml-2 text-xs">SCRAPPED</Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-mono text-slate-600 dark:text-slate-400">
+                            {scrappedCassettes[0]?.serialNumber}
+                          </p>
+                          <Badge variant="destructive" className="text-xs">SCRAPPED</Badge>
+                        </div>
+                      )}
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-2 italic">
+                        Kaset SCRAPPED akan tetap di RC untuk disposal dan tidak dikembalikan ke Pengelola.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
             
+            {/* Tanggal Pickup */}
+            <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="pickup-notes">Catatan (Opsional)</Label>
+                <Label htmlFor="pickup-date" className="text-sm font-semibold">
+                  Tanggal Pickup <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="pickup-date"
+                  type="date"
+                  value={pickupDate}
+                  onChange={(e) => setPickupDate(e.target.value)}
+                  required
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pickup-time" className="text-sm font-semibold">
+                  Waktu Pickup <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="pickup-time"
+                  type="time"
+                  value={pickupTime}
+                  onChange={(e) => setPickupTime(e.target.value)}
+                  required
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            {/* Kondisi Kaset - Only show for non-SCRAPPED cassettes (pickup flow) */}
+            {!isDisposalFlow ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="pickup-condition" className="text-sm font-semibold">
+                    Kondisi Kaset Saat Diambil <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={pickupCondition} onValueChange={setPickupCondition}>
+                    <SelectTrigger id="pickup-condition">
+                      <SelectValue placeholder="Pilih kondisi kaset" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GOOD">✅ Baik - Tidak ada kerusakan</SelectItem>
+                      <SelectItem value="MINOR_DAMAGE">⚠️ Ada kerusakan minor</SelectItem>
+                      <SelectItem value="DAMAGE">❌ Ada kerusakan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Nama Pengambil dan No HP - Only for pickup */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="pickup-recipient-name" className="text-sm font-semibold">
+                      Nama Pengambil <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="pickup-recipient-name"
+                      type="text"
+                      placeholder="Masukkan nama pengambil"
+                      value={pickupRecipientName}
+                      onChange={(e) => setPickupRecipientName(e.target.value)}
+                      required
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pickup-recipient-phone" className="text-sm font-semibold">
+                      No. HP Pengambil <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="pickup-recipient-phone"
+                      type="tel"
+                      placeholder="Masukkan nomor HP"
+                      value={pickupRecipientPhone}
+                      onChange={(e) => setPickupRecipientPhone(e.target.value)}
+                      required
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {/* Catatan */}
+            <div className="space-y-2">
+              <Label htmlFor="pickup-notes" className="text-sm font-semibold">
+                Catatan Tambahan
+              </Label>
               <Textarea
                 id="pickup-notes"
-                placeholder="Masukkan catatan jika diperlukan..."
+                placeholder="Masukkan catatan tambahan jika diperlukan (misalnya: kondisi fisik, jumlah kaset yang diambil, dll)..."
                 value={pickupNotes}
                 onChange={(e) => setPickupNotes(e.target.value)}
                 className="min-h-[100px]"
               />
+            </div>
+
+            {/* Tanda Tangan Digital - Only for pickup, not disposal */}
+            {!isDisposalFlow ? (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">
+                  Tanda Tangan Digital <span className="text-red-500">*</span>
+                </Label>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                  Tanda tangan di area berikut untuk konfirmasi pickup
+                </p>
+                <SignaturePad
+                  onSignatureChange={(signature) => setPickupSignature(signature)}
+                  width={500}
+                  height={200}
+                />
+                
+                {/* Preview Signature */}
+                {pickupSignature && (
+                  <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Preview Tanda Tangan:
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowSignaturePreview(true)}
+                        className="h-6 px-2 text-xs"
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        Lihat Besar
+                      </Button>
+                    </div>
+                    <div className="relative inline-block border-2 border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 p-2 cursor-pointer hover:border-teal-400 transition-colors"
+                         onClick={() => setShowSignaturePreview(true)}
+                    >
+                      <img 
+                        src={pickupSignature} 
+                        alt="Preview Tanda Tangan" 
+                        className="h-auto max-h-32 object-contain"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      Tanda tangan sudah tersimpan
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Konfirmasi Checkbox */}
+            <div className="flex items-start space-x-3 p-4 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-lg">
+              <input
+                type="checkbox"
+                id="pickup-confirmed"
+                checked={pickupConfirmed}
+                onChange={(e) => setPickupConfirmed(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 focus:ring-2 cursor-pointer"
+              />
+              <Label 
+                htmlFor="pickup-confirmed" 
+                className="text-sm font-medium leading-none cursor-pointer flex-1"
+              >
+                {isDisposalFlow
+                  ? `Saya mengkonfirmasi bahwa ${isMultiPickup ? `${pickupCassetteCount} kaset` : 'kaset'} dengan status SCRAPPED (tidak bisa diperbaiki, tidak lolos QC) telah dikonfirmasi untuk disposal. Kaset tetap di RC dan ticket akan ditutup.`
+                  : `Saya mengkonfirmasi bahwa ${isMultiPickup ? `${pickupCassetteCount} kaset` : 'kaset'} telah diambil di RC dengan kondisi sesuai yang dipilih di atas.`}
+                <span className="text-red-500 ml-1">*</span>
+              </Label>
             </div>
           </div>
 
@@ -1153,6 +1812,13 @@ export default function TicketDetailPage() {
               onClick={() => {
                 setShowPickupDialog(false);
                 setPickupNotes('');
+                setPickupDate(new Date().toISOString().split('T')[0]);
+                setPickupTime(new Date().toTimeString().slice(0, 5));
+                setPickupCondition('GOOD');
+                setPickupSignature(null);
+                setPickupConfirmed(false);
+                setPickupRecipientName('');
+                setPickupRecipientPhone('');
               }}
               disabled={confirmingPickup}
             >
@@ -1160,8 +1826,12 @@ export default function TicketDetailPage() {
             </Button>
             <Button
               onClick={handleConfirmPickup}
-              disabled={confirmingPickup}
-              className="bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700"
+              disabled={confirmingPickup || !pickupConfirmed || (!isDisposalFlow && (!pickupSignature || !pickupRecipientName.trim() || !pickupRecipientPhone.trim()))}
+              className={`bg-gradient-to-r disabled:opacity-50 ${
+                isDisposalFlow 
+                  ? 'from-red-500 to-red-600 hover:from-red-600 hover:to-red-700' 
+                  : 'from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700'
+              }`}
             >
               {confirmingPickup ? (
                 <>
@@ -1170,10 +1840,71 @@ export default function TicketDetailPage() {
                 </>
               ) : (
                 <>
+                  {isDisposalFlow ? (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Konfirmasi Disposal
+                </>
+              ) : (
+                <>
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                   Konfirmasi Pickup
+                    </>
+                  )}
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      ) : null}
+
+      {/* Signature Preview Dialog */}
+      <Dialog open={showSignaturePreview} onOpenChange={setShowSignaturePreview}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
+              <Eye className="h-5 w-5" />
+              Preview Tanda Tangan Digital
+            </DialogTitle>
+            <DialogDescription>
+              Tanda tangan yang akan digunakan untuk konfirmasi pickup
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {pickupSignature && (
+              <div className="relative border-4 border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 p-4 overflow-auto max-h-[60vh]">
+                <img 
+                  src={pickupSignature} 
+                  alt="Tanda Tangan Digital" 
+                  className="w-full h-auto"
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSignaturePreview(false)}
+            >
+              Tutup
+            </Button>
+            <Button
+              onClick={() => {
+                if (pickupSignature) {
+                  const link = document.createElement('a');
+                  link.href = pickupSignature;
+                  link.download = `tanda-tangan-pickup-${ticketId}-${Date.now()}.png`;
+                  link.click();
+                }
+              }}
+              className="bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700"
+              disabled={!pickupSignature}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1215,6 +1946,61 @@ export default function TicketDetailPage() {
             <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
               Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Start Repair Dialog */}
+      <Dialog open={showStartRepairDialog} onOpenChange={setShowStartRepairDialog}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-[400px] sm:max-w-[500px] mx-auto rounded-3xl sm:rounded-lg p-4 sm:p-6">
+          <DialogHeader className="px-0">
+            <DialogTitle className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
+              <Wrench className="h-5 w-5" />
+              Mulai Repair
+            </DialogTitle>
+            <DialogDescription>
+              {isMultiCassette 
+                ? `Mulai repair untuk ${cassetteCount} kaset?`
+                : 'Mulai repair untuk kaset ini?'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4 px-0">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 sm:p-4">
+              <p className="text-sm text-blue-800 dark:text-blue-300">
+                <strong>Info:</strong> {isMultiCassette 
+                  ? `Ini akan membuat ${cassetteCount} repair tickets dan mengubah status SO menjadi IN_PROGRESS.`
+                  : 'Ini akan membuat repair ticket dan mengubah status SO menjadi IN_PROGRESS.'}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="px-0 gap-2 sm:gap-0 flex-col sm:flex-row">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowStartRepairDialog(false)}
+              disabled={creatingRepairs}
+              className="w-full sm:w-auto rounded-xl sm:rounded-lg"
+            >
+              Batal
+            </Button>
+            <Button 
+              onClick={handleStartRepair}
+              disabled={creatingRepairs}
+              className="bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 w-full sm:w-auto rounded-xl sm:rounded-lg"
+            >
+              {creatingRepairs ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                <>
+                  <Wrench className="h-4 w-4 mr-2" />
+                  Mulai Repair
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

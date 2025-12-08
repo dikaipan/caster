@@ -63,8 +63,14 @@ export default function HistoryPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Explicitly request CLOSED tickets only (backend excludes CLOSED by default for active SO)
         const [ticketsRes, pmRes] = await Promise.all([
-          api.get('/tickets'),
+          api.get('/tickets', {
+            params: {
+              status: 'CLOSED',
+              limit: 1000, // Get all closed tickets for history
+            },
+          }),
           api.get('/preventive-maintenance').catch(() => ({ data: [] })),
         ]);
         
@@ -73,10 +79,9 @@ export default function HistoryPage() {
           ? ticketsRes.data 
           : (ticketsRes.data?.data || []);
         
-        // Filter only closed tickets and sort by date descending (newest first)
+        // Sort by date descending (newest first)
         // Include both regular tickets and replacement requests (tickets with requestReplacement = true)
         const closedTickets = ticketsData
-          .filter((ticket: any) => ticket.status === 'CLOSED')
           .sort((a: any, b: any) => 
             new Date(b.closedAt || b.reportedAt).getTime() - new Date(a.closedAt || a.reportedAt).getTime()
         );
@@ -198,11 +203,10 @@ export default function HistoryPage() {
     
     const configs: Record<string, { label: string; className: string; icon: any }> = {
       OPEN: { label: 'Open', className: 'bg-blue-100 dark:bg-blue-900/30 text-[#2563EB] dark:text-blue-400 border-blue-200 dark:border-blue-800', icon: AlertCircle },
-      IN_DELIVERY: { label: 'Dikirim ke RC', className: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800', icon: Package },
-      RECEIVED: { label: 'Diterima di RC', className: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800', icon: Inbox },
+      IN_DELIVERY: { label: 'Dikirim ke RC', className: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border-amber-200 dark:border-amber-800', icon: Package },
+      RECEIVED: { label: 'Diterima di RC', className: 'bg-[#C5000F]/20 dark:bg-[#C5000F]/30 text-[#C5000F] dark:text-red-400 border-[#C5000F]/30 dark:border-red-800', icon: Inbox },
       IN_PROGRESS: { label: 'Sedang Diperbaiki', className: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800', icon: Wrench },
-      RESOLVED: { label: 'Selesai Diperbaiki', className: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-green-200 dark:border-green-800', icon: CheckCircle2 },
-      RETURN_SHIPPED: { label: 'Dikirim ke Pengelola', className: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 border-purple-200 dark:border-purple-800', icon: Truck },
+      RESOLVED: { label: 'Siap Pickup', className: 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-400 border-teal-200 dark:border-teal-800', icon: CheckCircle2 },
       CLOSED: { label: 'Selesai', className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700', icon: CheckCircle2 },
     };
     return configs[status] || configs.OPEN;
@@ -343,8 +347,7 @@ export default function HistoryPage() {
                 <SelectItem value="IN_DELIVERY">Dikirim ke RC</SelectItem>
                 <SelectItem value="RECEIVED">Diterima di RC</SelectItem>
                 <SelectItem value="IN_PROGRESS">Sedang Diperbaiki</SelectItem>
-                <SelectItem value="RESOLVED">Selesai Diperbaiki</SelectItem>
-                <SelectItem value="RETURN_SHIPPED">Dikirim ke Pengelola</SelectItem>
+                <SelectItem value="RESOLVED">Siap Pickup</SelectItem>
                 <SelectItem value="CLOSED">Selesai</SelectItem>
               </SelectContent>
             </Select>
@@ -491,7 +494,14 @@ export default function HistoryPage() {
               const statusBadge = getStatusBadge(item.status, item.itemType);
                           const StatusIcon = statusBadge.icon;
                 const created = new Date(item.reportedAt);
-                const closed = item.closedAt ? new Date(item.closedAt) : null;
+                // Use closedAt, or fallback to cassetteReturn.receivedAtPengelola, or updatedAt for CLOSED tickets
+                const closed = item.closedAt 
+                  ? new Date(item.closedAt) 
+                  : (item.status === 'CLOSED' && item.cassetteReturn?.receivedAtPengelola
+                      ? new Date(item.cassetteReturn.receivedAtPengelola)
+                      : (item.status === 'CLOSED' && item.updatedAt
+                          ? new Date(item.updatedAt)
+                          : null));
               const duration = closed 
                 ? Math.round((closed.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
                 : null;
@@ -514,16 +524,11 @@ export default function HistoryPage() {
                               <td className="p-4">
                             <div className="flex items-center gap-2">
                               <Link
-                                  href={`/tickets/${item.id}`}
+                                  href={`/tickets/${item.id}?from=history`}
                                     className="font-mono font-extrabold text-sm text-teal-400 hover:text-teal-300 hover:underline transition-colors"
                               >
                                   {item.ticketNumber}
                               </Link>
-                              {hasReplacement && (
-                                <Badge variant="destructive" className="text-[9px] px-1.5 py-0.5">
-                                  REPLACEMENT
-                                </Badge>
-                              )}
                             </div>
                               </td>
                               <td className="p-4">
@@ -537,11 +542,6 @@ export default function HistoryPage() {
                                     <div className="flex items-center gap-1.5 mb-1">
                                       <Package className="h-3.5 w-3.5 text-teal-400" />
                                       <span className="text-xs font-bold text-teal-400">{cassetteCount} Kaset</span>
-                                      {hasReplacement && (
-                                        <Badge variant="destructive" className="text-[9px] px-1 py-0">
-                                          REPLACEMENT
-                                        </Badge>
-                                      )}
                                     </div>
                                     <div className="space-y-0.5">
                                       {allCassettes.slice(0, 2).map((cassette: any) => {
@@ -565,28 +565,23 @@ export default function HistoryPage() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div>
-                                    <div className="flex items-center gap-1">
-                                      <p className="font-mono font-extrabold text-sm text-slate-100">
-                                        {allCassettes[0]?.serialNumber || item.cassette?.serialNumber || 'N/A'}
-                                      </p>
-                                      {hasReplacement && replacementCassettes.some((rc: any) => rc.id === (allCassettes[0]?.id || item.cassette?.id)) && (
-                                        <Badge variant="destructive" className="text-[9px] px-1 py-0">
-                                          REPLACEMENT
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {allCassettes[0]?.cassetteType && (
-                                      <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                                        {allCassettes[0].cassetteType.typeCode}
-                                      </p>
-                                    )}
-                                    {hasReplacement && replacementCassettes.some((rc: any) => rc.id === (allCassettes[0]?.id || item.cassette?.id)) && (allCassettes[0] || item.cassette)?.status === 'SCRAPPED' && (
-                                      <Badge variant="destructive" className="text-[9px] px-1 py-0 mt-0.5">
-                                        SCRAPPED
-                                      </Badge>
-                                    )}
+                                <div>
+                                  <div className="flex items-center gap-1">
+                                    <p className="font-mono font-extrabold text-sm text-slate-100">
+                                      {allCassettes[0]?.serialNumber || item.cassette?.serialNumber || 'N/A'}
+                                    </p>
                                   </div>
+                                  {allCassettes[0]?.cassetteType && (
+                                    <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                                      {allCassettes[0].cassetteType.typeCode}
+                                    </p>
+                                  )}
+                                  {hasReplacement && replacementCassettes.some((rc: any) => rc.id === (allCassettes[0]?.id || item.cassette?.id)) && (allCassettes[0] || item.cassette)?.status === 'SCRAPPED' && (
+                                    <Badge variant="destructive" className="text-[9px] px-1 py-0 mt-0.5">
+                                      SCRAPPED
+                                    </Badge>
+                                  )}
+                                </div>
                                 )}
                               </td>
                               <td className="p-4">
@@ -618,7 +613,7 @@ export default function HistoryPage() {
                                 {closed ? (
                                   <div className="flex items-center gap-1.5 text-sm text-slate-300 font-medium">
                                     <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
-                                    {formatDateTime(item.closedAt).split(',')[0]}
+                                    {formatDateTime(closed.toISOString()).split(',')[0]}
                                   </div>
                                 ) : (
                                   <span className="text-sm text-slate-500">-</span>
@@ -635,7 +630,7 @@ export default function HistoryPage() {
                                 )}
                               </td>
                               <td className="p-4 text-center">
-                          <Link href={`/tickets/${item.id}`}>
+                          <Link href={`/tickets/${item.id}?from=history`}>
                                   <Button 
                                     size="sm" 
                                     variant="outline" 

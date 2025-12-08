@@ -90,7 +90,7 @@ export class PmSchedulerService {
           // Check if cassettes are available (not in repair, not in transit)
           const availableCassettes = pm.cassetteDetails.filter(d => {
             const status = d.cassette.status;
-            return !['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA', 'SCRAPPED'].includes(status);
+            return !['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'READY_FOR_PICKUP', 'IN_TRANSIT_TO_PENGELOLA', 'SCRAPPED'].includes(status);
           });
 
           if (availableCassettes.length === 0) {

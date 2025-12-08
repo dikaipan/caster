@@ -24,7 +24,7 @@ export class CreateMachineDto {
   @IsNotEmpty()
   machineCode: string;
 
-  @ApiProperty({ example: 'Hitachi SR-M100' })
+  @ApiProperty({ example: 'SR7500VS', description: 'Machine model: SR7500 or SR7500VS' })
   @IsString()
   @IsNotEmpty()
   modelName: string;

@@ -155,31 +155,32 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
             }
           }
 
+          // PM Tasks - DISABLED TEMPORARILY
           // Fetch PM tasks count (unassigned or assigned to current user) - for HITACHI users only
           // Throttle to max once per 5 minutes
-          if (user.userType === 'HITACHI') {
-            const now = Date.now();
-            const lastFetch = lastFetchTimeRef.current['pm-tasks'] || 0;
-            const timeSinceLastFetch = now - lastFetch;
-            
-            if (timeSinceLastFetch < 300000) { // 5 minutes
-              // Skip this fetch, too soon
-            } else {
-              try {
-                const pmCountResponse = await api.get('/preventive-maintenance/count/unassigned');
-                if (isMounted) {
-                  setPmTasksCount(pmCountResponse.data || 0);
-                  lastFetchTimeRef.current['pm-tasks'] = now;
-                }
-              } catch (error: any) {
-                if (error.response?.status === 429) {
-                  lastFetchTimeRef.current['pm-tasks'] = now; // Update time to prevent immediate retry
-                } else if (error.response?.status !== 429) {
-                  console.warn('Could not fetch PM tasks count:', error);
-                }
-              }
-            }
-          }
+          // if (user.userType === 'HITACHI') {
+          //   const now = Date.now();
+          //   const lastFetch = lastFetchTimeRef.current['pm-tasks'] || 0;
+          //   const timeSinceLastFetch = now - lastFetch;
+          //   
+          //   if (timeSinceLastFetch < 300000) { // 5 minutes
+          //     // Skip this fetch, too soon
+          //   } else {
+          //     try {
+          //       const pmCountResponse = await api.get('/preventive-maintenance/count/unassigned');
+          //       if (isMounted) {
+          //         setPmTasksCount(pmCountResponse.data || 0);
+          //         lastFetchTimeRef.current['pm-tasks'] = now;
+          //       }
+          //     } catch (error: any) {
+          //       if (error.response?.status === 429) {
+          //         lastFetchTimeRef.current['pm-tasks'] = now; // Update time to prevent immediate retry
+          //       } else if (error.response?.status !== 429) {
+          //         console.warn('Could not fetch PM tasks count:', error);
+          //       }
+          //     }
+          //   }
+          // }
 
           // Fetch replacement request count
           try {
@@ -282,35 +283,36 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
           }
         }
 
+        // PM Tasks - DISABLED TEMPORARILY
         // Fetch PM tasks count (unassigned or assigned to current user) - for HITACHI users only
         // Throttle to max once per 5 minutes
-        if (user.userType === 'HITACHI') {
-          const now = Date.now();
-          const lastFetch = lastFetchTimeRef.current['pm-tasks'] || 0;
-          const timeSinceLastFetch = now - lastFetch;
-          
-          if (timeSinceLastFetch < 300000) { // 5 minutes
-            // Skip this fetch, too soon
-          } else {
-            try {
-              const pmCountResponse = await api.get('/preventive-maintenance/count/unassigned');
-              if (isMounted) {
-                setPmTasksCount(pmCountResponse.data || 0);
-                lastFetchTimeRef.current['pm-tasks'] = now;
-                retryDelayRef.current = 300000; // Reset to 300 seconds (5 minutes) on success
-              }
-            } catch (error: any) {
-              if (error.response?.status === 429) {
-                // Rate limited - increase delay significantly
-                retryDelayRef.current = Math.min(retryDelayRef.current * 2, 900000); // Max 15 minutes
-                lastFetchTimeRef.current['pm-tasks'] = now; // Update time to prevent immediate retry
-                console.warn('Rate limited for PM tasks count, retrying in', retryDelayRef.current / 1000, 'seconds');
-              } else {
-                console.warn('Could not fetch PM tasks count:', error);
-              }
-            }
-          }
-        }
+        // if (user.userType === 'HITACHI') {
+        //   const now = Date.now();
+        //   const lastFetch = lastFetchTimeRef.current['pm-tasks'] || 0;
+        //   const timeSinceLastFetch = now - lastFetch;
+        //   
+        //   if (timeSinceLastFetch < 300000) { // 5 minutes
+        //     // Skip this fetch, too soon
+        //   } else {
+        //     try {
+        //       const pmCountResponse = await api.get('/preventive-maintenance/count/unassigned');
+        //       if (isMounted) {
+        //         setPmTasksCount(pmCountResponse.data || 0);
+        //         lastFetchTimeRef.current['pm-tasks'] = now;
+        //         retryDelayRef.current = 300000; // Reset to 300 seconds (5 minutes) on success
+        //       }
+        //     } catch (error: any) {
+        //       if (error.response?.status === 429) {
+        //         // Rate limited - increase delay significantly
+        //         retryDelayRef.current = Math.min(retryDelayRef.current * 2, 900000); // Max 15 minutes
+        //         lastFetchTimeRef.current['pm-tasks'] = now; // Update time to prevent immediate retry
+        //         console.warn('Rate limited for PM tasks count, retrying in', retryDelayRef.current / 1000, 'seconds');
+        //       } else {
+        //         console.warn('Could not fetch PM tasks count:', error);
+        //       }
+        //     }
+        //   }
+        // }
 
         // Fetch replacement request count
         try {
@@ -371,12 +373,7 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
       adminOnly: true,
       defaultOpen: true,
       items: [
-        { icon: User, label: 'Users', link: '/users' },
-        { icon: Building2, label: 'Banks', link: '/banks' },
-        { icon: Truck, label: 'Pengelola', link: '/pengelola' },
-        { icon: Link2, label: 'Assignments', link: '/assignments' },
-        { icon: Database, label: 'Data Management', link: '/data-management' },
-        { icon: Download, label: 'Bulk Import', link: '/import' },
+        { icon: Settings, label: 'Settings', link: '/settings' },
       ],
     },
     {
@@ -387,7 +384,8 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
         { icon: Monitor, label: 'Machines', link: '/machines' },
         { icon: Disc, label: 'Cassettes', link: '/cassettes' },
         { icon: Wrench, label: 'Repairs', link: '/repairs', hitachiOnly: true },
-        { icon: Settings, label: 'PM Tasks', link: '/preventive-maintenance', hitachiOnly: true, badgeCount: pmTasksCount },
+        // PM Tasks - DISABLED TEMPORARILY
+        // { icon: Settings, label: 'PM Tasks', link: '/preventive-maintenance', hitachiOnly: true, badgeCount: pmTasksCount },
       ],
     },
     {
@@ -401,7 +399,7 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
         { icon: History, label: 'SO History', link: '/history' },
       ],
     },
-  ], [pendingConfirmationCount, newSOCount, pmTasksCount]);
+  ], [pendingConfirmationCount, newSOCount]); // pmTasksCount removed - PM disabled temporarily
 
   // Filter menu groups berdasarkan permissions
   const filteredGroups = menuGroups
@@ -442,12 +440,12 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
           className={`flex items-center ${collapsed ? 'justify-center' : 'space-x-3'} min-w-0`}
         >
           <div className="flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-xl bg-teal-600 shadow-lg">
-            <span className="text-2xl font-bold text-white">H</span>
+            <span className="text-2xl font-bold text-white">C</span>
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <h1 className="text-lg font-bold truncate text-white">HITACHI</h1>
-              <p className="text-xs text-teal-300 truncate">C M S</p>
+              <h1 className="text-lg font-bold truncate text-white">CASTER</h1>
+              <p className="text-xs text-teal-300 truncate">Tracking System</p>
             </div>
           )}
         </Link>
@@ -681,7 +679,17 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
   return (
     <>
       {/* Desktop Sidebar - Hidden on mobile, always visible on desktop */}
-      <aside className={`hidden lg:flex fixed left-0 top-0 z-30 h-screen ${collapsed ? 'w-20' : 'w-64'} bg-gradient-to-b from-teal-800 to-teal-900 text-white shadow-2xl overflow-hidden transition-all duration-300`}>
+      <aside 
+        className={`hidden lg:flex ${collapsed ? 'w-20' : 'w-64'} bg-gradient-to-b from-teal-800 to-teal-900 text-white shadow-2xl overflow-hidden transition-all duration-300`}
+        style={{ 
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          height: '100vh',
+          zIndex: 40,
+        }}
+      >
         {sidebarContent}
       </aside>
 

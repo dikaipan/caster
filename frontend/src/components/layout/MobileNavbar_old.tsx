@@ -73,10 +73,10 @@ export default function MobileNavbar() {
           onClick={() => setIsMenuOpen(false)}
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600">
-            <span className="text-lg font-bold text-white">H</span>
+            <span className="text-lg font-bold text-white">C</span>
           </div>
           <div>
-            <h1 className="text-base font-bold text-gray-900">Hitachi CRM</h1>
+            <h1 className="text-base font-bold text-gray-900">CASTER</h1>
           </div>
         </Link>
 

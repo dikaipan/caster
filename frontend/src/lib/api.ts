@@ -5,6 +5,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'; // B
 // Remove trailing slash from API_URL to avoid double slashes
 const cleanApiUrl = API_URL.replace(/\/+$/, '');
 
+// Debug: Log API URL in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('🔧 API Configuration:', {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    API_URL,
+    cleanApiUrl,
+    baseURL: `${cleanApiUrl}/api`,
+  });
+}
+
 export const api = axios.create({
   baseURL: `${cleanApiUrl}/api`,
   headers: {

@@ -74,6 +74,8 @@ export default function MachinesPage() {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [sortField, setSortField] = useState<string>('serialNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [banks, setBanks] = useState<any[]>([]);
   
   // Cassettes Dialog State
   const [selectedMachine, setSelectedMachine] = useState<any>(null);
@@ -98,10 +100,25 @@ export default function MachinesPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Reset to page 1 when search term, itemsPerPage, or status filter changes
+  // Reset to page 1 when search term, itemsPerPage, status filter, or bank filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, itemsPerPage, selectedStatus]);
+  }, [searchTerm, itemsPerPage, selectedStatus, selectedBankId]);
+
+  // Fetch banks
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        const response = await api.get('/banks');
+        setBanks(response.data);
+      } catch (error) {
+        console.error('Error fetching banks:', error);
+      }
+    };
+    if (isAuthenticated) {
+      fetchBanks();
+    }
+  }, [isAuthenticated]);
 
   const fetchMachines = useCallback(async () => {
     try {
@@ -119,6 +136,11 @@ export default function MachinesPage() {
       
       if (selectedStatus && selectedStatus !== 'ALL') {
         params.params.status = selectedStatus;
+      }
+      
+      // ADD: Filter by bank
+      if (selectedBankId) {
+        params.params.customerBankId = selectedBankId;
       }
       
       if (sortField) {
@@ -148,7 +170,7 @@ export default function MachinesPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, itemsPerPage, searchTerm, selectedStatus, sortField, sortDirection]);
+  }, [currentPage, itemsPerPage, searchTerm, selectedStatus, sortField, sortDirection, selectedBankId]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -398,14 +420,32 @@ export default function MachinesPage() {
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="relative flex-1 w-full sm:max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Cari serial number, machine code, atau branch..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+              <div className="flex flex-1 gap-2 w-full sm:max-w-2xl">
+                <Select 
+                  value={selectedBankId || 'all'} 
+                  onValueChange={(value) => setSelectedBankId(value === 'all' ? null : value)}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Filter by Bank" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Banks</SelectItem>
+                    {banks.map((bank) => (
+                      <SelectItem key={bank.id} value={bank.id}>
+                        {bank.bankName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Cari serial number, machine code, atau branch..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Per halaman:</span>
@@ -430,24 +470,39 @@ export default function MachinesPage() {
             </div>
             
             {/* Active Filters */}
-            {searchTerm && (
+            {(searchTerm || selectedBankId) && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-muted-foreground">Filter aktif:</span>
-                <Badge 
-                  variant="secondary"
-                  className="cursor-pointer hover:bg-gray-200"
-                  onClick={() => setSearchTerm('')}
-                >
-                  Pencarian: &quot;{searchTerm}&quot;
-                  <XCircle className="h-3 w-3 ml-1" />
-                </Badge>
+                {selectedBankId && (
+                  <Badge 
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-gray-200"
+                    onClick={() => setSelectedBankId(null)}
+                  >
+                    Bank: {banks.find(b => b.id === selectedBankId)?.bankName || selectedBankId}
+                    <XCircle className="h-3 w-3 ml-1" />
+                  </Badge>
+                )}
+                {searchTerm && (
+                  <Badge 
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-gray-200"
+                    onClick={() => setSearchTerm('')}
+                  >
+                    Pencarian: &quot;{searchTerm}&quot;
+                    <XCircle className="h-3 w-3 ml-1" />
+                  </Badge>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setSearchTerm('')}
+                  onClick={() => {
+                    setSearchTerm('');
+                    setSelectedBankId(null);
+                  }}
                   className="h-6 text-xs"
                 >
-                  Hapus filter
+                  Hapus semua filter
                 </Button>
               </div>
             )}
@@ -758,6 +813,9 @@ export default function MachinesPage() {
               <Package className="h-6 w-6 text-primary dark:text-teal-400" />
               Cassettes for Machine
             </DialogTitle>
+            <DialogDescription>
+              Daftar kaset yang terhubung dengan mesin ini
+            </DialogDescription>
           </DialogHeader>
 
           {/* Machine Info - Outside DialogDescription to avoid nesting issues */}

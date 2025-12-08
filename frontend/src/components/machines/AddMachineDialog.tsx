@@ -9,6 +9,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -316,14 +323,19 @@ export default function AddMachineDialog({ open, onOpenChange, onSuccess }: AddM
                 <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                   Model Name <span className="text-red-500 dark:text-red-400">*</span>
                 </label>
-                <input
-                  type="text"
-                  required
+                <Select
                   value={machineData.modelName}
-                  onChange={(e) => setMachineData({ ...machineData, modelName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 dark:focus:ring-teal-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500"
-                  placeholder="e.g., Hitachi SR-M100"
-                />
+                  onValueChange={(value) => setMachineData({ ...machineData, modelName: value })}
+                  required
+                >
+                  <SelectTrigger className="w-full border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
+                    <SelectValue placeholder="Pilih model mesin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SR7500">SR7500</SelectItem>
+                    <SelectItem value="SR7500VS">SR7500VS</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Physical Location */}

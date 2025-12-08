@@ -7,7 +7,7 @@ export class AppService {
       status: 'ok',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      service: 'Hitachi CRM Management API',
+      service: 'CASTER - Cassette Tracking & Retrieval System',
     };
   }
 

@@ -38,6 +38,7 @@ export class MachinesController {
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status (OPERATIONAL, UNDER_REPAIR, INACTIVE)' })
   @ApiQuery({ name: 'sortBy', required: false, description: 'Sort field (serialNumberManufacturer, machineCode, createdAt, status)' })
   @ApiQuery({ name: 'sortOrder', required: false, description: 'Sort order: asc or desc (default: desc)' })
+  @ApiQuery({ name: 'customerBankId', required: false, description: 'Filter by customer bank ID' })
   findAll(
     @Request() req,
     @Query('page') page?: string,
@@ -46,6 +47,7 @@ export class MachinesController {
     @Query('status') status?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: string,
+    @Query('customerBankId') customerBankId?: string,
   ) {
     const validSortOrder = sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
     return this.machinesService.findAll(
@@ -58,6 +60,7 @@ export class MachinesController {
       status && status !== 'ALL' ? status : undefined,
       sortBy,
       validSortOrder,
+      customerBankId,
     );
   }
 

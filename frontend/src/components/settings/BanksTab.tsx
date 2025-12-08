@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
-import PageLayout from '@/components/layout/PageLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -50,9 +48,8 @@ interface BankCustomer {
   pengelolaAssignments?: any[];
 }
 
-export default function BanksPage() {
-  const router = useRouter();
-  const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
+export default function BanksTab() {
+  const { user, isAuthenticated, loadUser } = useAuthStore();
   const [banks, setBanks] = useState<BankCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,12 +84,6 @@ export default function BanksPage() {
     loadUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
 
   const fetchBanks = async () => {
     try {
@@ -140,17 +131,6 @@ export default function BanksPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
-
-  if (isLoading || loading) {
-    return (
-      <PageLayout>
-        <div className="flex flex-col items-center justify-center h-64 space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary dark:text-teal-400" />
-          <p className="text-muted-foreground">Loading banks...</p>
-        </div>
-      </PageLayout>
-    );
-  }
 
   const handleCreate = async () => {
     setSubmitting(true);
@@ -300,8 +280,17 @@ export default function BanksPage() {
     setIsDeleteDialogOpen(true);
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary dark:text-teal-400" />
+        <p className="text-muted-foreground">Loading banks...</p>
+      </div>
+    );
+  }
+
   return (
-    <PageLayout>
+    <div className="space-y-6">
       {/* Search and Filters */}
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -356,121 +345,121 @@ export default function BanksPage() {
                   Add Bank Customer
                 </Button>
               </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create Bank Customer</DialogTitle>
-              <DialogDescription>
-                Add a new bank customer to the system
-              </DialogDescription>
-            </DialogHeader>
-            <Tabs defaultValue="bank-info" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="bank-info">Bank Information</TabsTrigger>
-                <TabsTrigger value="warranty">Warranty Configuration</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="bank-info" className="space-y-4">
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="bankCode">Bank Code *</Label>
-                  <Input
-                    id="bankCode"
-                    value={formData.bankCode}
-                    onChange={(e) => setFormData({ ...formData, bankCode: e.target.value })}
-                    placeholder="e.g., BNI"
-                    maxLength={20}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) => setFormData({ ...formData, status: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ACTIVE">Active</SelectItem>
-                      <SelectItem value="INACTIVE">Inactive</SelectItem>
-                      <SelectItem value="SUSPENDED">Suspended</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bankName">Bank Name *</Label>
-                <Input
-                  id="bankName"
-                  value={formData.bankName}
-                  onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                  placeholder="e.g., PT Bank Negara Indonesia (Persero) Tbk"
-                  maxLength={255}
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="primaryContactName">Contact Name</Label>
-                  <Input
-                    id="primaryContactName"
-                    value={formData.primaryContactName}
-                    onChange={(e) => setFormData({ ...formData, primaryContactName: e.target.value })}
-                    placeholder="John Doe"
-                    maxLength={255}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="primaryContactEmail">Contact Email</Label>
-                  <Input
-                    id="primaryContactEmail"
-                    type="email"
-                    value={formData.primaryContactEmail}
-                    onChange={(e) => setFormData({ ...formData, primaryContactEmail: e.target.value })}
-                    placeholder="contact@bank.co.id"
-                    maxLength={255}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="primaryContactPhone">Contact Phone</Label>
-                  <Input
-                    id="primaryContactPhone"
-                    value={formData.primaryContactPhone}
-                    onChange={(e) => setFormData({ ...formData, primaryContactPhone: e.target.value })}
-                    placeholder="+6281234567890"
-                    maxLength={50}
-                  />
-                </div>
-              </div>
-            </div>
-              </TabsContent>
-              
-              <TabsContent value="warranty" className="space-y-4">
-                <div className="py-4 space-y-4">
-                  <p className="text-sm text-gray-600 dark:text-slate-400 mb-4">
-                    Configure warranty settings for this bank. Only active configurations will be created.
-                  </p>
-                  {(['MA', 'MS', 'IN_WARRANTY'] as const).map((warrantyType) => (
-                    <WarrantyConfigFormCard
-                      key={warrantyType}
-                      warrantyType={warrantyType}
-                      formData={warrantyFormData[warrantyType]}
-                      onChange={(data) => setWarrantyFormData({ ...warrantyFormData, [warrantyType]: data })}
-                    />
-                  ))}
-                </div>
-              </TabsContent>
-            </Tabs>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleCreate} disabled={submitting}>
-                {submitting ? 'Creating...' : 'Create'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Create Bank Customer</DialogTitle>
+                  <DialogDescription>
+                    Add a new bank customer to the system
+                  </DialogDescription>
+                </DialogHeader>
+                <Tabs defaultValue="bank-info" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="bank-info">Bank Information</TabsTrigger>
+                    <TabsTrigger value="warranty">Warranty Configuration</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="bank-info" className="space-y-4">
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="bankCode">Bank Code *</Label>
+                          <Input
+                            id="bankCode"
+                            value={formData.bankCode}
+                            onChange={(e) => setFormData({ ...formData, bankCode: e.target.value })}
+                            placeholder="e.g., BNI"
+                            maxLength={20}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="status">Status</Label>
+                          <Select
+                            value={formData.status}
+                            onValueChange={(value) => setFormData({ ...formData, status: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ACTIVE">Active</SelectItem>
+                              <SelectItem value="INACTIVE">Inactive</SelectItem>
+                              <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="bankName">Bank Name *</Label>
+                        <Input
+                          id="bankName"
+                          value={formData.bankName}
+                          onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                          placeholder="e.g., PT Bank Negara Indonesia (Persero) Tbk"
+                          maxLength={255}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="primaryContactName">Contact Name</Label>
+                          <Input
+                            id="primaryContactName"
+                            value={formData.primaryContactName}
+                            onChange={(e) => setFormData({ ...formData, primaryContactName: e.target.value })}
+                            placeholder="John Doe"
+                            maxLength={255}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="primaryContactEmail">Contact Email</Label>
+                          <Input
+                            id="primaryContactEmail"
+                            type="email"
+                            value={formData.primaryContactEmail}
+                            onChange={(e) => setFormData({ ...formData, primaryContactEmail: e.target.value })}
+                            placeholder="contact@bank.co.id"
+                            maxLength={255}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="primaryContactPhone">Contact Phone</Label>
+                          <Input
+                            id="primaryContactPhone"
+                            value={formData.primaryContactPhone}
+                            onChange={(e) => setFormData({ ...formData, primaryContactPhone: e.target.value })}
+                            placeholder="+6281234567890"
+                            maxLength={50}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="warranty" className="space-y-4">
+                    <div className="py-4 space-y-4">
+                      <p className="text-sm text-gray-600 dark:text-slate-400 mb-4">
+                        Configure warranty settings for this bank. Only active configurations will be created.
+                      </p>
+                      {(['MA', 'MS', 'IN_WARRANTY'] as const).map((warrantyType) => (
+                        <WarrantyConfigFormCard
+                          key={warrantyType}
+                          warrantyType={warrantyType}
+                          formData={warrantyFormData[warrantyType]}
+                          onChange={(data) => setWarrantyFormData({ ...warrantyFormData, [warrantyType]: data })}
+                        />
+                      ))}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreate} disabled={submitting}>
+                    {submitting ? 'Creating...' : 'Create'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -896,7 +885,7 @@ export default function BanksPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </PageLayout>
+    </div>
   );
 }
 

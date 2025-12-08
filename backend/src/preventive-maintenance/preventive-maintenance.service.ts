@@ -129,7 +129,7 @@ export class PreventiveMaintenanceService {
       }
 
       // Check cassette status - should not be in transit or in repair
-      const restrictedStatuses = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA'];
+      const restrictedStatuses = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'READY_FOR_PICKUP', 'IN_TRANSIT_TO_PENGELOLA'];
       if (restrictedStatuses.includes(cassette.status)) {
         throw new BadRequestException(
           `Kaset ${cassette.serialNumber} sedang dalam status ${cassette.status}. Tidak dapat membuat PM task untuk kaset yang sedang dalam proses repair.`

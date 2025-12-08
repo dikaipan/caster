@@ -48,6 +48,7 @@ export class TicketsService {
       }
 
       // Status filter - handle comma-separated values
+      // By default, exclude CLOSED tickets (they should only appear in history)
       if (status) {
         const statusArray = status.split(',').map(s => s.trim()).filter(Boolean);
         if (statusArray.length === 1) {
@@ -55,6 +56,9 @@ export class TicketsService {
         } else if (statusArray.length > 1) {
           whereClause.status = { in: statusArray };
         }
+      } else {
+        // Default: exclude CLOSED tickets (active SO only)
+        whereClause.status = { not: 'CLOSED' as any };
       }
 
       // Priority filter
@@ -167,6 +171,18 @@ export class TicketsService {
                   cassetteType: true,
                 },
               },
+              receiver: {
+                select: {
+                  fullName: true,
+                  role: true,
+                },
+              },
+              sender: {
+                select: {
+                  fullName: true,
+                  role: true,
+                },
+              },
             },
           } as any,
         } as any,
@@ -230,6 +246,14 @@ export class TicketsService {
                 },
               },
             },
+            replacementFor: {
+              // Include replacement cassettes (new cassettes that replace this one)
+              select: {
+                id: true,
+                serialNumber: true,
+                status: true,
+              },
+            },
           },
         } as any,
         machine: {
@@ -260,6 +284,12 @@ export class TicketsService {
                   select: {
                     bankCode: true,
                     bankName: true,
+                  },
+                },
+                replacementFor: {
+                  // Include replacement cassettes (new cassettes that replace this one)
+                  include: {
+                    cassetteType: true,
                   },
                 },
               },
@@ -1706,18 +1736,40 @@ export class TicketsService {
         cassetteIds.push(delivery.cassetteId);
       }
       
-      // Update all cassettes to IN_TRANSIT_TO_RC
+      // Check if this is a replacement ticket
+      const isReplacementTicket = (ticket.cassetteDetails as any)?.some((detail: any) => detail.requestReplacement === true) || (ticket as any).requestReplacement === true;
+      
+      // Update cassette status
+      // For replacement tickets: SCRAPPED cassettes should remain SCRAPPED (not changed to IN_REPAIR)
+      // For repair tickets: cassettes should be updated to IN_REPAIR
       if (cassetteIds.length > 0) {
-        await tx.cassette.updateMany({
-          where: {
-            id: { in: cassetteIds },
-          },
-          data: {
-            status: 'IN_TRANSIT_TO_RC',
-            updatedAt: new Date(),
-          },
-        });
-        this.logger.debug(`RC Receive: Updated ${cassetteIds.length} cassettes to IN_TRANSIT_TO_RC`);
+        if (isReplacementTicket) {
+          // For replacement tickets, only update cassettes that are NOT SCRAPPED
+          // SCRAPPED cassettes remain SCRAPPED (they will be replaced, not repaired)
+          await tx.cassette.updateMany({
+            where: {
+              id: { in: cassetteIds },
+              status: { not: 'SCRAPPED' },
+            },
+            data: {
+              status: 'IN_REPAIR',
+              updatedAt: new Date(),
+            },
+          });
+          this.logger.debug(`RC Receive (Replacement): Updated non-SCRAPPED cassettes to IN_REPAIR. SCRAPPED cassettes remain SCRAPPED.`);
+        } else {
+          // For repair tickets, update all cassettes to IN_REPAIR
+          await tx.cassette.updateMany({
+            where: {
+              id: { in: cassetteIds },
+            },
+            data: {
+              status: 'IN_REPAIR',
+              updatedAt: new Date(),
+            },
+          });
+          this.logger.debug(`RC Receive: Updated ${cassetteIds.length} cassettes to IN_REPAIR (arrived at RC, ready for repair)`);
+        }
       }
 
       // Update ticket status ke RECEIVED (barang sudah diterima, belum mulai repair)
@@ -1740,7 +1792,7 @@ export class TicketsService {
     try {
       this.logger.debug(`Confirming pickup: ticketId=${createDto.ticketId}, userId=${userId}, userType=${userType}`);
 
-      // Only RC staff (HITACHI) can confirm pickup
+      // Only RC staff can confirm pickup (they handle the pickup confirmation on behalf of Pengelola)
       if (userType !== 'HITACHI') {
         throw new ForbiddenException('Only RC staff can confirm pickup');
       }
@@ -1862,8 +1914,9 @@ export class TicketsService {
       where: { ticketId: createDto.ticketId },
     });
 
+    // If return already exists, pickup has already been confirmed
     if (existingReturn) {
-      throw new BadRequestException('Pickup already confirmed for this ticket');
+      throw new BadRequestException('Pickup confirmation already exists for this ticket');
     }
 
     // Check if this is a replacement ticket
@@ -1908,98 +1961,165 @@ export class TicketsService {
 
       this.logger.debug(`Repair ticket - cassette status: id=${cassette.id}, serialNumber=${cassette.serialNumber}, status=${cassette.status}`);
 
-      // Verify cassette is in IN_REPAIR status (repair completed, ready for pickup)
-      // Status IN_REPAIR setelah QC passed berarti kaset sudah siap untuk di-pickup
-      if ((cassette.status as string) !== 'IN_REPAIR') {
-        // Additional check: if cassette is SCRAPPED, it might be a replacement ticket that wasn't detected
-        if ((cassette.status as string) === 'SCRAPPED') {
-          // Check if there's a new cassette for this ticket (fallback detection)
-          const newCassette = await this.prisma.cassette.findFirst({
-            where: {
-              replacementTicketId: createDto.ticketId,
-            },
-            include: {
-              cassetteType: true,
-              customerBank: true,
-            },
-          });
+      // Verify cassette is in READY_FOR_PICKUP status (repair completed, QC passed, ready for pickup)
+      // Status READY_FOR_PICKUP berarti kaset sudah selesai diperbaiki dan siap untuk di-pickup
+      // OR SCRAPPED status (for disposal confirmation - kaset tidak bisa diperbaiki, tetap di RC)
+      if ((cassette.status as string) !== 'READY_FOR_PICKUP' && (cassette.status as string) !== 'SCRAPPED') {
+        throw new BadRequestException(
+          `Cannot confirm pickup for cassette with status ${cassette.status}. Cassette must be in READY_FOR_PICKUP status (repair completed and QC passed) or SCRAPPED status (for disposal confirmation).`,
+        );
+      }
 
-          if (newCassette) {
-            this.logger.warn(`Fallback detection: Old cassette is SCRAPPED, found new cassette: ${newCassette.serialNumber}. This appears to be a replacement ticket that wasn't properly detected.`);
-            
-            // Verify new cassette is in OK status
-            if ((newCassette.status as string) !== 'OK') {
-              throw new BadRequestException(
-                `Kaset baru harus dalam status OK untuk bisa di-pickup. Status saat ini: ${newCassette.status}`,
-              );
-            }
+      // Handle SCRAPPED cassette (disposal confirmation - kaset tidak bisa diperbaiki, tetap di RC)
+      if ((cassette.status as string) === 'SCRAPPED') {
+        // Check if there's a new cassette for this ticket (replacement ticket)
+        const newCassette = await this.prisma.cassette.findFirst({
+          where: {
+            replacementTicketId: createDto.ticketId,
+          },
+          include: {
+            cassetteType: true,
+            customerBank: true,
+          },
+        });
 
-            // Use the new cassette instead
-            cassette = newCassette;
-            this.logger.debug(`Using NEW cassette ${newCassette.serialNumber} for return (fallback detection)`);
-          } else {
+        if (newCassette) {
+          // This is a replacement ticket - use the new cassette for pickup
+          this.logger.warn(`Replacement ticket detected: Old cassette is SCRAPPED, found new cassette: ${newCassette.serialNumber}.`);
+          
+          // Verify new cassette is in OK status
+          if ((newCassette.status as string) !== 'OK') {
             throw new BadRequestException(
-              `Cannot confirm pickup for cassette with status ${cassette.status}. Cassette must be in IN_REPAIR status (repair completed and QC passed). If this is a replacement ticket, ensure the replacement process is completed first.`,
+              `Kaset baru harus dalam status OK untuk bisa di-pickup. Status saat ini: ${newCassette.status}`,
             );
           }
+
+          // Use the new cassette instead
+          cassette = newCassette;
+          this.logger.debug(`Using NEW cassette ${newCassette.serialNumber} for return (replacement ticket)`);
         } else {
-          throw new BadRequestException(
-            `Cannot confirm pickup for cassette with status ${cassette.status}. Cassette must be in IN_REPAIR status (repair completed and QC passed).`,
-          );
+          // No replacement - this is a disposal confirmation for SCRAPPED cassette
+          // Kaset SCRAPPED tetap di RC, tidak di-pickup, hanya konfirmasi disposal
+          this.logger.debug(`Disposal confirmation: Cassette ${cassette.serialNumber} is SCRAPPED, will remain at RC. Creating disposal record.`);
         }
       } else {
-        this.logger.debug(`Repair ticket: Using repaired cassette ${cassette.serialNumber} for pickup`);
+        this.logger.debug(`Repair ticket: Using repaired cassette ${cassette.serialNumber} (READY_FOR_PICKUP) for pickup`);
       }
     }
 
-    // Confirm pickup and update cassette status to OK immediately
+    // Check if this is a disposal confirmation for SCRAPPED cassette (no replacement)
+    const isDisposalConfirmation = (cassette.status as string) === 'SCRAPPED' && !isReplacementTicket;
+    
+    // Confirm pickup/disposal and update cassette status accordingly
     return this.prisma.$transaction(async (tx) => {
-      // For multi-cassette tickets: update ALL cassettes that are in IN_REPAIR status (completed repair)
-      // For single-cassette tickets: update only the cassette being picked up
-      let cassettesToUpdate: string[] = [cassette.id];
+      // For disposal confirmation: SCRAPPED cassettes remain SCRAPPED (stay at RC)
+      // For normal pickup: READY_FOR_PICKUP cassettes become OK (picked up)
+      let cassettesToUpdate: string[] = [];
       
-      // Check if this is a multi-cassette ticket
-      if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
-        // Get all cassettes in this ticket that are in IN_REPAIR status (completed repair, ready for pickup)
-        const cassettesInTicket = ticket.cassetteDetails.map((detail: any) => detail.cassette);
-        const repairedCassettes = cassettesInTicket.filter((c: any) => c && c.status === 'IN_REPAIR');
-        cassettesToUpdate = repairedCassettes.map((c: any) => c.id);
+      if (isDisposalConfirmation) {
+        // Disposal confirmation: SCRAPPED cassettes remain at RC, status stays SCRAPPED
+        // Get all SCRAPPED cassettes in this ticket
+        if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
+          const cassettesInTicket = ticket.cassetteDetails.map((detail: any) => detail.cassette);
+          const scrappedCassettes = cassettesInTicket.filter((c: any) => c && c.status === 'SCRAPPED');
+          cassettesToUpdate = scrappedCassettes.map((c: any) => c.id);
+          this.logger.debug(`Disposal confirmation: Found ${scrappedCassettes.length} SCRAPPED cassette(s) - will remain at RC`);
+        } else {
+          // Single cassette ticket
+          if (cassette.status === 'SCRAPPED') {
+            cassettesToUpdate = [cassette.id];
+            this.logger.debug(`Disposal confirmation: Single SCRAPPED cassette ${cassette.serialNumber} - will remain at RC`);
+          }
+        }
+        // Note: We don't update SCRAPPED cassettes - they stay SCRAPPED at RC
+      } else {
+        // Normal pickup: READY_FOR_PICKUP cassettes become OK
+        cassettesToUpdate = [cassette.id];
         
-        this.logger.debug(`Multi-cassette ticket: Found ${repairedCassettes.length} cassettes in IN_REPAIR status to update for pickup`);
+        // Check if this is a multi-cassette ticket
+        if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
+          // Get all cassettes in this ticket that are in READY_FOR_PICKUP status (completed repair, ready for pickup)
+          const cassettesInTicket = ticket.cassetteDetails.map((detail: any) => detail.cassette);
+          const readyCassettes = cassettesInTicket.filter((c: any) => c && c.status === 'READY_FOR_PICKUP');
+          cassettesToUpdate = readyCassettes.map((c: any) => c.id);
+          
+          this.logger.debug(`Multi-cassette ticket: Found ${readyCassettes.length} cassettes in READY_FOR_PICKUP status to update for pickup`);
+        }
+        
+        // Update all cassettes to OK status immediately (picked up by Pengelola at RC)
+        if (cassettesToUpdate.length > 0) {
+          // Update each cassette individually to ensure all are updated
+          await Promise.all(
+            cassettesToUpdate.map((cassetteId) =>
+              tx.$executeRaw`
+                UPDATE cassettes 
+                SET status = ${'OK'}, updated_at = NOW()
+                WHERE id = ${cassetteId}
+              `
+            )
+          );
+          this.logger.debug(`Confirm Pickup: Updated ${cassettesToUpdate.length} cassette(s) status to OK (${isReplacementTicket ? 'Replacement' : 'Repair'})`);
+        }
+      }
+
+      // Create return record with pickup/disposal confirmation
+      // Since pickup/disposal is done at RC, we set receivedAtPengelola immediately
+      let notes = createDto.notes?.trim() || null;
+      
+      // For disposal confirmation, add disposal information to notes
+      if (isDisposalConfirmation) {
+        const disposalInfo = `\n\n=== DISPOSAL CONFIRMATION ===\n` +
+          `Kaset dengan status SCRAPPED (tidak bisa diperbaiki, tidak lolos QC)\n` +
+          `Kaset tetap di RC untuk disposal\n` +
+          `Tanggal konfirmasi: ${new Date().toLocaleString('id-ID')}\n` +
+          `Dikonfirmasi oleh: RC Staff\n` +
+          `Alasan: Kaset tidak dapat diperbaiki atau tidak lolos Quality Control setelah perbaikan`;
+        notes = notes ? `${notes}${disposalInfo}` : disposalInfo;
       }
       
-      // Update all cassettes to OK status immediately (picked up by Pengelola at RC)
-      if (cassettesToUpdate.length > 0) {
-        // Update each cassette individually to ensure all are updated
-        await Promise.all(
-          cassettesToUpdate.map((cassetteId) =>
-            tx.$executeRaw`
-              UPDATE cassettes 
-              SET status = ${'OK'}, updated_at = NOW()
-              WHERE id = ${cassetteId}
-            `
-          )
-        );
-        this.logger.debug(`Confirm Pickup: Updated ${cassettesToUpdate.length} cassette(s) status to OK (${isReplacementTicket ? 'Replacement' : 'Repair'})`);
+      // Store signature (RC staff confirms pickup on behalf of Pengelola)
+      const signatureData = createDto.rcSignature || createDto.signature || null;
+      
+      if (signatureData) {
+        this.logger.debug(`RC ${isDisposalConfirmation ? 'Disposal' : 'Pickup'} signature received for ticket ${createDto.ticketId} (length: ${signatureData.length} chars)`);
+      }
+      
+      const pickupDate = new Date(); // Pickup/disposal date is now
+
+      // For multi-cassette tickets, use the primary cassette (first one from cassetteDetails or from delivery)
+      // Since ticketId is unique in CassetteReturn, we can only create one return record per ticket
+      let primaryCassetteId = cassette.id;
+      
+      // For multi-cassette tickets, prefer using the first READY_FOR_PICKUP cassette
+      if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0 && !isDisposalConfirmation) {
+        const readyCassettes = ticket.cassetteDetails
+          .map((detail: any) => detail.cassette)
+          .filter((c: any) => c && c.status === 'READY_FOR_PICKUP');
+        
+        if (readyCassettes.length > 0) {
+          primaryCassetteId = readyCassettes[0].id;
+          this.logger.debug(`Multi-cassette ticket: Using primary cassette ${readyCassettes[0].serialNumber} for return record`);
+        }
       }
 
-      // Create return record with pickup confirmation
-      // Since pickup is done at RC, we set receivedAtPengelola immediately
-      const notes = createDto.notes?.trim() || null;
-      const pickupDate = new Date(); // Pickup date is now
-
-      const returnRecord = await (tx as any).cassetteReturn.create({
+      // Create new return record (RC confirmation only)
+      const returnRecord = await tx.cassetteReturn.create({
         data: {
           ticketId: createDto.ticketId,
-          cassetteId: cassette.id,
+          cassetteId: primaryCassetteId, // Use primary cassette ID
           sentBy: userId,
-          shippedDate: pickupDate, // Use pickup date as shippedDate for backward compatibility
-          courierService: null, // No courier service for pickup
-          trackingNumber: null, // No tracking number for pickup
-          estimatedArrival: null, // No estimated arrival for pickup
-          receivedAtPengelola: pickupDate, // Immediately received since pickup is at RC
-          receivedBy: null, // Will be set by Pengelola if needed, or can be set here if Pengelola user info is available
+          shippedDate: pickupDate, // Use pickup/disposal date as shippedDate for backward compatibility
+          courierService: null, // No courier service for pickup/disposal
+          trackingNumber: null, // No tracking number for pickup/disposal
+          estimatedArrival: null, // No estimated arrival for pickup/disposal
+          receivedAtPengelola: pickupDate, // Set immediately since RC confirms on behalf of Pengelola
+          receivedBy: null, // RC confirms on behalf of Pengelola, no specific Pengelola user ID available
           notes: notes,
+          signature: signatureData, // Store signature base64 data
+          // RC confirmation (RC staff confirms pickup)
+          confirmedByRc: userId,
+          rcSignature: signatureData,
+          rcConfirmedAt: pickupDate,
         },
         include: {
           cassette: {
@@ -2015,17 +2135,28 @@ export class TicketsService {
               role: true,
             },
           },
+          rcConfirmer: {
+            select: {
+              fullName: true,
+              role: true,
+            },
+          },
         },
       });
 
-      // Update ticket status to CLOSED (kaset sudah di-pickup oleh Pengelola di RC)
+      // Update ticket status to CLOSED immediately after RC confirmation
+      const shouldCloseTicket = true;
+      
+      // Update ticket status to CLOSED immediately after RC confirmation
+      // RC staff confirms pickup on behalf of Pengelola
       await tx.problemTicket.update({
         where: { id: createDto.ticketId },
         data: {
           status: 'CLOSED' as any,
+          closedAt: pickupDate,
         },
       });
-      this.logger.debug('Confirm Pickup: Updated ticket status to CLOSED');
+      this.logger.debug(`Pickup confirmed by RC: Ticket ${createDto.ticketId} status updated to CLOSED`);
 
       return returnRecord;
     });
@@ -2120,7 +2251,7 @@ export class TicketsService {
     // Update return and cassette status
     return this.prisma.$transaction(async (tx) => {
       // Update return record
-      const updatedReturn = await (tx as any).cassetteReturn.update({
+      const updatedReturn = await tx.cassetteReturn.update({
         where: { id: returnRecord.id },
         data: {
           receivedAtPengelola: new Date(),

@@ -200,7 +200,7 @@ async function importFromExcel(bankCode: string, pengelolaCode: string, excelFil
                 customerBankId: bank.id,
                 pengelolaId: pengelola.id,
                 machineCode: `M-${bankCode}-${machineSN.slice(-6)}`,
-                modelName: 'Hitachi SR-M100',
+                modelName: 'SR7500VS',
                 serialNumberManufacturer: machineSN,
                 physicalLocation: 'Imported from Excel',
                 status: 'OPERATIONAL',

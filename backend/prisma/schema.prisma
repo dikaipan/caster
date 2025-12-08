@@ -12,6 +12,7 @@ model CustomerBank {
   bankCode             String                    @unique @map("bank_code") @db.VarChar(20)
   bankName             String                    @map("bank_name") @db.VarChar(255)
   status               OrganizationStatus        @default(ACTIVE)
+  useMachines          Boolean                   @default(true) @map("use_machines") // Apakah bank ini menggunakan mesin? (BNI=true, BRI=false)
   primaryContactName   String?                   @map("primary_contact_name") @db.VarChar(255)
   primaryContactEmail  String?                   @map("primary_contact_email") @db.VarChar(255)
   primaryContactPhone  String?                   @map("primary_contact_phone") @db.VarChar(50)
@@ -92,6 +93,7 @@ model PengelolaUser {
   updatedAt          DateTime                @updatedAt @map("updated_at")
   cassetteDeliveries CassetteDelivery[]
   receivedReturns    CassetteReturn[]        @relation("ReturnReceiver")
+  pengelolaPickupConfirmations CassetteReturn[] @relation("PengelolaPickupConfirmer")
   problemTickets     ProblemTicket[]
   requestedPMs       PreventiveMaintenance[] @relation("PMRequesterPengelola")
   pengelola          Pengelola               @relation(fields: [pengelolaId], references: [id], onDelete: Cascade)
@@ -113,6 +115,7 @@ model HitachiUser {
   updatedAt          DateTime                @updatedAt @map("updated_at")
   receivedDeliveries CassetteDelivery[]      @relation("DeliveryReceiver")
   sentReturns        CassetteReturn[]        @relation("ReturnSender")
+  rcPickupConfirmations CassetteReturn[]    @relation("RCPickupConfirmer")
   repairTickets      RepairTicket[]
   assignedPMs        PreventiveMaintenance[] @relation("PMEngineer")
   requestedPMs       PreventiveMaintenance[] @relation("PMRequesterHitachi")
@@ -380,11 +383,22 @@ model CassetteReturn {
   receivedAtPengelola DateTime?      @map("received_at_pengelola")
   receivedBy          String?        @map("received_by") @db.Char(36)
   notes               String?
+  signature           String?        @map("signature") @db.Text // Digital signature (base64 encoded image) - DEPRECATED: use rcSignature or pengelolaSignature
+  // RC Confirmation (RC staff confirms handover)
+  confirmedByRc       String?         @map("confirmed_by_rc") @db.Char(36)
+  rcSignature        String?        @map("rc_signature") @db.Text // RC staff signature (base64 encoded image)
+  rcConfirmedAt       DateTime?      @map("rc_confirmed_at")
+  // Pengelola Confirmation (Pengelola confirms receipt)
+  confirmedByPengelola String?       @map("confirmed_by_pengelola") @db.Char(36)
+  pengelolaSignature  String?        @map("pengelola_signature") @db.Text // Pengelola signature (base64 encoded image)
+  pengelolaConfirmedAt DateTime?     @map("pengelola_confirmed_at")
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
   cassette            Cassette       @relation(fields: [cassetteId], references: [id])
   receiver            PengelolaUser? @relation("ReturnReceiver", fields: [receivedBy], references: [id])
   sender              HitachiUser    @relation("ReturnSender", fields: [sentBy], references: [id])
+  rcConfirmer         HitachiUser?   @relation("RCPickupConfirmer", fields: [confirmedByRc], references: [id])
+  pengelolaConfirmer  PengelolaUser? @relation("PengelolaPickupConfirmer", fields: [confirmedByPengelola], references: [id])
   ticket              ProblemTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@map("cassette_returns")
@@ -516,6 +530,7 @@ enum CassetteStatus {
   BAD
   IN_TRANSIT_TO_RC
   IN_REPAIR
+  READY_FOR_PICKUP
   IN_TRANSIT_TO_PENGELOLA
   SCRAPPED
 }

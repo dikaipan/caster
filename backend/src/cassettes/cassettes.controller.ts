@@ -34,9 +34,10 @@ export class CassettesController {
   @ApiQuery({ name: 'serial_number', required: false, description: 'Search by cassette serial number (alias for keyword)' })
   @ApiQuery({ name: 'sn_mesin', required: false, description: 'Search cassettes by machine serial number (partial match)' })
   @ApiQuery({ name: 'sn_mesin_suffix', required: false, description: 'Search cassettes by machine serial number suffix (last N digits)' })
-  @ApiQuery({ name: 'status', required: false, description: 'Filter by status (OK, BAD, IN_TRANSIT_TO_RC, IN_REPAIR, IN_TRANSIT_TO_PENGELOLA, SCRAPPED)' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status (OK, BAD, IN_TRANSIT_TO_RC, IN_REPAIR, READY_FOR_PICKUP, IN_TRANSIT_TO_PENGELOLA, SCRAPPED)' })
   @ApiQuery({ name: 'sortBy', required: false, description: 'Sort field (serialNumber, createdAt, status, etc.)' })
   @ApiQuery({ name: 'sortOrder', required: false, description: 'Sort order: asc or desc (default: desc)' })
+  @ApiQuery({ name: 'customerBankId', required: false, description: 'Filter by customer bank ID' })
   findAll(
     @Request() req,
     @Query('page') page?: string,
@@ -48,6 +49,7 @@ export class CassettesController {
     @Query('status') status?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: string,
+    @Query('customerBankId') customerBankId?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? Math.min(parseInt(limit, 10), 1000) : 50; // Default 50, max 1000 to prevent memory issues
@@ -69,6 +71,7 @@ export class CassettesController {
       status && status !== 'all' ? status : undefined,
       sortBy,
       validSortOrder,
+      customerBankId,
     );
   }
 
@@ -87,8 +90,14 @@ export class CassettesController {
   @Get('search')
   @ApiOperation({ summary: 'Search cassette by serial number' })
   @ApiQuery({ name: 'serialNumber', required: true, description: 'Cassette serial number' })
-  searchBySerialNumber(@Query('serialNumber') serialNumber: string, @Request() req) {
-    return this.cassettesService.findBySerialNumber(serialNumber, req.user.userType, req.user.pengelolaId);
+  @ApiQuery({ name: 'customerBankId', required: false, description: 'Filter by customer bank ID' })
+  searchBySerialNumber(
+    @Request() req,
+    @Query('serialNumber') serialNumber: string,
+    @Query('customerBankId') customerBankId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.cassettesService.findBySerialNumber(serialNumber, req.user.userType, req.user.pengelolaId, customerBankId, status);
   }
 
   @Get('search-by-machine-sn')
@@ -97,8 +106,15 @@ export class CassettesController {
     description: 'Search cassettes by machine serial number (last 6 digits). Returns all cassettes from the same bank as the machine.'
   })
   @ApiQuery({ name: 'machineSN', required: true, description: 'Machine serial number (last 6 digits or full)' })
-  searchByMachineSN(@Query('machineSN') machineSN: string, @Request() req) {
-    return this.cassettesService.findByMachineSN(machineSN, req.user.userType, req.user.pengelolaId);
+  @ApiQuery({ name: 'customerBankId', required: false, description: 'Filter by customer bank ID' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by cassette status (e.g., SCRAPPED)' })
+  searchByMachineSN(
+    @Request() req,
+    @Query('machineSN') machineSN: string,
+    @Query('customerBankId') customerBankId?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.cassettesService.findByMachineSN(machineSN, req.user.userType, req.user.pengelolaId, customerBankId, status);
   }
 
   @Get('by-machine/:machineId')

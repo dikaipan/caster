@@ -562,8 +562,10 @@ export class RepairsService {
       ? ticket.cassetteDetails.map((detail: any) => detail.cassette).filter((c: any): c is NonNullable<typeof c> => c !== null)
       : (ticket.cassette ? [ticket.cassette] : []);
     
-    // Also check cassetteDelivery for additional cassettes
-    if (ticketType === 'SO') {
+    this.logger.debug(`Initial cassette list from cassetteDetails: ${cassetteList.length} cassettes`);
+    
+    // Also check cassetteDelivery for additional cassettes (for single-cassette tickets)
+    if (ticketType === 'SO' && cassetteList.length === 0) {
       const ticketWithDelivery = await this.prisma.problemTicket.findUnique({
         where: { id: ticketId },
         include: {
@@ -580,6 +582,7 @@ export class RepairsService {
         // Add delivery cassette if not already in list
         if (!cassetteList.find((c: any) => c.id === deliveryCassette.id)) {
           cassetteList.push(deliveryCassette);
+          this.logger.debug(`Added cassette from cassetteDelivery: ${deliveryCassette.serialNumber}`);
         }
       }
     }
@@ -611,11 +614,18 @@ export class RepairsService {
     }
 
     this.logger.debug(`Processing ${cassetteList.length} unique cassettes for ${ticketType} ${ticket.ticketNumber || ticket.pmNumber}`);
+    
+    // Log all cassette statuses for debugging
+    for (const cassette of cassetteList) {
+      this.logger.debug(`Cassette ${cassette.serialNumber} (ID: ${cassette.id}) has status: ${cassette.status}`);
+    }
 
     // Verify all cassettes are in correct status
-    // Allow RECEIVED status as well (in case status was updated differently)
+    // For multi-cassette tickets, cassettes should be in IN_REPAIR status if already received at RC
+    // Allow multiple valid statuses for flexibility
+    const validStatuses = ['IN_TRANSIT_TO_RC', 'BAD', 'RECEIVED', 'IN_REPAIR'];
+    
     for (const cassette of cassetteList) {
-      const validStatuses = ['IN_TRANSIT_TO_RC', 'BAD', 'RECEIVED'];
       if (!validStatuses.includes(cassette.status)) {
         this.logger.warn(`Cassette ${cassette.serialNumber} has status ${cassette.status}, expected one of: ${validStatuses.join(', ')}`);
         // Try to update to IN_TRANSIT_TO_RC if it's a valid transition
@@ -628,7 +638,7 @@ export class RepairsService {
           cassette.status = 'IN_TRANSIT_TO_RC';
         } else {
           throw new BadRequestException(
-            `Cassette ${cassette.serialNumber} must be IN_TRANSIT_TO_RC, BAD, or RECEIVED to create repair ticket. Current status: ${cassette.status}`,
+            `Cassette ${cassette.serialNumber} must be in one of these statuses: ${validStatuses.join(', ')} to create repair ticket. Current status: ${cassette.status}`,
           );
         }
       }
@@ -1124,19 +1134,18 @@ export class RepairsService {
         `;
         this.logger.log(`Complete Repair (Replacement Requested): Updated cassette status to SCRAPPED. Reason: ${replacementReason}`);
       } else if (completeDto.qcPassed) {
-        // If QC passed, keep status as IN_REPAIR (kaset masih di RC, belum di-pickup)
+        // If QC passed, update status to READY_FOR_PICKUP (kaset sudah selesai diperbaiki, siap di-pickup)
         // Flow baru (pickup-based):
-        // - Kaset tetap IN_REPAIR sampai Pengelola melakukan pickup di RC
-        // - Setelah RC konfirmasi pickup, status kaset akan menjadi OK dan ticket menjadi CLOSED
-        // JANGAN langsung ke OK karena kaset masih di RC dan belum bisa digunakan oleh Pengelola
+        // - Kaset status menjadi READY_FOR_PICKUP setelah repair selesai dan QC passed
+        // - Setelah Pengelola konfirmasi pickup di RC, status kaset akan menjadi OK dan ticket menjadi CLOSED
         await tx.$executeRaw`
           UPDATE cassettes 
-          SET status = ${'IN_REPAIR'}, 
+          SET status = ${'READY_FOR_PICKUP'}, 
               notes = CONCAT(COALESCE(notes, ''), '\n', 'Repaired and passed QC - ready for pickup at RC by Pengelola'),
               updated_at = NOW()
           WHERE id = ${ticket.cassetteId}
         `;
-        this.logger.debug('Complete Repair (QC Passed): Cassette status remains IN_REPAIR (still at RC, ready for pickup by Pengelola)');
+        this.logger.log(`Complete Repair (QC Passed): Updated cassette ${cassette.serialNumber} status to READY_FOR_PICKUP (ready for pickup at RC)`);
       } else {
         // If QC failed and no replacement request, mark as scrapped using raw SQL
         await tx.$executeRaw`

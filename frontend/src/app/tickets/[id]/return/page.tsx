@@ -107,7 +107,7 @@ export default function ReturnDeliveryPage() {
 
         // Validation checks
         if (ticketResponse.data.status !== 'RESOLVED') {
-          setError(`Status SO harus "RESOLVED" untuk bisa dikirim kembali.`);
+          setError(`Status SO harus "RESOLVED" (Siap Di-pickup) untuk bisa dikonfirmasi pickup.`);
         }
 
         if (ticketResponse.data.cassetteReturn) {

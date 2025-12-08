@@ -18,6 +18,7 @@ export class MachinesService {
     status?: string,
     sortBy?: string,
     sortOrder: 'asc' | 'desc' = 'desc',
+    customerBankId?: string,
   ) {
     const whereClause: any = {};
 
@@ -25,9 +26,40 @@ export class MachinesService {
     // Pengelola users can only see their assigned machines
     if (userType === 'HITACHI') {
       // Admin can see everything - no filter
+      // But if customerBankId is provided, filter by it
+      if (customerBankId) {
+        whereClause.customerBankId = customerBankId;
+      }
       this.logger.debug('Admin user - showing all machines');
     } else if (userType === 'PENGELOLA' && pengelolaId) {
       whereClause.pengelolaId = pengelolaId;
+
+      // If customerBankId is provided, validate that pengelola has access to this bank
+      if (customerBankId) {
+        // Verify that pengelola is assigned to this bank
+        const bankAssignment = await this.prisma.bankPengelolaAssignment.findFirst({
+          where: {
+            pengelolaId,
+            customerBankId,
+            status: 'ACTIVE',
+          },
+        });
+
+        if (!bankAssignment) {
+          // Pengelola doesn't have access to this bank, return empty result
+          return {
+            data: [],
+            meta: {
+              total: 0,
+              page,
+              limit,
+              totalPages: 0,
+            },
+          };
+        }
+
+        whereClause.customerBankId = customerBankId;
+      }
 
       // Technicians can only see machines in their assigned branches
       const pengelolaUser = await this.prisma.pengelolaUser.findUnique({

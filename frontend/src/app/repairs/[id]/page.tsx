@@ -12,6 +12,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   ArrowLeft,
   Package,
   Clock,
@@ -51,6 +59,7 @@ export default function RepairDetailPage() {
   const [partsReplaced, setPartsReplaced] = useState('');
   const [notes, setNotes] = useState('');
   const [qcPassed, setQcPassed] = useState<boolean | null>(null);
+  const [showCompleteRepairDialog, setShowCompleteRepairDialog] = useState(false);
   
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
@@ -229,11 +238,12 @@ export default function RepairDetailPage() {
       return;
     }
 
-    if (!confirm(`Konfirmasi selesai repair?\n\nQC Status: ${qcPassed ? '✅ Passed' : '❌ Failed'}\n\n${qcPassed ? 'Kaset akan dikembalikan ke pengelola dalam keadaan OK.' : 'Kaset akan di-mark sebagai SCRAPPED.'}`)) {
-      return;
-    }
+    setShowCompleteRepairDialog(true);
+  };
 
+  const handleConfirmCompleteRepair = async () => {
     setSubmitting(true);
+    setShowCompleteRepairDialog(false);
 
     try {
       const partsArray = partsReplaced.trim() ? partsReplaced.split(',').map(p => p.trim()).filter(p => p) : undefined;
@@ -882,19 +892,13 @@ export default function RepairDetailPage() {
                             <SelectItem value="true" className="text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700">
                               <div className="flex items-center gap-3 py-2">
                                 <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-500" />
-                                <div>
-                                  <div className="font-semibold">✅ QC Passed</div>
-                                  <div className="text-xs text-slate-600 dark:text-slate-500">Kaset sudah diperbaiki. Status tetap IN_REPAIR (masih di RC). Create return untuk kirim ke pengelola.</div>
-                                </div>
+                                <div className="font-semibold">✅ QC Passed</div>
                               </div>
                             </SelectItem>
                             <SelectItem value="false" className="text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700">
                               <div className="flex items-center gap-3 py-2">
                                 <XCircle className="h-5 w-5 text-red-600 dark:text-red-500" />
-                                <div>
-                                  <div className="font-semibold">❌ QC Failed</div>
-                                  <div className="text-xs text-slate-600 dark:text-slate-500">Kaset akan di-mark sebagai SCRAPPED</div>
-                                </div>
+                                <div className="font-semibold">❌ QC Failed</div>
                               </div>
                             </SelectItem>
                           </SelectContent>
@@ -912,7 +916,7 @@ export default function RepairDetailPage() {
                           </p>
                           <p className="text-xs text-slate-700 dark:text-slate-400">
                             {qcPassed 
-                              ? 'Kaset sudah diperbaiki dan lolos QC. Status tetap IN_REPAIR (masih di RC). Setelah create return, status akan menjadi IN_TRANSIT_TO_PENGELOLA. Setelah diterima pengelola, status akan menjadi OK dan siap digunakan.'
+                              ? 'Kaset sudah diperbaiki dan lolos QC. Status kaset sekarang: READY_FOR_PICKUP (siap di-pickup di RC). Status SO akan berubah menjadi RESOLVED. Setelah Pengelola konfirmasi pickup di RC, status kaset akan menjadi OK dan siap digunakan kembali.'
                               : 'Kaset akan ditandai sebagai SCRAPPED dan tidak dapat digunakan lagi.'
                             }
                           </p>
@@ -1075,7 +1079,7 @@ export default function RepairDetailPage() {
                       </p>
                       <p className="text-xs text-slate-700 dark:text-slate-300">
                         {repair.qcPassed 
-                          ? 'Kaset sudah diperbaiki dan lolos QC. Flow baru: kaset tetap disimpan di RC dan siap untuk di-pickup oleh Pengelola. Status SO akan berubah menjadi RESOLVED (Ready to Pickup) dan setelah konfirmasi pickup di RC, status kaset akan menjadi OK dan siap digunakan kembali.'
+                          ? 'Kaset sudah diperbaiki dan lolos QC. Status kaset sekarang: READY_FOR_PICKUP (siap di-pickup di RC). Status SO akan berubah menjadi RESOLVED. Setelah Pengelola konfirmasi pickup di RC, status kaset akan menjadi OK dan siap digunakan kembali.'
                           : 'Kaset telah ditandai sebagai SCRAPPED dan tidak dapat digunakan lagi.'
                         }
                       </p>
@@ -1135,9 +1139,99 @@ export default function RepairDetailPage() {
           </div>
         </div>
       </div>
-    </PageLayout>
-  );
-}
+
+      {/* Confirm Complete Repair Dialog */}
+        <Dialog open={showCompleteRepairDialog} onOpenChange={setShowCompleteRepairDialog}>
+          <DialogContent className="w-[calc(100%-2rem)] max-w-[400px] sm:max-w-[500px] mx-auto rounded-3xl sm:rounded-lg p-4 sm:p-6">
+            <DialogHeader className="px-0">
+              <DialogTitle className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
+                <CheckCircle2 className="h-5 w-5" />
+                Konfirmasi Selesai Repair
+              </DialogTitle>
+              <DialogDescription>
+                Apakah Anda yakin ingin menyelesaikan repair ini?
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4 px-0">
+              {/* QC Status Info */}
+              <div className={`rounded-xl p-3 sm:p-4 border ${
+                qcPassed 
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
+                  : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    QC Status:
+                  </span>
+                  {qcPassed ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                        <CheckCircle2 className="h-3 w-3 text-white" />
+                      </div>
+                      <span className="text-sm font-bold text-green-700 dark:text-green-300">
+                        Passed
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                        <XCircle className="h-3 w-3 text-white" />
+                      </div>
+                      <span className="text-sm font-bold text-red-700 dark:text-red-300">
+                        Failed
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <p className={`text-sm ${
+                  qcPassed 
+                    ? 'text-green-800 dark:text-green-300' 
+                    : 'text-red-800 dark:text-red-300'
+                }`}>
+                  {qcPassed 
+                    ? 'Kaset akan dikembalikan ke pengelola dalam keadaan OK.'
+                    : 'Kaset akan di-mark sebagai SCRAPPED.'}
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter className="px-0 gap-2 sm:gap-0 flex-col sm:flex-row">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowCompleteRepairDialog(false)}
+                disabled={submitting}
+                className="w-full sm:w-auto rounded-xl sm:rounded-lg"
+              >
+                Batal
+              </Button>
+              <Button 
+                onClick={handleConfirmCompleteRepair}
+                disabled={submitting}
+                className={`w-full sm:w-auto rounded-xl sm:rounded-lg ${
+                  qcPassed
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
+                    : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
+                }`}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Memproses...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Konfirmasi
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </PageLayout>
+    );
+  }
 
 // Helper Components
 const InfoBlock = ({ icon: Icon, iconColor, title, children, isDark = false }: any) => (

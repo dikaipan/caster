@@ -251,7 +251,7 @@ export default function ResourcesPage() {
       BAD: 'bg-rose-100 text-rose-700 border-rose-200',
       IN_TRANSIT_TO_RC: 'bg-amber-100 text-amber-700 border-amber-200',
       IN_REPAIR: 'bg-orange-100 text-orange-700 border-orange-200',
-      IN_TRANSIT_TO_PENGELOLA: 'bg-purple-100 text-purple-700 border-purple-200',
+      READY_FOR_PICKUP: 'bg-teal-100 text-teal-700 border-teal-200',
       SCRAPPED: 'bg-gray-100 text-gray-700 border-gray-200',
     };
     return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-700 border-gray-200';
@@ -337,7 +337,7 @@ export default function ResourcesPage() {
               { status: 'BAD', label: 'Faulty', icon: '✕', color: 'rose' },
               { status: 'IN_TRANSIT_TO_RC', label: 'In Transit', icon: '→', color: 'amber' },
               { status: 'IN_REPAIR', label: 'In Repair', icon: '⚙', color: 'orange' },
-              { status: 'IN_TRANSIT_TO_PENGELOLA', label: 'Returning', icon: '←', color: 'purple' },
+              { status: 'READY_FOR_PICKUP', label: 'Ready Pickup', icon: '✓', color: 'teal' },
               { status: 'SCRAPPED', label: 'Scrapped', icon: '🗑', color: 'gray' },
             ].map(({ status, label, icon, color }) => (
               <Card 

@@ -20,6 +20,7 @@ import {
   Download,
   Filter,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   Truck,
   Wrench,
@@ -45,6 +46,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -54,13 +62,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 
 export default function CassettesPage() {
@@ -82,6 +83,7 @@ export default function CassettesPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
   
   // CRUD Dialog States
   const [addCassetteDialogOpen, setAddCassetteDialogOpen] = useState(false);
@@ -137,6 +139,11 @@ export default function CassettesPage() {
         // Server-side status filter
         if (selectedStatus && selectedStatus !== 'all') {
           params.status = selectedStatus;
+        }
+        
+        // ADD: Filter by bank
+        if (selectedBankId) {
+          params.customerBankId = selectedBankId;
         }
         
         // Server-side sorting
@@ -230,7 +237,7 @@ export default function CassettesPage() {
       } finally {
         setLoading(false);
       }
-  }, [user?.userType, user?.role, user?.pengelolaId, currentPage, itemsPerPage, searchTerm, selectedStatus, sortField, sortDirection, router, toast]);
+  }, [user?.userType, user?.role, user?.pengelolaId, currentPage, itemsPerPage, searchTerm, selectedStatus, sortField, sortDirection, selectedBankId, router, toast]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -263,7 +270,7 @@ export default function CassettesPage() {
   // Reset to page 1 when filter or sort changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedStatus, sortField, sortDirection]);
+  }, [selectedStatus, sortField, sortDirection, selectedBankId]);
 
   // Copy to clipboard function
   const copyToClipboard = useCallback(async (text: string, id: string) => {
@@ -346,6 +353,8 @@ export default function CassettesPage() {
         return 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 border-amber-300 dark:border-amber-700';
       case 'IN_REPAIR':
         return 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400 border-orange-300 dark:border-orange-700';
+      case 'READY_FOR_PICKUP':
+        return 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-400 border-teal-300 dark:border-teal-700';
       case 'IN_TRANSIT_TO_PENGELOLA':
         return 'bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-400 border-sky-300 dark:border-sky-700';
       case 'SCRAPPED':
@@ -365,6 +374,8 @@ export default function CassettesPage() {
         return <Truck className="h-4 w-4" />;
       case 'IN_REPAIR':
         return <Wrench className="h-4 w-4" />;
+      case 'READY_FOR_PICKUP':
+        return <CheckCircle2 className="h-4 w-4" />;
       case 'IN_TRANSIT_TO_PENGELOLA':
         return <Package className="h-4 w-4" />;
       case 'SCRAPPED':
@@ -557,6 +568,23 @@ export default function CassettesPage() {
     }
   };
 
+  // Additional role-based permissions
+  const isHitachi = user?.userType === 'HITACHI';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isRCManager = user?.role === 'RC_MANAGER';
+  const isRCStaff = user?.role === 'RC_STAFF';
+  const isTechnician = user?.role === 'TECHNICIAN';
+  const canManageCassettes = isHitachi && isSuperAdmin;
+  
+  // Status counts are now provided by backend in response.statistics.statusCounts
+  // This gives accurate counts for all matching records, not just current page
+
+  // Gunakan data dari server apa adanya
+  const effectiveTotalItems = totalItems;
+  const paginatedCassettes = cassettes;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + paginatedCassettes.length, effectiveTotalItems);
+
   const exportToCSV = () => {
     const headers = ['Serial Number', 'Cassette Type', 'Machine Type', 'Bank', 'Status', 'Usage Type', 'Cycle Problem (SO)', 'Repair Count', 'Notes'];
     // Note: Export only current page data. For full export, use server-side export endpoint
@@ -593,23 +621,6 @@ export default function CassettesPage() {
     a.click();
     window.URL.revokeObjectURL(url);
   };
-
-  // Additional role-based permissions
-  const isHitachi = user?.userType === 'HITACHI';
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const isRCManager = user?.role === 'RC_MANAGER';
-  const isRCStaff = user?.role === 'RC_STAFF';
-  const isTechnician = user?.role === 'TECHNICIAN';
-  const canManageCassettes = isHitachi && isSuperAdmin;
-  
-  // Status counts are now provided by backend in response.statistics.statusCounts
-  // This gives accurate counts for all matching records, not just current page
-
-  // Use server-side filtered and sorted data directly
-  // All filtering and sorting is handled by the backend
-  const paginatedCassettes = cassettes; // Already filtered, sorted, and paginated from server
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + paginatedCassettes.length, totalItems);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -735,7 +746,7 @@ export default function CassettesPage() {
           { key: 'BAD', label: 'Rusak', count: statusCounts.BAD || 0, color: 'red', icon: XCircle },
           { key: 'IN_TRANSIT_TO_RC', label: isPengelola ? 'Dikirim ke RC' : 'Dalam Perjalanan', count: statusCounts.IN_TRANSIT_TO_RC || 0, color: 'amber', icon: Truck },
           { key: 'IN_REPAIR', label: isPengelola ? 'Sedang Diperbaiki' : 'Dalam Perbaikan', count: statusCounts.IN_REPAIR || 0, color: 'orange', icon: Wrench },
-          { key: 'IN_TRANSIT_TO_PENGELOLA', label: isPengelola ? 'Kembali dari RC' : 'Kembali ke Pengelola', count: statusCounts.IN_TRANSIT_TO_PENGELOLA || 0, color: 'sky', icon: Package, title: isPengelola ? 'Kaset dalam perjalanan kembali dari Repair Center ke pengelola' : 'Kaset dalam perjalanan kembali ke pengelola' },
+          { key: 'READY_FOR_PICKUP', label: isPengelola ? 'Siap Di-pickup' : 'Siap Di-pickup', count: statusCounts.READY_FOR_PICKUP || 0, color: 'teal', icon: CheckCircle2, title: 'Kaset sudah selesai diperbaiki dan siap di-pickup di RC' },
           { key: 'SCRAPPED', label: 'Tidak Layak Pakai', count: statusCounts.SCRAPPED || 0, color: 'gray', icon: Trash2, title: 'Kaset yang sudah tidak layak pakai dan dibuang secara fisik' },
         ].map(({ key, label, count, color, icon: Icon, title }) => {
           const isSelected = selectedStatus === key;
@@ -805,16 +816,34 @@ export default function CassettesPage() {
       <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-            <div className="relative flex-1 w-full sm:max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-slate-500 h-4 w-4" />
-              <Input
-                  ref={searchInputRef}
-                  placeholder="Cari nomor serial, tipe kaset, tipe mesin (VS/SR), bank, atau status... (Tekan / untuk fokus)"
-                value={searchInputValue}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-10"
-              />
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="flex flex-1 gap-2 w-full sm:max-w-2xl">
+              <Select 
+                value={selectedBankId || 'all'} 
+                onValueChange={(value) => setSelectedBankId(value === 'all' ? null : value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by Bank" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Banks</SelectItem>
+                  {banks.map((bank) => (
+                    <SelectItem key={bank.id} value={bank.id}>
+                      {bank.bankName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-slate-500 h-4 w-4" />
+                <Input
+                    ref={searchInputRef}
+                    placeholder="Cari nomor serial, tipe kaset, tipe mesin (VS/SR), bank, atau status... (Tekan / untuk fokus)"
+                  value={searchInputValue}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
             </div>
             <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Per halaman:</span>
@@ -835,9 +864,19 @@ export default function CassettesPage() {
             </div>
             
             {/* Active Filters */}
-            {(selectedStatus || searchInputValue) && (
+            {(selectedStatus || searchInputValue || selectedBankId) && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-muted-foreground">Filter aktif:</span>
+                {selectedBankId && (
+                  <Badge 
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-gray-200"
+                    onClick={() => setSelectedBankId(null)}
+                  >
+                    Bank: {banks.find(b => b.id === selectedBankId)?.bankName || selectedBankId}
+                    <XCircle className="h-3 w-3 ml-1" />
+                  </Badge>
+                )}
                 {searchInputValue && (
                   <Badge 
                     variant="secondary" 
@@ -871,6 +910,7 @@ export default function CassettesPage() {
                     setSelectedStatus(null);
                     setSearchInputValue('');
                     setSearchTerm('');
+                    setSelectedBankId(null);
                     setCurrentPage(1);
                   }}
                   className="h-6 text-xs"
@@ -892,7 +932,7 @@ export default function CassettesPage() {
                 <Disc className="h-5 w-5 text-primary" />
                 <span>Daftar Kaset</span>
                 <Badge variant="secondary" className="ml-2">
-                  {totalItems.toLocaleString()} kaset
+                  {effectiveTotalItems.toLocaleString()} kaset
                 </Badge>
               </CardTitle>
               <CardDescription className="mt-2">
@@ -1060,10 +1100,10 @@ export default function CassettesPage() {
                     {paginatedCassettes.map((cassette, index) => {
                       // Cycle Problem = berapa kali kaset bermasalah (Service Orders)
                       // Include both single cassette SOs and multi-cassette SOs
+                      const problemCount = cassette.problemCount ?? ((cassette._count?.problemTickets || 0) + (cassette._count?.ticketCassetteDetails || 0));
                       const singleCassetteCount = cassette._count?.problemTickets || 0;
                       const multiCassetteCount = cassette._count?.ticketCassetteDetails || 0;
-                      const problemCount = singleCassetteCount + multiCassetteCount;
-                      const repairCount = cassette._count?.repairTickets || 0;
+                      const repairCount = cassette.repairCount ?? (cassette._count?.repairTickets || 0);
                       return (
                         <tr
                           key={cassette.id}
@@ -1106,7 +1146,7 @@ export default function CassettesPage() {
                               variant="secondary"
                               className={`font-semibold ${
                                 cassette.cassetteType.machineType === 'VS' 
-                                  ? 'bg-red-100 dark:bg-red-900/30 text-[#E60012] dark:text-red-400 border-red-200 dark:border-red-800' 
+                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border-blue-200 dark:border-blue-800' 
                                   : 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border-green-200 dark:border-green-800'
                               }`}
                             >
@@ -1240,7 +1280,7 @@ export default function CassettesPage() {
                   <div className="text-sm text-muted-foreground order-2 sm:order-1">
                     Menampilkan <span className="font-medium text-gray-900 dark:text-slate-100">{startIndex + 1}</span> sampai{' '}
                     <span className="font-medium text-gray-900 dark:text-slate-100">{endIndex}</span> dari{' '}
-                    <span className="font-medium text-gray-900 dark:text-slate-100">{totalItems}</span> kaset
+                    <span className="font-medium text-gray-900 dark:text-slate-100">{effectiveTotalItems}</span> kaset
                   </div>
                   <div className="flex items-center gap-2 order-1 sm:order-2">
                     <Button
@@ -1321,7 +1361,7 @@ export default function CassettesPage() {
                 onValueChange={(value) => setFormData({ ...formData, cassetteTypeId: value })}
                 disabled={loadingDropdowns}
               >
-                <SelectTrigger>
+                <SelectTrigger id="cassetteTypeId">
                   <SelectValue placeholder={loadingDropdowns ? "Loading..." : "Select cassette type"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -1338,12 +1378,20 @@ export default function CassettesPage() {
               <Select
                 value={formData.customerBankId}
                 onValueChange={(value) => {
-                  setFormData({ ...formData, customerBankId: value, machineId: '' });
-                  loadMachinesForBank(value);
+                  const selectedBank = banks.find(b => b.id === value);
+                  const bankUsesMachines = selectedBank?.useMachines !== false;
+                  setFormData({ 
+                    ...formData, 
+                    customerBankId: value, 
+                    machineId: bankUsesMachines ? formData.machineId : '' // Clear machine jika bank tidak menggunakan machines
+                  });
+                  if (bankUsesMachines) {
+                    loadMachinesForBank(value);
+                  }
                 }}
                 disabled={loadingDropdowns}
               >
-                <SelectTrigger>
+                <SelectTrigger id="customerBankId">
                   <SelectValue placeholder={loadingDropdowns ? "Loading..." : "Select bank"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -1355,14 +1403,22 @@ export default function CassettesPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="machineId">Machine (Optional)</Label>
-              <Select
-                value={formData.machineId || undefined}
-                onValueChange={(value) => setFormData({ ...formData, machineId: value === 'NONE' ? '' : value })}
-                disabled={!formData.customerBankId}
-              >
-                <SelectTrigger>
+            {/* Machine field - hanya tampil jika bank menggunakan mesin */}
+            {(() => {
+              const selectedBank = banks.find(b => b.id === formData.customerBankId);
+              const bankUsesMachines = selectedBank?.useMachines !== false; // Default true untuk backward compatibility
+              
+              if (!bankUsesMachines) return null;
+              
+              return (
+                <div>
+                  <Label htmlFor="machineId">Machine (Optional)</Label>
+                  <Select
+                    value={formData.machineId || undefined}
+                    onValueChange={(value) => setFormData({ ...formData, machineId: value === 'NONE' ? '' : value })}
+                    disabled={!formData.customerBankId}
+                  >
+                    <SelectTrigger id="machineId">
                   <SelectValue placeholder={formData.customerBankId ? "Select machine (optional)" : "Select bank first"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -1374,7 +1430,9 @@ export default function CassettesPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="usageType">Usage Type</Label>
@@ -1459,25 +1517,35 @@ export default function CassettesPage() {
               <Label>Serial Number</Label>
               <Input value={formData.serialNumber} disabled />
             </div>
-            <div>
-              <Label htmlFor="edit-machineId">Machine (Optional)</Label>
-              <Select
-                value={formData.machineId || undefined}
-                onValueChange={(value) => setFormData({ ...formData, machineId: value === 'NONE' ? '' : value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select machine (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">None</SelectItem>
-                  {machines.map((machine) => (
-                    <SelectItem key={machine.id} value={machine.id}>
-                      {machine.machineCode} - {machine.serialNumberManufacturer}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Machine field - hanya tampil jika bank menggunakan mesin */}
+            {(() => {
+              const selectedBank = banks.find(b => b.id === formData.customerBankId);
+              const bankUsesMachines = selectedBank?.useMachines !== false; // Default true untuk backward compatibility
+              
+              if (!bankUsesMachines) return null;
+              
+              return (
+                <div>
+                  <Label htmlFor="edit-machineId">Machine (Optional)</Label>
+                  <Select
+                    value={formData.machineId || undefined}
+                    onValueChange={(value) => setFormData({ ...formData, machineId: value === 'NONE' ? '' : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select machine (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">None</SelectItem>
+                      {machines.map((machine) => (
+                        <SelectItem key={machine.id} value={machine.id}>
+                          {machine.machineCode} - {machine.serialNumberManufacturer}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-usageType">Usage Type</Label>

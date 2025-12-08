@@ -85,7 +85,7 @@ Berdasarkan data spreadsheet Anda:
    - `machineCode` = auto-generated dari bank code dan SN mesin
    - `customerBankId` = dari bank code yang diberikan
    - `vendorId` = dari vendor code yang diberikan
-   - `modelName` = "Hitachi SR-M100" (default)
+   - `modelName` = "SR7500VS" (default)
    - `status` = "OPERATIONAL"
 
 2. **Membuat/Update Cassette:**

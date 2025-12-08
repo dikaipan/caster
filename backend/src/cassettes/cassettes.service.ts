@@ -20,6 +20,7 @@ export class CassettesService {
     status?: string,
     sortBy?: string,
     sortOrder: 'asc' | 'desc' = 'desc',
+    customerBankId?: string,
   ) {
     const whereClause: any = {};
 
@@ -287,13 +288,27 @@ export class CassettesService {
       take,
     });
 
+    // Enrich with computed cycle/repair counts to ensure frontend always has numbers
+    const enrichedData = data.map((cassette) => {
+      const singleProblems = cassette._count?.problemTickets ?? 0;
+      const multiProblems = cassette._count?.ticketCassetteDetails ?? 0;
+      const problemCount = singleProblems + multiProblems;
+      const repairCount = cassette._count?.repairTickets ?? 0;
+
+      return {
+        ...cassette,
+        problemCount,
+        repairCount,
+      };
+    });
+
     // Return format compatible with existing frontend
     // Format: { cassettes: [...], count: number } for backward compatibility
     // Also include pagination info and status statistics
     return {
-      cassettes: data,
+      cassettes: enrichedData,
       count: total,
-      data, // New format
+      data: enrichedData, // New format
       pagination: {
         page,
         limit,
@@ -314,6 +329,14 @@ export class CassettesService {
         customerBank: true,
         repairTickets: {
           orderBy: { receivedAtRc: 'desc' },
+        },
+        replacementFor: {
+          // Include replacement cassettes (new cassettes that replace this one)
+          select: {
+            id: true,
+            serialNumber: true,
+            status: true,
+          },
         },
       },
     });
@@ -369,18 +392,25 @@ export class CassettesService {
     };
   }
 
-  async findByMachineSN(machineSN: string, userType: string, pengelolaId?: string) {
+  async findByMachineSN(machineSN: string, userType: string, pengelolaId?: string, customerBankId?: string, status?: string) {
     const machineSnTrimmed = machineSN.trim();
     
     // Find machines matching the serial number (suffix or full match)
     const machineSnLower = machineSnTrimmed.toLowerCase();
+    const machineWhere: any = {
+      OR: [
+        { serialNumberManufacturer: { endsWith: machineSnLower } },
+        { serialNumberManufacturer: { contains: machineSnLower } },
+      ],
+    };
+    
+    // Filter by bank if provided
+    if (customerBankId) {
+      machineWhere.customerBankId = customerBankId;
+    }
+    
     const machines = await this.prisma.machine.findMany({
-      where: {
-        OR: [
-          { serialNumberManufacturer: { endsWith: machineSnLower } },
-          { serialNumberManufacturer: { contains: machineSnLower } },
-        ],
-      },
+      where: machineWhere,
       select: {
         id: true,
         serialNumberManufacturer: true,
@@ -434,10 +464,17 @@ export class CassettesService {
     }
 
     // Get cassettes that are ASSIGNED TO these specific machines
+    const cassetteWhere: any = {
+      machineId: { in: allowedMachineIds },
+    };
+    
+    // Filter by status if provided
+    if (status) {
+      cassetteWhere.status = status;
+    }
+    
     const cassettes = await this.prisma.cassette.findMany({
-      where: {
-        machineId: { in: allowedMachineIds },
-      },
+      where: cassetteWhere,
       include: {
         cassetteType: true,
         machine: {
@@ -482,12 +519,22 @@ export class CassettesService {
     };
   }
 
-  async findBySerialNumber(serialNumber: string, userType: string, pengelolaId?: string) {
+  async findBySerialNumber(serialNumber: string, userType: string, pengelolaId?: string, customerBankId?: string, status?: string) {
     const serialNumberTrimmed = serialNumber.trim();
     
     const whereClause: any = {
       serialNumber: serialNumberTrimmed,
     };
+
+    // Filter by bank if provided
+    if (customerBankId) {
+      whereClause.customerBankId = customerBankId;
+    }
+
+    // Filter by status if provided
+    if (status) {
+      whereClause.status = status;
+    }
 
     // Apply role-based filtering similar to findAll
     if (userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
@@ -515,6 +562,18 @@ export class CassettesService {
       vendorFilter = Prisma.sql`AND c.customer_bank_id IN (SELECT customer_bank_id FROM bank_pengelola_assignments WHERE pengelola_id = ${pengelolaId})`;
     }
     
+    // Add bank filter if provided
+    let bankFilter = Prisma.empty;
+    if (customerBankId) {
+      bankFilter = Prisma.sql`AND c.customer_bank_id = ${customerBankId}`;
+    }
+    
+    // Add status filter if provided
+    let statusFilter = Prisma.empty;
+    if (status) {
+      statusFilter = Prisma.sql`AND c.status = ${status}`;
+    }
+    
     const rawResult = await this.prisma.$queryRaw`
       SELECT 
         c.id,
@@ -525,6 +584,8 @@ export class CassettesService {
       FROM cassettes c
       WHERE c.serial_number = ${serialNumberParam}
       ${vendorFilter}
+      ${bankFilter}
+      ${statusFilter}
       LIMIT 1
     ` as any[];
     
@@ -760,17 +821,19 @@ export class CassettesService {
   }
 
   async getStatisticsByBank(bankId: string) {
-    const [total, ok, bad, inTransit, inRepair] = await Promise.all([
+    const [total, ok, bad, inTransit, inRepair, readyForPickup] = await Promise.all([
       this.prisma.cassette.count({ where: { customerBankId: bankId } }),
       this.prisma.cassette.count({ where: { customerBankId: bankId, status: 'OK' as any } }),
       this.prisma.cassette.count({ where: { customerBankId: bankId, status: 'BAD' } }),
       this.prisma.cassette.count({ where: { customerBankId: bankId, status: 'IN_TRANSIT_TO_RC' } }),
       this.prisma.cassette.count({ where: { customerBankId: bankId, status: 'IN_REPAIR' } }),
+      this.prisma.cassette.count({ where: { customerBankId: bankId, status: 'READY_FOR_PICKUP' } }),
     ]);
 
     return {
       total,
       ok,
+      readyForPickup,
       bad,
       inTransit,
       inRepair,
@@ -931,8 +994,8 @@ export class CassettesService {
     const returnReceived = returnRecord !== null || ticketReturnReceived;
 
     // Statuses that indicate cassette is in repair process
-    // But if return is received, cassette is available even if status is still IN_REPAIR or IN_TRANSIT_TO_PENGELOLA
-    const repairStatuses = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA'];
+    // But if return is received, cassette is available even if status is still in repair process
+    const repairStatuses = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'READY_FOR_PICKUP'];
     const isInRepairProcess = cassette && repairStatuses.includes(cassette.status) && !returnReceived;
 
     // Cassette is available if:

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, AlertCircle, Sun, Moon, Lock, User } from 'lucide-react';
+import { Loader2, AlertCircle, Sun, Moon, Lock, User, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Load dark mode from localStorage after hydration
   useEffect(() => {
@@ -90,19 +91,29 @@ export default function LoginPage() {
       </button>
 
       <div className="w-full max-w-md relative z-10">
+        {/* Branding Header */}
+        <div className="text-center mb-6">
+          <div className="flex justify-center mb-4">
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-500 via-teal-600 to-blue-600 shadow-2xl transform hover:scale-105 transition-transform duration-300">
+              <span className="text-4xl font-bold text-white">C</span>
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-teal-600 via-teal-700 to-blue-600 bg-clip-text text-transparent dark:from-teal-400 dark:via-teal-300 dark:to-blue-400 mb-2">
+            CASTER
+          </h1>
+          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+            Cassette Tracking & Retrieval System
+          </p>
+        </div>
+
         {/* Login Card */}
         <Card className="border-0 shadow-2xl bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm">
           <CardHeader className="space-y-3 pb-6 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-500 to-blue-600 shadow-lg">
-                <Lock className="h-8 w-8 text-white" />
-              </div>
-            </div>
-            <CardTitle className="text-3xl font-bold text-slate-900 dark:text-white">
+            <CardTitle className="text-2xl font-bold text-slate-900 dark:text-white">
               Welcome Back
             </CardTitle>
             <CardDescription className="text-base text-slate-600 dark:text-slate-400">
-              Sign in to your account to continue
+              Sign in to access your dashboard
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -135,15 +146,28 @@ export default function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <Input
                     id="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={loading}
                     autoComplete="current-password"
-                    className="h-12 pl-10 bg-white dark:bg-slate-900/50 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 focus:border-teal-500 dark:focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                    className="h-12 pl-10 pr-10 bg-white dark:bg-slate-900/50 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 focus:border-teal-500 dark:focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
                 </div>
               </div>
 

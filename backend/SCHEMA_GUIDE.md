@@ -106,7 +106,7 @@ Mesin ATM Hitachi yang terinstall di bank.
 - Relations: `customerBankId` → CustomerBank, `vendorId` → Vendor
 - `machineCode` - Kode mesin (unique, max 100 char)
 - `modelNumber` - Nomor model (contoh: SR-M100)
-- `modelName` - Nama model (contoh: Hitachi SR-M100)
+- `modelName` - Nama model (contoh: SR7500 atau SR7500VS)
 - `serialNumberManufacturer` - Serial number dari manufacturer (immutable)
 - Location: `physicalLocation`, `branchCode`, `city`, `province`
 - Dates: `installationDate`, `warrantyExpiryDate`, `lastMaintenanceDate`, `nextScheduledMaintenance`

@@ -144,11 +144,11 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen }: Sideb
               className="flex items-center space-x-3 min-w-0"
             >
               <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg">
-                <span className="text-xl font-bold text-white">H</span>
+                <span className="text-xl font-bold text-white">C</span>
               </div>
               <div className="min-w-0">
-                <h1 className="text-lg font-bold truncate">Hitachi CRM</h1>
-                <p className="text-xs text-slate-400 truncate">Management System</p>
+                <h1 className="text-lg font-bold truncate">CASTER</h1>
+                <p className="text-xs text-slate-400 truncate">Tracking & Retrieval</p>
               </div>
             </Link>
           </div>

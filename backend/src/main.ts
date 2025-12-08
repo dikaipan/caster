@@ -140,7 +140,7 @@ async function bootstrap() {
   // Swagger documentation - Security: Disable in production
   if (!isProduction) {
     const config = new DocumentBuilder()
-      .setTitle('Hitachi CRM Management API')
+      .setTitle('CASTER API - Cassette Tracking & Retrieval System')
       .setDescription('API documentation for Cash Recycling Machine Management System')
       .setVersion('1.0')
       .addBearerAuth()

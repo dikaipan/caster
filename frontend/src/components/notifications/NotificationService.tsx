@@ -161,7 +161,7 @@ export default function NotificationService() {
     return labels[status] || status;
   }, []);
 
-  // Poll for ticket updates
+  // Poll for ticket updates - optimized for performance
   const pollTickets = useCallback(async () => {
     if (!isAuthenticated || !user) return;
 
@@ -178,20 +178,24 @@ export default function NotificationService() {
         ? response.data 
         : (response.data?.data || []);
 
-      // Check each ticket for status changes
-      tickets.forEach((ticket: any) => {
-        // Get last status BEFORE updating
-        const state = useNotificationStore.getState();
+      // Batch store updates to reduce re-renders
+      const state = useNotificationStore.getState();
+      const statusUpdates: Record<string, string> = {};
+      const notifications: any[] = [];
+      let shouldPlaySound = false;
+
+      // Process tickets efficiently - batch all updates
+      for (const ticket of tickets) {
         const lastStatus = state.lastCheckedTickets[ticket.id];
         const currentStatus = ticket.status;
         
         // Only create notification if status actually changed (not first time tracking)
         if (lastStatus && lastStatus !== currentStatus) {
-          // Status has changed! Create notification and play sound
+          // Status has changed! Queue notification
           const oldStatusLabel = getStatusLabel(lastStatus);
           const newStatusLabel = getStatusLabel(currentStatus);
           
-          addNotification({
+          notifications.push({
             type: 'SO_STATUS_CHANGE',
             title: `Status Service Order Berubah`,
             message: `Service Order ${ticket.ticketNumber} telah berubah dari ${oldStatusLabel} menjadi ${newStatusLabel}`,
@@ -200,16 +204,49 @@ export default function NotificationService() {
             oldStatus: oldStatusLabel,
             newStatus: newStatusLabel,
           });
-
-          // Play sound when notification is created
-          setTimeout(() => {
-            playNotificationSound();
-          }, 100); // Small delay to ensure notification is added first
+          shouldPlaySound = true;
         }
         
-        // Update the last checked status (always update, even if no change)
-        updateTicketStatus(ticket.id, currentStatus);
-      });
+        // Queue status update
+        statusUpdates[ticket.id] = currentStatus;
+      }
+
+      // Batch update all statuses at once (single store update)
+      if (Object.keys(statusUpdates).length > 0) {
+        // Update all statuses in one batch
+        Object.entries(statusUpdates).forEach(([ticketId, status]) => {
+          updateTicketStatus(ticketId, status);
+        });
+      }
+
+      // Add all notifications at once (single store update per notification, but batched in time)
+      if (notifications.length > 0) {
+        // Use requestIdleCallback to defer non-critical work
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(() => {
+            notifications.forEach(notification => {
+              addNotification(notification);
+            });
+            if (shouldPlaySound) {
+              setTimeout(() => {
+                playNotificationSound();
+              }, 100);
+            }
+          }, { timeout: 1000 });
+        } else {
+          // Fallback for browsers without requestIdleCallback
+          setTimeout(() => {
+            notifications.forEach(notification => {
+              addNotification(notification);
+            });
+            if (shouldPlaySound) {
+              setTimeout(() => {
+                playNotificationSound();
+              }, 100);
+            }
+          }, 0);
+        }
+      }
     } catch (error: any) {
       // Handle rate limiting errors
       if (error.response?.status === 429) {

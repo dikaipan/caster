@@ -407,7 +407,7 @@ export default function DashboardPage() {
                 title="Banks"
                 value={stats.totalBanks}
                 icon={Building2}
-                link="/banks"
+                link="/settings?tab=banks"
                 color={{
                   gradient: 'bg-gradient-to-br from-green-500 to-emerald-600',
                   icon: 'text-green-600',
@@ -418,7 +418,7 @@ export default function DashboardPage() {
                 title="Pengelola"
                 value={stats.totalPengelola}
                 icon={Truck}
-                link="/pengelola"
+                link="/settings?tab=vendors"
                 color={{
                   gradient: 'bg-gradient-to-br from-[#64748B] to-[#475569]',
                   icon: 'text-[#64748B]',
@@ -696,7 +696,7 @@ export default function DashboardPage() {
                   </Link>
 
                   {isSuperAdmin && (
-                    <Link href="/import">
+                    <Link href="/settings?tab=data-management">
                       <Button className="w-full h-auto py-6 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 dark:from-teal-500 dark:to-teal-600 dark:hover:from-teal-600 dark:hover:to-teal-700 flex flex-col items-center gap-3 group text-white">
                         <Package className="h-8 w-8 group-hover:scale-110 transition-transform" />
                         <div className="text-center">

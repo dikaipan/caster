@@ -302,8 +302,10 @@ export class AnalyticsService {
     });
 
     // Utilization rate (active cassettes / total cassettes)
+    // Active cassettes are OK status (ready to use)
+    // READY_FOR_PICKUP cassettes are not yet available (still at RC)
     const activeCassettes = cassettes.filter(c => 
-      c.status === 'OK' || c.status === 'IN_TRANSIT_TO_PENGELOLA'
+      c.status === 'OK'
     ).length;
     const utilizationRate = cassettes.length > 0 
       ? (activeCassettes / cassettes.length) * 100 

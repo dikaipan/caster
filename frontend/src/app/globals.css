@@ -22,6 +22,13 @@ body {
   overflow-x: hidden !important;
   position: relative !important;
 }
+
+/* Ensure sidebar is always fixed - override any transform issues */
+aside[class*="fixed"] {
+  position: fixed !important;
+  transform: none !important;
+  -webkit-transform: none !important;
+}
  
 @layer base {
   :root {
@@ -162,8 +169,6 @@ body {
     line-height: 1.65; /* Improved line height for better readability */
     letter-spacing: -0.011em; /* Slightly tighter for Inter font */
     zoom: 1 !important;
-    transform: scale(1) !important;
-    -webkit-transform: scale(1) !important;
   }
   
   /* Improved readability for body text */
@@ -287,8 +292,6 @@ body {
     text-size-adjust: 100% !important;
     font-size: 16px !important; /* Force consistent base size in pixels */
     zoom: 1 !important;
-    transform: scale(1) !important;
-    -webkit-transform: scale(1) !important;
   }
 
   /* ===== DARK MODE TEXT COLORS ===== */

@@ -14,7 +14,7 @@ interface MachineCassetteData {
 interface ImportConfig {
   customerBankCode: string; // Bank code (harus sudah ada di database)
   pengelolaCode: string; // pengelola code (harus sudah ada di database)
-  machineModelName?: string; // Default: 'Hitachi SR-M100'
+  machineModelName?: string; // Default: 'SR7500VS' (options: 'SR7500' or 'SR7500VS')
   physicalLocation?: string; // Default: akan dibuat dari bank name
 }
 
@@ -179,7 +179,7 @@ async function importMachineCassettes(
             customerBankId: bank.id,
             pengelolaId: pengelola.id,
             machineCode,
-            modelName: config.machineModelName || 'Hitachi SR-M100',
+            modelName: config.machineModelName || 'SR7500VS',
             physicalLocation: config.physicalLocation || `Bank ${bank.bankName}`,
             status: 'OPERATIONAL',
           },
@@ -191,7 +191,7 @@ async function importMachineCassettes(
             customerBankId: bank.id,
             pengelolaId: pengelola.id,
             machineCode,
-            modelName: config.machineModelName || 'Hitachi SR-M100',
+            modelName: config.machineModelName || 'SR7500VS',
             serialNumberManufacturer: machineSerialNumber,
             physicalLocation: config.physicalLocation || `Bank ${bank.bankName}`,
             status: 'OPERATIONAL',

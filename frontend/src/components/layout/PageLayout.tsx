@@ -31,11 +31,9 @@ export default function PageLayout({ children }: PageLayoutProps) {
     if (!pathname || pathname === '/' || pathname === '/dashboard') return 'Dashboard';
 
     const routeTitles: Record<string, string> = {
-      '/banks': 'Banks',
-      '/pengelola': 'Pengelola',
+      '/settings': 'Settings',
       '/machines': 'Machines',
       '/cassettes': 'Cassettes',
-      '/assignments': 'Assignments',
       '/tickets': 'Tickets',
       '/tickets/create': 'Create Ticket',
       '/service-orders/create': 'Create Service Order',
@@ -43,11 +41,9 @@ export default function PageLayout({ children }: PageLayoutProps) {
       '/resources': 'Resources',
       '/history': 'SO History',
       '/repairs': 'Repairs',
-      '/preventive-maintenance': 'Preventive Maint.',
-      '/preventive-maintenance/create': 'Create PM Task',
-      '/data-management': 'Data Management',
-      '/users': 'User Management',
-      '/import': 'Bulk Import'
+      // PM - DISABLED TEMPORARILY
+      // '/preventive-maintenance': 'Preventive Maint.',
+      // '/preventive-maintenance/create': 'Create PM Task',
     };
 
     if (routeTitles[pathname]) return routeTitles[pathname];
@@ -68,7 +64,8 @@ export default function PageLayout({ children }: PageLayoutProps) {
       const dynamicRouteTitles: Record<string, string> = {
         'tickets': 'SO Detail',
         'repairs': 'Repair Detail',
-        'preventive-maintenance': 'PM Detail',
+        // PM - DISABLED TEMPORARILY
+        // 'preventive-maintenance': 'PM Detail',
         'tickets/receive': 'Receive SO',
         'tickets/delivery': 'Delivery SO',
         'tickets/return': 'Return SO',
@@ -133,8 +130,8 @@ export default function PageLayout({ children }: PageLayoutProps) {
         
         {/* Main Content */}
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex-1 flex flex-col overflow-hidden lg:ml-64 transition-all duration-300">
-          {/* Mobile Header */}
-          <div className="lg:hidden sticky top-0 z-[50] bg-gradient-to-r from-teal-900 via-teal-800 to-teal-700 text-white px-4 py-3 flex items-center justify-between shadow-lg">
+          {/* Mobile Header - Fixed at top */}
+          <div className="lg:hidden fixed top-0 left-0 right-0 z-[50] bg-gradient-to-r from-teal-900 via-teal-800 to-teal-700 text-white px-4 py-3 flex items-center justify-between shadow-lg">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -149,7 +146,7 @@ export default function PageLayout({ children }: PageLayoutProps) {
                 )}
               </button>
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-white/70">Hitachi CMS</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-white/70">CASTER</p>
                 <p className="text-base font-semibold leading-tight text-white">{pageTitle}</p>
               </div>
             </div>
@@ -165,6 +162,9 @@ export default function PageLayout({ children }: PageLayoutProps) {
               </div>
             </div>
           </div>
+
+          {/* Spacer for fixed mobile header - matches header height */}
+          <div className="lg:hidden h-[73px] flex-shrink-0"></div>
 
           {/* Desktop Header */}
           <div className="hidden lg:flex items-center justify-between px-8 py-4 border-b shadow-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-200 dark:border-slate-700">

@@ -35,25 +35,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import BarcodeScanner from '@/components/BarcodeScanner';
 import { 
   CheckCircle2, 
-  Circle, 
   AlertCircle, 
   Package, 
   FileText, 
   Truck, 
-  ScanBarcode,
   Loader2,
   ArrowRight,
   ArrowLeft,
   RefreshCw,
   AlertTriangle,
-  Search,
-  Cpu,
-  Database,
 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function CreateReplacementPage() {
   const router = useRouter();
@@ -63,16 +56,9 @@ export default function CreateReplacementPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [searchMode, setSearchMode] = useState<'cassette' | 'machine'>('cassette');
-  const [cassetteSerialNumber, setCassetteSerialNumber] = useState('');
-  const [machineSN, setMachineSN] = useState('');
-  const [cassetteInfo, setCassetteInfo] = useState<any>(null);
-  const [machineSearchResults, setMachineSearchResults] = useState<any>(null);
-  const [searchingMachine, setSearchingMachine] = useState(false);
   const [selectedCassettes, setSelectedCassettes] = useState<any[]>([]);
-  const [searchedMachines, setSearchedMachines] = useState<string[]>([]);
-  const [cassettesAvailability, setCassettesAvailability] = useState<Record<string, any>>({});
-  const [showScanner, setShowScanner] = useState(false);
+  const [scrappedCassettes, setScrappedCassettes] = useState<any[]>([]);
+  const [loadingScrappedCassettes, setLoadingScrappedCassettes] = useState(false);
   const MAX_CASSETTES = 30;
   
   // Replacement form data
@@ -84,6 +70,8 @@ export default function CreateReplacementPage() {
   const [shippedDate, setShippedDate] = useState(new Date().toISOString().split('T')[0]);
   const [estimatedArrival, setEstimatedArrival] = useState('');
   const [pengelolaInfo, setPengelolaInfo] = useState<any>(null);
+  const [banks, setBanks] = useState<any[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState<string>('');
   const [useOfficeAddress, setUseOfficeAddress] = useState(false);
   const [senderAddress, setSenderAddress] = useState('');
   const [senderCity, setSenderCity] = useState('');
@@ -120,6 +108,20 @@ export default function CreateReplacementPage() {
             if (user.phone) {
               setSenderContactPhone(user.phone);
             }
+            
+            // Fetch banks assigned to this pengelola
+            if (response.data.bankAssignments) {
+              const assignedBanks = response.data.bankAssignments
+                .filter((assignment: any) => assignment.status === 'ACTIVE' && assignment.customerBank)
+                .map((assignment: any) => assignment.customerBank);
+              
+              setBanks(assignedBanks);
+              
+              // Auto-select bank if only one bank assigned
+              if (assignedBanks.length === 1) {
+                setSelectedBankId(assignedBanks[0].id);
+              }
+            }
           }
         } catch (err: any) {
           console.error('Error fetching pengelola info:', err);
@@ -133,131 +135,55 @@ export default function CreateReplacementPage() {
     }
   }, [isAuthenticated, user]);
 
-  // Auto-search when machine SN is entered
+  // Fetch SCRAPPED cassettes when bank is selected
   useEffect(() => {
-    const searchByMachineSN = async () => {
-      if (!machineSN.trim() || searchMode !== 'machine') {
-        setMachineSearchResults(null);
+    const fetchScrappedCassettes = async () => {
+      if (!selectedBankId) {
+        setScrappedCassettes([]);
         return;
       }
-
-      // Check if this machine was already searched
-      if (searchedMachines.includes(machineSN.trim())) {
-        return;
-      }
-
-      setSearchingMachine(true);
-      setError('');
 
       try {
-        const response = await api.get('/cassettes/search-by-machine-sn', {
-          params: {
-            machineSN: machineSN.trim(),
-          },
-        });
+        setLoadingScrappedCassettes(true);
+        const params: any = {
+          status: 'SCRAPPED',
+          customerBankId: selectedBankId,
+          limit: 1000, // Get all scrapped cassettes
+        };
 
-        if (response.data) {
-          setMachineSearchResults(response.data);
-          if (response.data.cassettes && response.data.cassettes.length === 0) {
-            setError(`Tidak ada kaset di mesin dengan SN "${machineSN}"`);
-          } else {
-            setError('');
-            // Mark this machine as searched
-            setSearchedMachines(prev => {
-              if (!prev.includes(machineSN.trim())) {
-                return [...prev, machineSN.trim()];
-              }
-              return prev;
-            });
-          }
+        const response = await api.get('/cassettes', { params });
+        
+        let cassettesData: any[] = [];
+        if (Array.isArray(response.data)) {
+          cassettesData = response.data;
+        } else if (response.data?.data) {
+          cassettesData = response.data.data;
         }
+
+        // Filter only SCRAPPED cassettes (double check)
+        const scrapped = cassettesData.filter((c: any) => c.status === 'SCRAPPED');
+        setScrappedCassettes(scrapped);
       } catch (err: any) {
-        setError(err.response?.data?.message || 'Gagal mencari kaset. Silakan coba lagi.');
-        setMachineSearchResults(null);
+        console.error('Error fetching scrapped cassettes:', err);
+        setScrappedCassettes([]);
+        toast({
+          title: 'Error',
+          description: 'Gagal memuat daftar kaset SCRAPPED',
+          variant: 'destructive',
+        });
       } finally {
-        setSearchingMachine(false);
+        setLoadingScrappedCassettes(false);
       }
     };
 
-    const timeoutId = setTimeout(() => {
-      searchByMachineSN();
-    }, 600);
-
-    return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineSN, searchMode]);
-
-  // Search cassette by serial number
-  const handleSearchCassette = async () => {
-    if (!cassetteSerialNumber.trim()) {
-      setError('Masukkan Serial Number kaset');
-      return;
+    if (isAuthenticated && selectedBankId) {
+      fetchScrappedCassettes();
     }
+  }, [isAuthenticated, selectedBankId, toast]);
 
-    try {
-      setError('');
-      const response = await api.get(`/cassettes/search?serialNumber=${encodeURIComponent(cassetteSerialNumber.trim())}`);
-      
-      if (response.data) {
-        setCassetteInfo(response.data);
-        // Auto-add to selected cassettes if not already added
-        if (!selectedCassettes.some(c => c.id === response.data.id)) {
-          setSelectedCassettes([response.data]);
-        }
-      } else {
-        setError('Kaset tidak ditemukan');
-        setCassetteInfo(null);
-      }
-    } catch (err: any) {
-      console.error('Error searching cassette:', err);
-      setError(err.response?.data?.message || 'Gagal mencari kaset');
-      setCassetteInfo(null);
-    }
-  };
-
-  // Search machine by serial number
-  const handleSearchMachine = async () => {
-    if (!machineSN.trim()) {
-      return;
-    }
-
-    // Check if this machine was already searched
-    if (searchedMachines.includes(machineSN.trim())) {
-      setError('Mesin ini sudah dicari. Masukkan SN mesin yang berbeda.');
-      return;
-    }
-
-    try {
-      setSearchingMachine(true);
-      setError('');
-      
-      const response = await api.get('/cassettes/search-by-machine-sn', {
-        params: {
-          machineSN: machineSN.trim(),
-        },
-      });
-
-      if (response.data) {
-        setMachineSearchResults(response.data);
-        if (response.data.cassettes && response.data.cassettes.length === 0) {
-          setError(`Tidak ada kaset di mesin dengan SN "${machineSN}"`);
-        } else {
-          setError('');
-          // Mark this machine as searched
-          setSearchedMachines(prev => [...prev, machineSN.trim()]);
-        }
-      }
-    } catch (err: any) {
-      console.error('Error searching machine:', err);
-      setError(err.response?.data?.message || 'Gagal mencari kaset. Silakan coba lagi.');
-      setMachineSearchResults(null);
-    } finally {
-      setSearchingMachine(false);
-    }
-  };
 
   // Handle cassette selection
-  const handleToggleCassette = async (cassette: any) => {
+  const handleToggleCassette = (cassette: any) => {
     const isSelected = selectedCassettes.some(c => c.id === cassette.id);
     
     if (isSelected) {
@@ -265,28 +191,16 @@ export default function CreateReplacementPage() {
     } else {
       if (selectedCassettes.length >= MAX_CASSETTES) {
         setError(`Maksimal ${MAX_CASSETTES} kaset per tiket`);
-        return;
-      }
-      
-      // Check availability
-      try {
-        const availabilityResponse = await api.get(`/cassettes/${cassette.id}/availability`);
-        setCassettesAvailability({
-          ...cassettesAvailability,
-          [cassette.id]: availabilityResponse.data,
+        toast({
+          title: 'Batas Maksimal',
+          description: `Maksimal ${MAX_CASSETTES} kaset per tiket`,
+          variant: 'destructive',
         });
-      } catch (err) {
-        console.error('Error checking availability:', err);
+        return;
       }
       
       setSelectedCassettes([...selectedCassettes, cassette]);
     }
-  };
-
-  const handleClearSearch = () => {
-    setMachineSN('');
-    setMachineSearchResults(null);
-    setError('');
   };
 
   // Field validation
@@ -345,13 +259,8 @@ export default function CreateReplacementPage() {
     validateField(name, value);
   };
 
-  const handleScanSuccess = (serialNumber: string) => {
-    setCassetteSerialNumber(serialNumber);
-    setShowScanner(false);
-  };
-
   // Validation helpers
-  const hasSelectedCassettes = selectedCassettes.length > 0 || !!cassetteInfo;
+  const hasSelectedCassettes = selectedCassettes.length > 0;
   const canProceedToStep2 = hasSelectedCassettes;
   const canProceedToStep3 = canProceedToStep2 && replacementReason.trim().length > 0;
   
@@ -429,12 +338,10 @@ export default function CreateReplacementPage() {
     setSubmitting(true);
 
     try {
-      const cassetteIds = cassetteInfo 
-        ? [cassetteInfo.id] 
-        : selectedCassettes.map(c => c.id);
+      const cassetteIds = selectedCassettes.map(c => c.id);
 
       const cassettesData = cassetteIds.map(cassetteId => ({
-        cassetteSerialNumber: cassetteInfo?.serialNumber || selectedCassettes.find(c => c.id === cassetteId)?.serialNumber,
+        cassetteSerialNumber: selectedCassettes.find(c => c.id === cassetteId)?.serialNumber,
         title: 'Permintaan Pergantian Kaset',
         description: replacementReason.trim(),
         priority: 'HIGH',
@@ -442,7 +349,7 @@ export default function CreateReplacementPage() {
         replacementReason: replacementReason.trim(),
       }));
 
-      const machineId = cassetteInfo?.machine?.id || selectedCassettes[0]?.machine?.id;
+      const machineId = selectedCassettes[0]?.machine?.id;
 
       const response = await api.post('/tickets/multi-cassette', {
         cassettes: cassettesData,
@@ -615,297 +522,173 @@ export default function CreateReplacementPage() {
                     <Package className="h-6 w-6 text-primary" />
                   </div>
                   <div className="flex-1">
-                    <CardTitle>Identifikasi Kaset</CardTitle>
-                    <CardDescription>Cari kaset yang tidak layak pakai berdasarkan Serial Number</CardDescription>
+                    <CardTitle>Pilih Kaset SCRAPPED</CardTitle>
+                    <CardDescription>Pilih kaset yang tidak layak pakai untuk diganti</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Tabs value={searchMode} onValueChange={(v) => {
-                  setSearchMode(v as 'cassette' | 'machine');
-                  setError('');
-                  setCassetteInfo(null);
-                  setMachineSearchResults(null);
-                }}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="cassette" className="flex items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      Cari by SN Kaset
-                    </TabsTrigger>
-                    <TabsTrigger value="machine" className="flex items-center gap-2">
-                      <Cpu className="h-4 w-4" />
-                      Cari by SN Mesin
-                    </TabsTrigger>
-                  </TabsList>
+                {/* Bank Filter for PENGELOLA users with multiple banks */}
+                {isPengelola && banks.length > 1 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="bank" className="text-base font-semibold text-gray-900 dark:text-slate-100">
+                      Pilih Bank <span className="text-red-600 dark:text-red-400 font-bold">*</span>
+                    </Label>
+                    <Select value={selectedBankId} onValueChange={setSelectedBankId} required>
+                      <SelectTrigger id="bank" className="h-12 text-base border-2 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-slate-100">
+                        <SelectValue placeholder="Pilih bank" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {banks.map((bank) => (
+                          <SelectItem key={bank.id} value={bank.id}>
+                            {bank.bankName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!selectedBankId && (
+                      <p className="text-xs text-red-700 dark:text-red-400 font-semibold flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Wajib pilih bank untuk melihat daftar kaset SCRAPPED
+                      </p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Show selected bank info if only one bank */}
+                {isPengelola && banks.length === 1 && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg">
+                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                      Bank: {banks[0].bankName}
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                      Menampilkan semua kaset SCRAPPED dari bank ini
+                    </p>
+                  </div>
+                )}
 
-                  <TabsContent value="cassette" className="space-y-4 mt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="cassetteSerialNumber" className="text-base font-semibold text-gray-900 dark:text-slate-100">
-                        Serial Number Kaset <span className="text-red-600 dark:text-red-400 font-bold">*</span>
-                      </Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="cassetteSerialNumber"
-                          placeholder="Contoh: RB-BNI-0001"
-                          value={cassetteSerialNumber}
-                          onChange={(e) => setCassetteSerialNumber(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSearchCassette();
-                            }
-                          }}
-                          required
-                          className="flex-1 font-mono text-lg h-12 border-2 border-gray-300 dark:border-slate-600 focus:border-teal-600 dark:focus:border-teal-500"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="lg"
-                          onClick={handleSearchCassette}
-                          className="px-6"
-                        >
-                          <Search className="h-5 w-5 mr-2" />
-                          Cari
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="lg"
-                          onClick={() => setShowScanner(true)}
-                          className="px-6"
-                        >
-                          <ScanBarcode className="h-5 w-5 mr-2" />
-                          Scan
-                        </Button>
-                      </div>
-                      
-                      {cassetteInfo ? (
-                        <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-lg">
-                          <div className="flex items-start gap-3">
-                            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                              <p className="font-semibold text-green-900 dark:text-green-100 mb-2">Kaset Ditemukan!</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                <div>
-                                  <span className="text-green-700 dark:text-green-300 font-medium">Serial Number:</span>
-                                  <p className="text-green-900 dark:text-green-100 font-mono">{cassetteInfo.serialNumber}</p>
-                                </div>
-                                <div>
-                                  <span className="text-green-700 dark:text-green-300 font-medium">Tipe:</span>
-                                  <p className="text-green-900 dark:text-green-100">{cassetteInfo.cassetteType?.typeCode || 'N/A'}</p>
-                                </div>
-                                <div>
-                                  <span className="text-green-700 dark:text-green-300 font-medium">Bank:</span>
-                                  <p className="text-green-900 dark:text-green-100">{cassetteInfo.customerBank?.bankName || 'N/A'}</p>
-                                </div>
-                                <div>
-                                  <span className="text-green-700 dark:text-green-300 font-medium">Status:</span>
-                                  <p className="text-green-900 dark:text-green-100 font-semibold">{cassetteInfo.status}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : cassetteSerialNumber.trim() && error && searchMode === 'cassette' ? (
-                        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0" />
-                            <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground flex items-center gap-2 mt-2">
-                          <Circle className="h-4 w-4" />
-                          Masukkan atau scan Serial Number kaset
-                        </p>
-                      )}
-                    </div>
-                  </TabsContent>
+                {/* Info Box */}
+                <div className="p-3 bg-gray-50 dark:bg-slate-800/50 border-2 border-gray-200 dark:border-slate-700 rounded-lg">
+                  <p className="text-sm text-gray-700 dark:text-slate-300">
+                    <strong>Info:</strong> Hanya menampilkan kaset dengan status <span className="font-mono font-semibold">SCRAPPED</span> yang dimiliki oleh pengelola Anda.
+                  </p>
+                </div>
 
-                  <TabsContent value="machine" className="space-y-4 mt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="machineSN" className="text-base font-semibold text-gray-900 dark:text-slate-100">
-                        Serial Number Mesin (6 digit terakhir)
-                      </Label>
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <Input
-                            id="machineSN"
-                            placeholder="Contoh: 071110"
-                            value={machineSN}
-                            onChange={(e) => setMachineSN(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSearchMachine();
-                              }
-                            }}
-                            className="flex-1 font-mono text-lg h-12 pr-12 border-2 border-gray-300 dark:border-slate-600 focus:border-teal-600 dark:focus:border-teal-500"
-                            maxLength={20}
-                          />
-                          {searchingMachine && (
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                            </div>
-                          )}
+                {/* Loading State */}
+                {loadingScrappedCassettes && (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="ml-3 text-gray-600 dark:text-slate-400">Memuat daftar kaset SCRAPPED...</p>
+                  </div>
+                )}
+
+                {/* Cassette List */}
+                {!loadingScrappedCassettes && selectedBankId && (
+                  <>
+                    {scrappedCassettes.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold text-gray-900 dark:text-slate-100">
+                            Daftar Kaset SCRAPPED
+                          </p>
+                          <span className="text-xs bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-400 px-2 py-1 rounded font-medium">
+                            {selectedCassettes.length}/{MAX_CASSETTES} dipilih • {scrappedCassettes.length} total
+                          </span>
                         </div>
-                        {machineSearchResults && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={handleClearSearch}
-                            className="w-full"
-                          >
-                            Cari Mesin Lain
-                          </Button>
-                        )}
-                      </div>
-                      
-                      {/* Machine Search Results */}
-                      {machineSearchResults && (
-                        <div className="mt-4 space-y-4">
-                          {/* Machine Info */}
-                          {machineSearchResults.machines && machineSearchResults.machines.length > 0 && (
-                            <div className="p-4 bg-gray-50 dark:bg-slate-800 border-2 border-gray-200 dark:border-slate-700 rounded-lg">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                  <Cpu className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                                  <p className="font-semibold text-gray-900 dark:text-slate-100">
-                                    Mesin Ditemukan
-                                  </p>
-                                </div>
-                                <span className="text-xs bg-gray-200 dark:bg-slate-700 text-gray-900 dark:text-slate-200 px-2 py-1 rounded font-medium">
-                                  {machineSearchResults.cassettes?.length || 0} kaset tersedia
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {machineSearchResults.machines.map((machine: any) => (
-                                  <div key={machine.id} className="p-3 bg-white dark:bg-slate-900/50 rounded border border-gray-300 dark:border-slate-600 text-sm">
-                                    <p className="font-mono font-semibold text-gray-900 dark:text-slate-100">{machine.serialNumber}</p>
-                                    <p className="text-gray-700 dark:text-slate-300">{machine.bank?.bankName} - {machine.location}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto p-1">
+                          {scrappedCassettes.map((cassette: any) => {
+                            const isSelected = selectedCassettes.some(c => c.id === cassette.id);
+                            const isDisabled = !isSelected && selectedCassettes.length >= MAX_CASSETTES;
+                            
+                            return (
+                              <div
+                                key={cassette.id}
+                                onClick={() => !isDisabled && handleToggleCassette(cassette)}
+                                className={`p-4 bg-white dark:bg-slate-800 border-2 rounded-lg transition-all ${
+                                  isDisabled 
+                                    ? 'border-gray-200 dark:border-slate-700 opacity-50 cursor-not-allowed' 
+                                    : isSelected 
+                                      ? 'border-teal-400 dark:border-teal-600 bg-teal-50/70 dark:bg-teal-900/10 shadow-md cursor-pointer' 
+                                      : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer'
+                                }`}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="flex items-center pt-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      disabled={isDisabled}
+                                      onChange={() => !isDisabled && handleToggleCassette(cassette)}
+                                      className="h-5 w-5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer disabled:cursor-not-allowed"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Cassette List with Checkboxes */}
-                          {machineSearchResults.cassettes && machineSearchResults.cassettes.length > 0 ? (
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <p className="font-semibold text-gray-900 dark:text-slate-100">
-                                  Pilih Kaset dari Mesin Ini
-                                </p>
-                                <span className="text-xs bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-400 px-2 py-1 rounded font-medium">
-                                  {selectedCassettes.length}/{MAX_CASSETTES} dipilih
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto p-1">
-                                {machineSearchResults.cassettes.map((cassette: any) => {
-                                  const isSelected = selectedCassettes.some(c => c.id === cassette.id);
-                                  const isDisabled = !isSelected && selectedCassettes.length >= MAX_CASSETTES;
-                                  
-                                  return (
-                                    <div
-                                      key={cassette.id}
-                                      onClick={() => !isDisabled && handleToggleCassette(cassette)}
-                                      className={`p-4 bg-white dark:bg-slate-800 border-2 rounded-lg transition-all ${
-                                        isDisabled 
-                                          ? 'border-gray-200 dark:border-slate-700 opacity-50 cursor-not-allowed' 
-                                          : isSelected 
-                                            ? 'border-teal-400 dark:border-teal-600 bg-teal-50/70 dark:bg-teal-900/10 shadow-md cursor-pointer' 
-                                            : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer'
-                                      }`}
-                                    >
-                                      <div className="flex items-start gap-3">
-                                        <div className="flex items-center pt-0.5">
-                                          <input
-                                            type="checkbox"
-                                            checked={isSelected}
-                                            disabled={isDisabled}
-                                            onChange={() => !isDisabled && handleToggleCassette(cassette)}
-                                            className="h-5 w-5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer disabled:cursor-not-allowed"
-                                            onClick={(e) => e.stopPropagation()}
-                                          />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="mb-2">
-                                            <p className="text-xs text-gray-600 dark:text-slate-400 font-medium mb-0.5">Serial Number:</p>
-                                            <p className="font-mono font-semibold text-base text-gray-900 dark:text-slate-100">
-                                              {cassette.serialNumber}
-                                            </p>
-                                          </div>
-                                          <div className="space-y-1 text-xs">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                              <span className="font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded">
-                                                {cassette.cassetteType?.typeCode || 'N/A'}
-                                              </span>
-                                              {cassette.machine?.machineType && (
-                                                <span className="font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded">
-                                                  {cassette.machine.machineType}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <p className="text-gray-600 dark:text-slate-400 truncate">
-                                              <span className="font-medium">Bank:</span> {cassette.customerBank?.bankName}
-                                            </p>
-                                            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                                              cassette.status === 'OK' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
-                                              cassette.status === 'BAD' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
-                                              'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
-                                            }`}>
-                                              {cassette.status}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="mb-2">
+                                      <p className="text-xs text-gray-600 dark:text-slate-400 font-medium mb-0.5">Serial Number:</p>
+                                      <p className="font-mono font-semibold text-base text-gray-900 dark:text-slate-100">
+                                        {cassette.serialNumber}
+                                      </p>
                                     </div>
-                                  );
-                                })}
+                                    <div className="space-y-1 text-xs">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                                          {cassette.cassetteType?.typeCode || 'N/A'}
+                                        </span>
+                                        {cassette.machine?.machineType && (
+                                          <span className="font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                                            {cassette.machine.machineType}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {cassette.machine && (
+                                        <p className="text-gray-600 dark:text-slate-400 truncate">
+                                          <span className="font-medium">Mesin:</span> {cassette.machine.serialNumberManufacturer || 'N/A'}
+                                        </p>
+                                      )}
+                                      <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-400 border border-gray-300 dark:border-gray-700">
+                                        {cassette.status}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          ) : machineSearchResults.cassettes && machineSearchResults.cassettes.length === 0 ? (
-                            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-lg">
-                              <div className="flex items-center gap-3">
-                                <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
-                                <p className="text-sm text-yellow-700 dark:text-yellow-300 font-medium">
-                                  Tidak ada kaset ditemukan untuk mesin ini
-                                </p>
-                              </div>
-                            </div>
-                          ) : null}
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                      </div>
+                    ) : (
+                      <div className="p-8 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-lg text-center">
+                        <AlertCircle className="h-8 w-8 text-yellow-600 dark:text-yellow-400 mx-auto mb-3" />
+                        <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-300 mb-1">
+                          Tidak ada kaset SCRAPPED
+                        </p>
+                        <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                          Tidak ada kaset dengan status SCRAPPED untuk bank yang dipilih
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
 
-                {(cassetteInfo || selectedCassettes.length > 0) && (
+                {/* Selected Cassettes Summary */}
+                {selectedCassettes.length > 0 && (
                   <div className="pt-4 border-t">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-semibold text-gray-900 dark:text-slate-100">Kaset Terpilih</p>
                         <p className="text-sm text-muted-foreground">
-                          {selectedCassettes.length > 0 
-                            ? `${selectedCassettes.length} kaset akan diganti` 
-                            : '1 kaset akan diganti'}
+                          {selectedCassettes.length} kaset akan diganti
                         </p>
                       </div>
-                      {selectedCassettes.length > 0 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedCassettes([]);
-                            setSearchedMachines([]);
-                          }}
-                        >
-                          Reset Semua
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedCassettes([])}
+                      >
+                        Reset Semua
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -945,24 +728,9 @@ export default function CreateReplacementPage() {
                 <div className="p-4 bg-gray-50 dark:bg-slate-800/50 border-2 border-gray-200 dark:border-slate-700 rounded-lg">
                   <h4 className="font-semibold text-gray-900 dark:text-slate-100 mb-2">Kaset yang Akan Diganti:</h4>
                   <div className="space-y-1">
-                    {cassetteInfo ? (
-                      <p className="text-sm font-mono text-gray-900 dark:text-slate-200">• {cassetteInfo.serialNumber}</p>
-                    ) : (
-                      selectedCassettes.map(c => (
-                        <p key={c.id} className="text-sm font-mono text-gray-900 dark:text-slate-200">• {c.serialNumber}</p>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-200 dark:border-orange-800 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="text-sm text-orange-800 dark:text-orange-300 font-medium">
-                        Kaset yang ditandai untuk pergantian akan diubah statusnya menjadi <strong>SCRAPPED</strong> setelah tiket selesai dan tidak dapat digunakan lagi.
-                      </p>
-                    </div>
+                    {selectedCassettes.map(c => (
+                      <p key={c.id} className="text-sm font-mono text-gray-900 dark:text-slate-200">• {c.serialNumber}</p>
+                    ))}
                   </div>
                 </div>
 
@@ -1417,7 +1185,7 @@ export default function CreateReplacementPage() {
             <AlertDialogHeader>
               <AlertDialogTitle className="text-slate-900 dark:text-slate-100">Konfirmasi Permintaan Pergantian Kaset</AlertDialogTitle>
               <AlertDialogDescription className="text-slate-600 dark:text-slate-400">
-                Apakah Anda yakin ingin membuat permintaan pergantian untuk {cassetteInfo ? '1' : selectedCassettes.length} kaset? 
+                Apakah Anda yakin ingin membuat permintaan pergantian untuk {selectedCassettes.length} kaset? 
                 Kaset akan ditandai sebagai tidak layak pakai (SCRAPPED) setelah tiket selesai.
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -1435,22 +1203,6 @@ export default function CreateReplacementPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Barcode Scanner Dialog */}
-        <Dialog open={showScanner} onOpenChange={setShowScanner}>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Scan Barcode Kaset</DialogTitle>
-              <DialogDescription>
-                Arahkan kamera ke barcode kaset untuk memindai Serial Number
-              </DialogDescription>
-            </DialogHeader>
-            <BarcodeScanner
-              onScanSuccess={handleScanSuccess}
-              onScanError={(err) => setError(err)}
-              onClose={() => setShowScanner(false)}
-            />
-          </DialogContent>
-        </Dialog>
       </div>
     </PageLayout>
   );

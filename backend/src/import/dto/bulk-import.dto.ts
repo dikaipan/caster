@@ -44,7 +44,7 @@ class CassetteDataDto {
   @ApiProperty({ example: 'BNI001' })
   customerBankCode: string;
 
-  @ApiPropertyOptional({ example: 'OK', enum: ['OK', 'BAD', 'IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA', 'SCRAPPED'] })
+  @ApiPropertyOptional({ example: 'OK', enum: ['OK', 'BAD', 'IN_TRANSIT_TO_RC', 'IN_REPAIR', 'READY_FOR_PICKUP', 'IN_TRANSIT_TO_PENGELOLA', 'SCRAPPED'] })
   status?: string;
 
   @ApiPropertyOptional()

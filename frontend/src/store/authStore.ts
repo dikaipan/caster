@@ -34,6 +34,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   login: async (username: string, password: string) => {
     try {
+      // Debug: Log the request URL
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const loginUrl = `${apiUrl}/api/auth/login`;
+      console.log('🔐 Attempting login to:', loginUrl);
+      
       const response = await api.post('/auth/login', { username, password });
       const { access_token, refresh_token, user } = response.data;
 
@@ -49,8 +54,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        url: error.config?.url,
+        baseURL: error.config?.baseURL,
+        fullURL: error.config?.baseURL ? `${error.config.baseURL}${error.config.url}` : 'unknown',
+      });
       throw error;
     }
   },

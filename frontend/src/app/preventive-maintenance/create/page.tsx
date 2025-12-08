@@ -616,7 +616,7 @@ export default function CreatePMPage() {
                             // Check if cassette is in any active process
                             const hasActiveTicket = availabilityInfo?.activeTicket;
                             const hasActivePM = availabilityInfo?.activePM;
-                            const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA'].includes(cassette.status);
+                            const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'READY_FOR_PICKUP'].includes(cassette.status);
                             
                             // Show "Dalam Proses" badge if any of these is true
                             const isInProcess = hasActiveTicket || hasActivePM || statusInRepair;
@@ -881,7 +881,7 @@ export default function CreatePMPage() {
                   <div>
                     <Label htmlFor="assignedEngineer" className="text-base font-semibold text-gray-900 dark:text-slate-100">Assign Engineer</Label>
                     <Select value={assignedEngineer} onValueChange={setAssignedEngineer}>
-                      <SelectTrigger className="h-12 border-2 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-slate-100">
+                      <SelectTrigger id="assignedEngineer" className="h-12 border-2 border-gray-300 dark:border-slate-600 text-gray-900 dark:text-slate-100">
                         <SelectValue placeholder="Pilih engineer..." />
                       </SelectTrigger>
                       <SelectContent>

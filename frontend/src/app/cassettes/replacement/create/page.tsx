@@ -71,32 +71,6 @@ export default function CreateReplacementCassettePage() {
 
   const isHitachi = user?.userType === 'HITACHI';
 
-  useEffect(() => {
-    loadUser();
-  }, [loadUser]);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-      return;
-    }
-
-    if (!isLoading && !isHitachi) {
-      toast({
-        title: 'Akses Ditolak',
-        description: 'Hanya Hitachi admin yang dapat mengakses halaman ini',
-        variant: 'destructive',
-      });
-      router.push('/dashboard');
-      return;
-    }
-
-    if (isAuthenticated && isHitachi) {
-      fetchDropdownData();
-      fetchReplacementTickets();
-    }
-  }, [isAuthenticated, isLoading, isHitachi, router, toast, fetchReplacementTickets, fetchDropdownData]);
-
   const fetchDropdownData = useCallback(async () => {
     try {
       const [typesRes, banksRes] = await Promise.all([
@@ -145,6 +119,32 @@ export default function CreateReplacementCassettePage() {
       setLoading(false);
     }
   }, [toast]);
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    if (!isLoading && !isHitachi) {
+      toast({
+        title: 'Akses Ditolak',
+        description: 'Hanya Hitachi admin yang dapat mengakses halaman ini',
+        variant: 'destructive',
+      });
+      router.push('/dashboard');
+      return;
+    }
+
+    if (isAuthenticated && isHitachi) {
+      fetchDropdownData();
+      fetchReplacementTickets();
+    }
+  }, [isAuthenticated, isLoading, isHitachi, router, toast, fetchReplacementTickets, fetchDropdownData]);
 
   const handleSearchTicket = async () => {
     if (!searchTicketNumber.trim()) {

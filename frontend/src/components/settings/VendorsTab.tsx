@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
-import PageLayout from '@/components/layout/PageLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +28,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, Building2, Search, Copy, Check, Loader2, ChevronLeft, ChevronRight, XCircle, Store } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Copy, Check, Loader2, ChevronLeft, ChevronRight, XCircle, Store } from 'lucide-react';
 
 interface Pengelola {
   id: string;
@@ -46,9 +44,8 @@ interface Pengelola {
   bankAssignments?: any[];
 }
 
-export default function PengelolaPage() {
-  const router = useRouter();
-  const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
+export default function VendorsTab() {
+  const { user, isAuthenticated, loadUser } = useAuthStore();
   const [pengelola, setPengelola] = useState<Pengelola[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,12 +70,6 @@ export default function PengelolaPage() {
     loadUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
 
   const fetchPengelola = useCallback(async () => {
     try {
@@ -233,31 +224,17 @@ export default function PengelolaPage() {
     }
   };
 
-  if (isLoading || loading) {
+  if (loading) {
     return (
-      <PageLayout>
-        <div className="flex flex-col items-center justify-center h-64 space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary dark:text-teal-400" />
-          <p className="text-muted-foreground">Loading pengelola...</p>
-        </div>
-      </PageLayout>
-    );
-  }
-
-  if (!isAuthenticated || user?.role !== 'SUPER_ADMIN') {
-    return (
-      <PageLayout>
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Access denied. Super Admin only.</p>
-          </CardContent>
-        </Card>
-      </PageLayout>
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary dark:text-teal-400" />
+        <p className="text-muted-foreground">Loading pengelola...</p>
+      </div>
     );
   }
 
   return (
-    <PageLayout>
+    <div className="space-y-6">
       {/* Search and Filters */}
       <Card className="mb-6">
         <CardContent className="pt-6">
@@ -290,13 +267,13 @@ export default function PengelolaPage() {
                 </Button>
               </div>
             )}
-      </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Modern Table */}
       <Card className="border-0 shadow-lg">
-              <CardHeader>
+        <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Store className="h-5 w-5 text-primary" />
@@ -378,7 +355,7 @@ export default function PengelolaPage() {
                         placeholder="e.g., Jakarta"
                         maxLength={100}
                       />
-                  </div>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
@@ -622,8 +599,8 @@ export default function PengelolaPage() {
               )}
             </>
           )}
-              </CardContent>
-            </Card>
+        </CardContent>
+      </Card>
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -695,7 +672,7 @@ export default function PengelolaPage() {
                 />
               </div>
             </div>
-        </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
@@ -729,7 +706,7 @@ export default function PengelolaPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </PageLayout>
+    </div>
   );
 }
 

@@ -79,6 +79,8 @@ export default function CreateTicketPage() {
   const [cassettesAvailability, setCassettesAvailability] = useState<Record<string, any>>({});
   const [showScanner, setShowScanner] = useState(false);
   const MAX_CASSETTES = 30;
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  const [banks, setBanks] = useState<any[]>([]);
   
   // Individual cassette details for multi-cassette ticket
   const [selectedCassetteDetails, setSelectedCassetteDetails] = useState<Array<{
@@ -159,6 +161,44 @@ export default function CreateTicketPage() {
     }
   }, [isAuthenticated, user]);
 
+  // Fetch banks - filter by pengelola assignments if PENGELOLA user
+  useEffect(() => {
+    const fetchBanks = async () => {
+      try {
+        if (user?.userType === 'PENGELOLA' && pengelolaInfo?.bankAssignments) {
+          // For PENGELOLA: only show banks assigned to this pengelola
+          // bankAssignments already includes customerBank from backend
+          const assignedBanks = pengelolaInfo.bankAssignments
+            .filter((assignment: any) => assignment.status === 'ACTIVE' && assignment.customerBank)
+            .map((assignment: any) => assignment.customerBank);
+          
+          setBanks(assignedBanks);
+          
+          // Auto-select bank if only one bank assigned
+          if (assignedBanks.length === 1) {
+            setSelectedBankId(assignedBanks[0].id);
+          }
+        } else if (user?.userType === 'HITACHI') {
+          // For HITACHI: show all banks
+          const response = await api.get('/banks');
+          setBanks(response.data || []);
+        } else {
+          setBanks([]);
+        }
+      } catch (error) {
+        console.error('Error fetching banks:', error);
+        setBanks([]);
+      }
+    };
+    if (isAuthenticated) {
+      // Wait for pengelolaInfo if PENGELOLA user
+      if (user?.userType === 'PENGELOLA' && !pengelolaInfo) {
+        return; // Wait for pengelolaInfo to be fetched first
+      }
+      fetchBanks();
+    }
+  }, [isAuthenticated, user, pengelolaInfo]);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
@@ -200,6 +240,7 @@ export default function CreateTicketPage() {
         const response = await api.get('/cassettes/search', {
           params: {
             serialNumber: cassetteSerialNumber.trim(),
+            customerBankId: selectedBankId || undefined,
             _t: Date.now(),
           },
         });
@@ -212,13 +253,15 @@ export default function CreateTicketPage() {
             
             const hasActiveTicket = availabilityInfo?.activeTicket;
             const hasActivePM = availabilityInfo?.activePM;
-            const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA'].includes(response.data.status);
+            const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA', 'SCRAPPED'].includes(response.data.status);
             
             if (hasActiveTicket || hasActivePM || statusInRepair) {
               const reason = hasActiveTicket 
                 ? `Kaset ${response.data.serialNumber} memiliki tiket aktif: ${availabilityInfo.activeTicket.ticketNumber} (${availabilityInfo.activeTicket.status})`
                 : hasActivePM
                 ? `Kaset ${response.data.serialNumber} sedang dalam PM task: ${availabilityInfo.activePM.pmNumber} (${availabilityInfo.activePM.status})`
+                : response.data.status === 'SCRAPPED'
+                ? `Kaset ${response.data.serialNumber} sudah di-SCRAPPED dan tidak dapat digunakan lagi`
                 : `Kaset ${response.data.serialNumber} sedang dalam proses perbaikan (Status: ${response.data.status})`;
               
               setError(reason + '. Kaset tidak dapat dipilih.');
@@ -273,7 +316,7 @@ export default function CreateTicketPage() {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [cassetteSerialNumber, isAuthenticated, searchMode]);
+  }, [cassetteSerialNumber, isAuthenticated, searchMode, selectedBankId]);
 
   // Auto-search when machine SN is entered
   useEffect(() => {
@@ -296,6 +339,7 @@ export default function CreateTicketPage() {
         const response = await api.get('/cassettes/search-by-machine-sn', {
           params: {
             machineSN: machineSN.trim(),
+            customerBankId: selectedBankId || undefined,
           },
         });
 
@@ -322,7 +366,7 @@ export default function CreateTicketPage() {
     }, 600);
 
     return () => clearTimeout(timeoutId);
-  }, [machineSN, searchMode, isAuthenticated, searchedMachines]);
+  }, [machineSN, searchMode, isAuthenticated, searchedMachines, selectedBankId]);
 
   // Load availability info for all cassettes when machine search results change
   useEffect(() => {
@@ -360,7 +404,7 @@ export default function CreateTicketPage() {
     const availabilityInfo = cassettesAvailability[cassette.id];
     const hasActiveTicket = availabilityInfo?.activeTicket;
     const hasActivePM = availabilityInfo?.activePM;
-    const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA'].includes(cassette.status);
+    const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA', 'SCRAPPED'].includes(cassette.status);
     
     if (hasActiveTicket || hasActivePM || statusInRepair) {
       // Don't allow selection if cassette is in process
@@ -368,6 +412,8 @@ export default function CreateTicketPage() {
         ? `Kaset ${cassette.serialNumber} memiliki tiket aktif: ${availabilityInfo.activeTicket.ticketNumber} (${availabilityInfo.activeTicket.status})`
         : hasActivePM
         ? `Kaset ${cassette.serialNumber} sedang dalam PM task: ${availabilityInfo.activePM.pmNumber} (${availabilityInfo.activePM.status})`
+        : cassette.status === 'SCRAPPED'
+        ? `Kaset ${cassette.serialNumber} sudah di-SCRAPPED dan tidak dapat digunakan lagi`
         : `Kaset ${cassette.serialNumber} sedang dalam proses perbaikan (Status: ${cassette.status})`;
       
       toast({
@@ -593,6 +639,32 @@ export default function CreateTicketPage() {
     e.preventDefault();
     setError('');
     setFieldErrors({});
+
+    // Validate bank is selected
+    if (!selectedBankId) {
+      toast({
+        title: 'Error',
+        description: 'Pilih bank terlebih dahulu',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate all cassettes are from the selected bank
+    if (selectedCassettes.length > 0) {
+      const allSameBank = selectedCassettes.every((c: any) => 
+        c.customerBankId === selectedBankId
+      );
+      
+      if (!allSameBank) {
+        toast({
+          title: 'Error',
+          description: 'Semua cassette harus dari bank yang dipilih',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
 
     // Validate all fields
     const errors: Record<string, string> = {};
@@ -963,6 +1035,55 @@ export default function CreateTicketPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Bank Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="bank" className="text-base font-semibold text-gray-900 dark:text-slate-100">
+                    Pilih Bank <span className="text-red-600 dark:text-red-400 font-bold">*</span>
+                  </Label>
+                  <Select 
+                    value={selectedBankId || ''} 
+                    onValueChange={(value) => {
+                      setSelectedBankId(value || null);
+                      // Clear search results when bank changes
+                      setCassetteInfo(null);
+                      setMachineSearchResults(null);
+                      setCassetteSerialNumber('');
+                      setMachineSN('');
+                      setError('');
+                    }}
+                    required
+                    disabled={banks.length === 1 && selectedBankId === banks[0]?.id} // Disable if only one bank and already selected
+                  >
+                    <SelectTrigger id="bank">
+                      <SelectValue placeholder={
+                        banks.length === 0 
+                          ? (user?.userType === 'PENGELOLA' ? "Tidak ada bank yang di-assign" : "Pilih Bank")
+                          : banks.length === 1 && selectedBankId === banks[0]?.id
+                          ? banks[0]?.bankName
+                          : "Pilih Bank"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {banks.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground text-center">
+                          {user?.userType === 'PENGELOLA' ? "Tidak ada bank yang di-assign ke pengelola Anda" : "Tidak ada bank tersedia"}
+                        </div>
+                      ) : (
+                        banks.map((bank) => (
+                          <SelectItem key={bank.id} value={bank.id}>
+                            {bank.bankName}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {!selectedBankId && (
+                    <p className="text-sm text-muted-foreground">
+                      Pilih bank terlebih dahulu sebelum mencari cassette/machine
+                    </p>
+                  )}
+                </div>
+
                 <Tabs value={searchMode} onValueChange={(v) => {
                   setSearchMode(v as 'cassette' | 'machine');
                   setError('');
@@ -970,11 +1091,11 @@ export default function CreateTicketPage() {
                   setMachineSearchResults(null);
                 }}>
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="cassette" className="flex items-center gap-2">
+                    <TabsTrigger value="cassette" className="flex items-center gap-2" disabled={!selectedBankId}>
                       <Database className="h-4 w-4" />
                       Cari by SN Kaset
                     </TabsTrigger>
-                    <TabsTrigger value="machine" className="flex items-center gap-2">
+                    <TabsTrigger value="machine" className="flex items-center gap-2" disabled={!selectedBankId}>
                       <Cpu className="h-4 w-4" />
                       Cari by SN Mesin
                     </TabsTrigger>
@@ -1202,7 +1323,7 @@ export default function CreateTicketPage() {
                                   // Check if cassette is in any active process
                                   const hasActiveTicket = availabilityInfo?.activeTicket;
                                   const hasActivePM = availabilityInfo?.activePM;
-                                  const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA'].includes(cassette.status);
+                                  const statusInRepair = ['IN_TRANSIT_TO_RC', 'IN_REPAIR', 'IN_TRANSIT_TO_PENGELOLA', 'SCRAPPED'].includes(cassette.status);
                                   
                                   // Show "Dalam Proses" badge if any of these is true
                                   const isInProcess = hasActiveTicket || hasActivePM || statusInRepair;
@@ -1252,6 +1373,7 @@ export default function CreateTicketPage() {
                                             <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
                                               cassette.status === 'OK' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
                                               cassette.status === 'BAD' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
+                                              cassette.status === 'SCRAPPED' ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-400' :
                                               'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
                                             }`}>
                                               {cassette.status}
@@ -1286,7 +1408,13 @@ export default function CreateTicketPage() {
                                                     </p>
                                                   </div>
                                                 )}
-                                                {statusInRepair && !hasActiveTicket && !hasActivePM && (
+                                                {cassette.status === 'SCRAPPED' && (
+                                                  <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-400 text-xs rounded-full">
+                                                    <AlertCircle className="h-3 w-3" />
+                                                    <span>Kaset SCRAPPED - Tidak Dapat Digunakan</span>
+                                                  </div>
+                                                )}
+                                                {statusInRepair && !hasActiveTicket && !hasActivePM && cassette.status !== 'SCRAPPED' && (
                                                   <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs rounded-full">
                                                     <AlertCircle className="h-3 w-3" />
                                                     <span>Status: Sedang diperbaiki</span>
