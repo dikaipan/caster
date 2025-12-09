@@ -140,8 +140,7 @@ export function SignaturePad({
           onTouchEnd={stopDrawing}
           onTouchCancel={stopDrawing}
           className="cursor-crosshair touch-none w-full"
-          style={{ touchAction: 'none' }}
-          style={{ height: `${height}px` }}
+          style={{ touchAction: 'none', height: `${height}px` }}
         />
         {!hasSignature && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

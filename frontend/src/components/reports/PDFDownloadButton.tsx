@@ -77,7 +77,8 @@ export default function PDFDownloadButton({ ticket, repairs, user, disabled = fa
       
       // Generate PDF blob
       const doc = React.createElement(SOReportPDF, { ticket, repairs, user });
-      const asPdf = pdf(doc);
+      // Type assertion needed for @react-pdf/renderer compatibility
+      const asPdf = pdf(doc as any);
       const blob = await asPdf.toBlob();
       
       // Create download link
