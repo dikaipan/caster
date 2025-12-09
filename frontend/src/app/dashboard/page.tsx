@@ -75,18 +75,8 @@ let chartInitialized = false;
 const initializeChart = async () => {
   if (typeof window !== 'undefined' && !chartInitialized) {
     try {
-      const ChartJS = await import('chart.js');
-      ChartJS.Chart.register(
-        ChartJS.CategoryScale,
-        ChartJS.LinearScale,
-        ChartJS.BarElement,
-        ChartJS.LineElement,
-        ChartJS.PointElement,
-        ChartJS.Title,
-        ChartJS.Tooltip,
-        ChartJS.Legend,
-        ChartJS.Filler // Enable 'fill' option support
-      );
+      // Use chart.js/auto to auto-register all controllers/plugins including Filler
+      await import('chart.js/auto');
       chartInitialized = true;
     } catch (error) {
       // Chart.js initialization error - handled silently
