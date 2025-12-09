@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ViewportScript } from "@/components/layout/ViewportScript";
+import { QueryProvider } from "@/providers/QueryProvider";
 
 // Inter font dengan optimasi untuk readability
 const inter = Inter({ 
@@ -33,9 +34,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} style={{ fontSize: '16px', zoom: 1, width: '100%', height: '100%' }}>
       <body className={`${inter.className} antialiased`} style={{ fontSize: '16px', zoom: 1, width: '100%', maxWidth: '100vw', overflowX: 'hidden', margin: 0, padding: 0 }}>
-        <ViewportScript />
-        {children}
-        <Toaster />
+        <QueryProvider>
+          <ViewportScript />
+          {children}
+          <Toaster />
+        </QueryProvider>
       </body>
     </html>
   );

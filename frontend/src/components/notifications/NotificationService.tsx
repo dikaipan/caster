@@ -283,9 +283,10 @@ export default function NotificationService() {
       pollTickets();
     }, 5000); // Wait 5 seconds before first poll
 
-    // Poll every 60 seconds (reduced frequency to avoid rate limits)
-    // This means max 1 request per minute, well under the 10/minute limit
-    pollingIntervalRef.current = setInterval(pollTickets, 60000);
+    // Poll every 120 seconds (2 minutes) - optimized to reduce server load
+    // This means max 0.5 requests per minute, well under the 10/minute limit
+    // Still responsive enough for real-time notifications while reducing API calls by 50%
+    pollingIntervalRef.current = setInterval(pollTickets, 120000);
 
     return () => {
       clearTimeout(initialDelay);

@@ -36,25 +36,22 @@ import {
 } from 'lucide-react';
 import { ErrorWithRetry } from '@/components/ui/error-with-retry';
 import { markTicketsAsViewed, isTicketViewed, markTicketAsViewed } from '@/lib/viewed-tickets';
+import { useTickets } from '@/hooks/useTickets';
+import { useDebounce } from 'use-debounce';
 
 export default function TicketsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
-  const [tickets, setTickets] = useState<any[]>([]);
   // PM Tasks - DISABLED TEMPORARILY
   // const [pmTasks, setPmTasks] = useState<any[]>([]);
   // const [loadingPM, setLoadingPM] = useState(false);
   // const [takingPMTask, setTakingPMTask] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [selectedPriority, setSelectedPriority] = useState<string>('ALL');
   const [activeTab, setActiveTab] = useState<string>('tickets');
   const [currentPage, setCurrentPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const itemsPerPage = 15;
 
   const isHitachi = user?.userType === 'HITACHI';
@@ -79,99 +76,71 @@ export default function TicketsPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Debounced search term
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
+  // Debounced search term using use-debounce
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchTerm, selectedStatus, selectedPriority, itemsPerPage]);
 
-  const fetchTickets = useCallback(async () => {
-    if (!isAuthenticated) {
-      return;
+  // Use React Query untuk fetch tickets dengan automatic caching
+  const { data: ticketsData, isLoading: loading, error, refetch } = useTickets({
+    page: currentPage,
+    limit: itemsPerPage,
+    status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
+    priority: selectedPriority !== 'ALL' ? selectedPriority : undefined,
+    search: debouncedSearchTerm.trim() || undefined,
+  }, isAuthenticated && !isLoading);
+
+  // Extract tickets and pagination from response
+  const tickets = useMemo(() => {
+    if (!ticketsData) return [];
+    
+    // Handle both old format (array) and new format (object with data & pagination)
+    if (Array.isArray(ticketsData)) {
+      return ticketsData;
     }
+    
+    return ticketsData?.data || [];
+  }, [ticketsData]);
 
-    try {
-      setLoading(true);
-      setFetchError(null);
-      const params: any = {
-        params: {
-          page: currentPage,
-          limit: itemsPerPage,
-        },
-      };
-
-      if (debouncedSearchTerm.trim()) {
-        params.params.search = debouncedSearchTerm.trim();
-      }
-
-      if (selectedStatus && selectedStatus !== 'ALL') {
-        params.params.status = selectedStatus;
-      }
-
-      if (selectedPriority && selectedPriority !== 'ALL') {
-        params.params.priority = selectedPriority;
-      }
-
-      const response = await api.get('/tickets', params);
-      
-      // Handle both old format (array) and new format (object with data & pagination)
-      if (Array.isArray(response.data)) {
-        // Old format - backward compatibility
-        setTickets(response.data);
-        setTotal(response.data.length);
-        setTotalPages(Math.ceil(response.data.length / itemsPerPage));
-      } else {
-        // New format with pagination
-        const ticketsData = response.data?.data || [];
-        setTickets(ticketsData);
-        setTotal(response.data?.pagination?.total || 0);
-        setTotalPages(response.data?.pagination?.totalPages || 0);
-        
-        // Don't auto-mark as viewed - let users see the badge first
-        // Tickets will be marked as viewed when user clicks on them
-      }
-    } catch (error: any) {
-      console.error('Error fetching tickets:', error);
-      let errorMessage = 'Terjadi kesalahan saat memuat data tickets.';
-      
-      if (error.response) {
-        const status = error.response.status;
-        if (status === 401) {
-          router.push('/login');
-          return;
-        } else if (status >= 500) {
-          errorMessage = 'Server mengalami masalah. Silakan coba lagi nanti.';
-        } else if (error.response.data?.message) {
-          errorMessage = error.response.data.message;
-        }
-      } else if (error.request) {
-        errorMessage = 'Tidak dapat terhubung ke server. Pastikan backend server berjalan.';
-      }
-      
-      setFetchError(errorMessage);
-      setTickets([]);
-      setTotal(0);
-      setTotalPages(0);
-    } finally {
-      setLoading(false);
+  const total = useMemo(() => {
+    if (!ticketsData || Array.isArray(ticketsData)) {
+      return Array.isArray(ticketsData) ? ticketsData.length : 0;
     }
-  }, [isAuthenticated, currentPage, itemsPerPage, debouncedSearchTerm, selectedStatus, selectedPriority, router]);
+    return ticketsData?.pagination?.total || 0;
+  }, [ticketsData]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchTickets();
+  const totalPages = useMemo(() => {
+    if (!ticketsData || Array.isArray(ticketsData)) {
+      return Array.isArray(ticketsData) ? Math.ceil(ticketsData.length / itemsPerPage) : 0;
     }
-  }, [isAuthenticated, fetchTickets]);
+    return ticketsData?.pagination?.totalPages || 0;
+  }, [ticketsData, itemsPerPage]);
+
+  // Handle errors
+  const fetchError = useMemo(() => {
+    if (!error) return null;
+    
+    if ((error as any).response) {
+      const status = (error as any).response.status;
+      if (status === 401) {
+        router.push('/login');
+        return null;
+      } else if (status >= 500) {
+        return 'Server mengalami masalah. Silakan coba lagi nanti.';
+      } else if ((error as any).response.data?.message) {
+        return (error as any).response.data.message;
+      }
+    } else if ((error as any).request) {
+      return 'Tidak dapat terhubung ke server. Pastikan backend server berjalan.';
+    }
+    
+    return 'Terjadi kesalahan saat memuat data tickets.';
+  }, [error, router]);
+
+  // React Query automatically refetches when filters change, no need for manual useEffect
 
   // PM Tasks - DISABLED TEMPORARILY
   // useEffect(() => {
@@ -560,27 +529,7 @@ export default function TicketsPage() {
                     title="Gagal Memuat Data Tickets"
                     description={fetchError}
                     onRetry={() => {
-                      setFetchError(null);
-                      // Trigger re-fetch
-                      const fetchTickets = async () => {
-                        try {
-                          setLoading(true);
-                          const response = await api.get('/tickets');
-                          setTickets(response.data);
-                          setFetchError(null);
-                        } catch (error: any) {
-                          let errorMessage = 'Terjadi kesalahan saat memuat data tickets.';
-                          if (error.response?.status >= 500) {
-                            errorMessage = 'Server mengalami masalah. Silakan coba lagi nanti.';
-                          } else if (error.request) {
-                            errorMessage = 'Tidak dapat terhubung ke server. Pastikan backend server berjalan.';
-                          }
-                          setFetchError(errorMessage);
-                        } finally {
-                          setLoading(false);
-                        }
-                      };
-                      fetchTickets();
+                      refetch();
                     }}
                     retryLabel="Coba Lagi"
                   />

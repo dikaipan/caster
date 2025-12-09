@@ -95,7 +95,7 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
   const [newSOCount, setNewSOCount] = useState(0);
   const [pmTasksCount, setPmTasksCount] = useState(0);
   const [replacementRequestCount, setReplacementRequestCount] = useState(0);
-  const retryDelayRef = useRef(300000); // Start with 300 seconds (5 minutes) to reduce rate limiting
+  const retryDelayRef = useRef(180000); // Start with 180 seconds (3 minutes) - optimized for better balance between freshness and server load
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastFetchTimeRef = useRef<Record<string, number>>({});
 

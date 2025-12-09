@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDebouncedCallback } from 'use-debounce';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import api from '@/lib/api';
 import PageLayout from '@/components/layout/PageLayout';
+import { useCassettes } from '@/hooks/useCassettes';
+import { useDebounce } from 'use-debounce';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,22 +70,89 @@ export default function CassettesPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
   const { toast } = useToast();
-  const [cassettes, setCassettes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInputValue, setSearchInputValue] = useState(''); // Local state for input (immediate update)
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50); // Changed from 25 to 50 for better performance
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [sortField, setSortField] = useState<string>('serialNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
+  
+  // Debounced search term
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
+  
+  // Use React Query untuk fetch cassettes dengan automatic caching
+  const { data: cassettesData, isLoading: loading, error, refetch } = useCassettes({
+    page: currentPage,
+    limit: itemsPerPage,
+    status: selectedStatus || undefined,
+    search: debouncedSearchTerm.trim() || undefined,
+    bankId: selectedBankId || undefined,
+    sortField: sortField || undefined,
+    sortDirection: sortDirection || undefined,
+  }, isAuthenticated && !isLoading);
+  
+  // Extract cassettes and pagination from response
+  const cassettes = useMemo(() => {
+    if (!cassettesData) return [];
+    
+    // Handle both old format (array) and new format (object with data & pagination)
+    if (Array.isArray(cassettesData)) {
+      return cassettesData;
+    }
+    
+    return cassettesData?.data || [];
+  }, [cassettesData]);
+
+  const totalItems = useMemo(() => {
+    if (!cassettesData || Array.isArray(cassettesData)) {
+      return Array.isArray(cassettesData) ? cassettesData.length : 0;
+    }
+    return cassettesData?.pagination?.total || 0;
+  }, [cassettesData]);
+
+  const totalPages = useMemo(() => {
+    if (!cassettesData || Array.isArray(cassettesData)) {
+      return Array.isArray(cassettesData) ? Math.ceil(cassettesData.length / itemsPerPage) : 1;
+    }
+    return cassettesData?.pagination?.totalPages || 1;
+  }, [cassettesData, itemsPerPage]);
+  
+  // Extract status counts from statistics if available
+  useEffect(() => {
+    if (cassettesData && !Array.isArray(cassettesData) && cassettesData.statistics?.statusCounts) {
+      setStatusCounts(cassettesData.statistics.statusCounts);
+    }
+  }, [cassettesData]);
+  
+  // Handle errors - compute error message from React Query error
+  const fetchError = useMemo(() => {
+    if (!error) return null;
+    
+    if ((error as any).response) {
+      const status = (error as any).response.status;
+      const data = (error as any).response.data;
+      
+      if (status === 401) {
+        router.push('/login');
+        return null;
+      } else if (status === 403) {
+        return 'Anda tidak memiliki izin untuk mengakses data ini.';
+      } else if (status >= 500) {
+        return 'Server mengalami masalah. Silakan coba lagi nanti.';
+      } else if (data?.message) {
+        return data.message;
+      }
+    } else if ((error as any).request) {
+      return 'Tidak dapat terhubung ke server. Pastikan backend server berjalan.';
+    }
+    
+    return 'Terjadi kesalahan saat memuat data kaset.';
+  }, [error, router]);
   
   // CRUD Dialog States
   const [addCassetteDialogOpen, setAddCassetteDialogOpen] = useState(false);
@@ -122,128 +191,38 @@ export default function CassettesPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  const fetchCassettes = useCallback(async () => {
-      try {
-        setLoading(true);
-        
-        // Build query params with server-side filtering and sorting
-        const params: any = {
-          page: currentPage,
-          limit: itemsPerPage,
-        };
-        
-        if (searchTerm.trim()) {
-          params.keyword = searchTerm.trim();
-        }
-        
-        // Server-side status filter
-        if (selectedStatus && selectedStatus !== 'all') {
-          params.status = selectedStatus;
-        }
-        
-        // ADD: Filter by bank
-        if (selectedBankId) {
-          params.customerBankId = selectedBankId;
-        }
-        
-        // Server-side sorting
-        if (sortField) {
-          params.sortBy = sortField;
-          params.sortOrder = sortDirection;
-        }
-        
-        const response = await api.get('/cassettes', { params }).catch((error) => {
-          console.error('❌ Error fetching cassettes:', error);
-          if (error.response) {
-            console.error('Response status:', error.response.status);
-            console.error('Response data:', error.response.data);
-          } else if (error.request) {
-            console.error('No response received. Backend server mungkin tidak berjalan.');
-            throw new Error('Backend server tidak dapat diakses. Pastikan server berjalan di port 3001.');
-          }
-          throw error;
-        });
-        
-        let cassettesData: any[] = [];
-        let total = 0;
-        let totalPagesCount = 1;
-        
-        // Handle both old format (array) and new format (object with data and pagination)
-        if (Array.isArray(response.data)) {
-          // Old format - direct array (backward compatibility)
-          cassettesData = response.data;
-          total = response.data.length;
-          totalPagesCount = Math.ceil(total / itemsPerPage);
-        } else if (response.data.data) {
-          // New format with pagination
-          cassettesData = response.data.data;
-          total = response.data.pagination?.total || 0;
-          totalPagesCount = response.data.pagination?.totalPages || 1;
-          
-          // Use statistics from backend if available
-          if (response.data.statistics?.statusCounts) {
-            setStatusCounts(response.data.statistics.statusCounts);
-          }
-        } else {
-          cassettesData = [];
-        }
-        
-        setCassettes(cassettesData);
-        setTotalItems(total);
-        setTotalPages(totalPagesCount);
-      } catch (error: any) {
-        // User-friendly error messages
-        let errorTitle = 'Gagal Memuat Data';
-        let errorDescription = 'Terjadi kesalahan saat memuat data kaset.';
-        
-        if (error.response) {
-          const status = error.response.status;
-          const data = error.response.data;
-          
-          if (status === 404) {
-            errorTitle = 'Endpoint Tidak Ditemukan';
-            errorDescription = 'Pastikan backend server berjalan dan endpoint terdaftar.';
-          } else if (status === 401) {
-            errorTitle = 'Tidak Terautentikasi';
-            errorDescription = 'Sesi Anda telah berakhir. Silakan login kembali.';
-            router.push('/login');
-          } else if (status === 403) {
-            errorTitle = 'Akses Ditolak';
-            errorDescription = 'Anda tidak memiliki izin untuk mengakses data ini.';
-          } else if (status >= 500) {
-            errorTitle = 'Kesalahan Server';
-            errorDescription = 'Server mengalami masalah. Silakan coba lagi nanti.';
-          } else if (data?.message) {
-            errorDescription = data.message;
-          }
-        } else if (error.request) {
-          errorTitle = 'Tidak Ada Koneksi';
-          errorDescription = 'Tidak dapat terhubung ke server. Pastikan backend server berjalan di http://localhost:3001';
-        } else if (error.message) {
-          errorDescription = error.message;
-        }
-        
-        // Show toast notification
-        toast({
-          variant: 'destructive',
-          title: errorTitle,
-          description: errorDescription,
-        });
-        
-        // Set empty array instead of leaving it undefined
-        setCassettes([]);
-        setTotalItems(0);
-        setTotalPages(1);
-      } finally {
-        setLoading(false);
-      }
-  }, [user?.userType, user?.role, user?.pengelolaId, currentPage, itemsPerPage, searchTerm, selectedStatus, sortField, sortDirection, selectedBankId, router, toast]);
-
+  // React Query automatically refetches when filters change, no need for manual useEffect
+  // Error handling is done via React Query's error state
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchCassettes();
+    if (error) {
+      const errorTitle = 'Gagal Memuat Data';
+      let errorDescription = 'Terjadi kesalahan saat memuat data kaset.';
+      
+      if ((error as any).response) {
+        const status = (error as any).response.status;
+        const data = (error as any).response.data;
+        
+        if (status === 401) {
+          router.push('/login');
+          return;
+        } else if (status === 403) {
+          errorDescription = 'Anda tidak memiliki izin untuk mengakses data ini.';
+        } else if (status >= 500) {
+          errorDescription = 'Server mengalami masalah. Silakan coba lagi nanti.';
+        } else if (data?.message) {
+          errorDescription = data.message;
+        }
+      } else if ((error as any).request) {
+        errorDescription = 'Tidak dapat terhubung ke server. Pastikan backend server berjalan.';
+      }
+      
+      toast({
+        variant: 'destructive',
+        title: errorTitle,
+        description: errorDescription,
+      });
     }
-  }, [isAuthenticated, fetchCassettes, currentPage, itemsPerPage]);
+  }, [error, router, toast]);
 
   // Debounced search handler - triggers API call after user stops typing
   const debouncedSearch = useDebouncedCallback(
@@ -498,7 +477,7 @@ export default function CassettesPage() {
       });
       setAddCassetteDialogOpen(false);
       resetForm();
-      fetchCassettes();
+      refetch();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -529,7 +508,7 @@ export default function CassettesPage() {
       setEditCassetteDialogOpen(false);
       setCassetteToEdit(null);
       resetForm();
-      fetchCassettes();
+      refetch();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -553,7 +532,7 @@ export default function CassettesPage() {
       });
       setDeleteDialogOpen(false);
       setCassetteToDelete(null);
-      fetchCassettes();
+      refetch();
     } catch (error: any) {
       console.error('Error deleting cassette:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Gagal menghapus kaset. Silakan coba lagi.';
@@ -943,7 +922,7 @@ export default function CassettesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={fetchCassettes}
+                onClick={() => refetch()}
                 disabled={loading}
                 className="flex-shrink-0"
               >
@@ -988,8 +967,7 @@ export default function CassettesPage() {
               title="Gagal Memuat Data Kaset"
               description={fetchError}
               onRetry={() => {
-                setFetchError(null);
-                fetchCassettes();
+                refetch();
               }}
               retryLabel="Coba Lagi"
             />

@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import api from '@/lib/api';
 import PageLayout from '@/components/layout/PageLayout';
+import { useMachines, useBanks } from '@/hooks/useMachines';
+import { useDebounce } from 'use-debounce';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,18 +66,55 @@ export default function MachinesPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
   const { toast } = useToast();
-  const [machines, setMachines] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [sortField, setSortField] = useState<string>('serialNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
-  const [banks, setBanks] = useState<any[]>([]);
+  
+  // Debounced search term
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 300);
+  
+  // Use React Query untuk fetch machines dengan automatic caching
+  const { data: machinesData, isLoading: loading, error, refetch } = useMachines({
+    page: currentPage,
+    limit: itemsPerPage,
+    status: selectedStatus && selectedStatus !== 'ALL' ? selectedStatus : undefined,
+    search: debouncedSearchTerm.trim() || undefined,
+    bankId: selectedBankId || undefined,
+  }, isAuthenticated && !isLoading);
+  
+  // Use React Query untuk fetch banks
+  const { data: banksData } = useBanks();
+  const banks = useMemo(() => banksData || [], [banksData]);
+  
+  // Extract machines and pagination from response
+  const machines = useMemo(() => {
+    if (!machinesData) return [];
+    
+    // Handle both old format (array) and new format (object with data & pagination)
+    if (Array.isArray(machinesData)) {
+      return machinesData;
+    }
+    
+    return machinesData?.data || [];
+  }, [machinesData]);
+
+  const total = useMemo(() => {
+    if (!machinesData || Array.isArray(machinesData)) {
+      return Array.isArray(machinesData) ? machinesData.length : 0;
+    }
+    return machinesData?.pagination?.total || 0;
+  }, [machinesData]);
+
+  const totalPages = useMemo(() => {
+    if (!machinesData || Array.isArray(machinesData)) {
+      return Array.isArray(machinesData) ? Math.ceil(machinesData.length / itemsPerPage) : 0;
+    }
+    return machinesData?.pagination?.totalPages || 0;
+  }, [machinesData, itemsPerPage]);
   
   // Cassettes Dialog State
   const [selectedMachine, setSelectedMachine] = useState<any>(null);
@@ -105,82 +144,7 @@ export default function MachinesPage() {
     setCurrentPage(1);
   }, [searchTerm, itemsPerPage, selectedStatus, selectedBankId]);
 
-  // Fetch banks
-  useEffect(() => {
-    const fetchBanks = async () => {
-      try {
-        const response = await api.get('/banks');
-        setBanks(response.data);
-      } catch (error) {
-        console.error('Error fetching banks:', error);
-      }
-    };
-    if (isAuthenticated) {
-      fetchBanks();
-    }
-  }, [isAuthenticated]);
-
-  const fetchMachines = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params: any = {
-        params: {
-          page: currentPage,
-          limit: itemsPerPage,
-        },
-      };
-      
-      if (searchTerm.trim()) {
-        params.params.search = searchTerm.trim();
-      }
-      
-      if (selectedStatus && selectedStatus !== 'ALL') {
-        params.params.status = selectedStatus;
-      }
-      
-      // ADD: Filter by bank
-      if (selectedBankId) {
-        params.params.customerBankId = selectedBankId;
-      }
-      
-      if (sortField) {
-        params.params.sortBy = sortField;
-        params.params.sortOrder = sortDirection;
-      }
-      
-      const response = await api.get('/machines', params);
-      
-      // Handle both old format (array) and new format (object with data & pagination)
-      if (Array.isArray(response.data)) {
-        // Old format - backward compatibility
-        setMachines(response.data);
-        setTotal(response.data.length);
-        setTotalPages(Math.ceil(response.data.length / itemsPerPage));
-      } else {
-        // New format with pagination
-        setMachines(response.data?.data || []);
-        setTotal(response.data?.pagination?.total || 0);
-        setTotalPages(response.data?.pagination?.totalPages || 0);
-      }
-    } catch (error) {
-      console.error('Error fetching machines:', error);
-      setMachines([]);
-      setTotal(0);
-      setTotalPages(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, itemsPerPage, searchTerm, selectedStatus, sortField, sortDirection, selectedBankId]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      const timeoutId = setTimeout(() => {
-        fetchMachines();
-      }, 300); // Debounce search
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isAuthenticated, searchTerm, currentPage, itemsPerPage, selectedStatus, fetchMachines]);
+  // React Query automatically refetches when filters change, no need for manual useEffect
 
   // Fetch cassettes for selected machine
   const fetchCassettes = async (machine: any) => {

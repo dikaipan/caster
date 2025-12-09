@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/lib/api';
 import PageLayout from '@/components/layout/PageLayout';
+import { useMachineStats } from '@/hooks/useMachines';
 import {
   Card,
   CardContent,
@@ -156,7 +157,45 @@ export default function DashboardPage() {
   const isRCStaff = user?.role === 'RC_STAFF';
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   
-  const [stats, setStats] = useState<DashboardStats>({
+  // Use React Query untuk fetch stats dengan automatic caching
+  // Only fetch if authenticated
+  const { data: statsData, isLoading: loadingStats, refetch: refetchStats } = useMachineStats(isAuthenticated && !isLoading);
+  
+  // Transform data dari API ke format yang diharapkan
+  const stats: DashboardStats = statsData ? {
+    totalMachines: statsData.totalMachines || 0,
+    totalCassettes: statsData.totalCassettes || 0,
+    totalBanks: statsData.totalBanks || 0,
+    totalPengelola: statsData.totalPengelola || statsData.totalVendors || 0,
+    machineTrend: statsData.machineTrend || 0,
+    cassetteTrend: statsData.cassetteTrend || 0,
+    machineStatus: statsData.machineStatus || {
+      operational: 0,
+      underRepair: 0,
+      inactive: 0,
+    },
+    cassetteStatus: statsData.cassetteStatus || {
+      ok: 0,
+      bad: 0,
+      inTransit: 0,
+      inRepair: 0,
+    },
+    healthScore: statsData.healthScore || 0,
+    topBanks: statsData.topBanks || [],
+    recentActivities: Array.isArray(statsData.recentActivities) ? statsData.recentActivities : [],
+    alerts: statsData.alerts || {
+      criticalTickets: 0,
+      longRepairs: 0,
+      badCassettes: 0,
+    },
+    ticketStats: statsData.ticketStats || {
+      total: 0,
+      byStatus: {},
+      byPriority: {},
+    },
+    ticketUsageByCassetteAndPengelola: statsData.ticketUsageByCassetteAndPengelola || [],
+    repairUsageByCassette: statsData.repairUsageByCassette || [],
+  } : {
     totalMachines: 0,
     totalCassettes: 0,
     totalBanks: 0,
@@ -189,8 +228,7 @@ export default function DashboardPage() {
     },
     ticketUsageByCassetteAndPengelola: [],
     repairUsageByCassette: [],
-  });
-  const [loadingStats, setLoadingStats] = useState(true);
+  };
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const retryDelayRef = useRef(120000); // Start with 120 seconds (2 minutes)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -231,50 +269,12 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, user]);
 
+  // Initialize Chart.js when stats data is loaded
   useEffect(() => {
-    const fetchStats = async () => {
-      setLoadingStats(true);
-      try {
-        const response = await api.get('/machines/dashboard/stats');
-        const data = response.data;
-        
-        const activities = Array.isArray(data.recentActivities) ? data.recentActivities : [];
-        
-        setStats({
-          totalMachines: data.totalMachines,
-          totalCassettes: data.totalCassettes,
-          totalBanks: data.totalBanks,
-          totalPengelola: data.totalPengelola || data.totalVendors || 0,
-          machineTrend: data.machineTrend,
-          cassetteTrend: data.cassetteTrend,
-          machineStatus: data.machineStatus,
-          cassetteStatus: data.cassetteStatus,
-          healthScore: data.healthScore,
-          topBanks: data.topBanks,
-          recentActivities: activities,
-          alerts: data.alerts,
-          ticketStats: data.ticketStats || {
-            total: 0,
-            byStatus: {},
-            byPriority: {},
-          },
-          ticketUsageByCassetteAndPengelola: data.ticketUsageByCassetteAndPengelola || [],
-          repairUsageByCassette: data.repairUsageByCassette || [],
-        });
-        
-        // Initialize Chart.js after data is loaded
-        initializeChart();
-      } catch (error) {
-        // Error handled by toast notification
-      } finally {
-        setLoadingStats(false);
-      }
-    };
-    
-    if (isAuthenticated) {
-      fetchStats();
+    if (!loadingStats && statsData) {
+      initializeChart();
     }
-  }, [user, isAuthenticated]);
+  }, [loadingStats, statsData]);
   
   // Monitor recentActivities changes (removed debug logging)
   useEffect(() => {

@@ -940,6 +940,8 @@ export default function TicketDetailPage() {
                                         src={ticket.cassetteReturn.signature} 
                                         alt="Tanda Tangan Digital" 
                                         className="h-auto max-h-32 object-contain"
+                                        loading="lazy"
+                                        decoding="async"
                                       />
                                     </div>
                                   </div>
@@ -1774,6 +1776,8 @@ export default function TicketDetailPage() {
                         src={pickupSignature} 
                         alt="Preview Tanda Tangan" 
                         className="h-auto max-h-32 object-contain"
+                        loading="lazy"
+                        decoding="async"
                       />
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 flex items-center gap-1">
@@ -1879,6 +1883,8 @@ export default function TicketDetailPage() {
                   src={pickupSignature} 
                   alt="Tanda Tangan Digital" 
                   className="w-full h-auto"
+                  loading="lazy"
+                  decoding="async"
                 />
               </div>
             )}

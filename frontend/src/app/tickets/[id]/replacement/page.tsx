@@ -870,6 +870,8 @@ export default function TicketReplacementPage() {
                                           src={ticket.cassetteReturn.signature} 
                                           alt="Tanda Tangan Digital" 
                                           className="h-auto max-h-24 object-contain"
+                                          loading="lazy"
+                                          decoding="async"
                                         />
                                       </div>
                                     </div>
@@ -1149,7 +1151,9 @@ export default function TicketReplacementPage() {
                             >
                               <img 
                                 src={pickupSignature} 
-                                alt="Preview Tanda Tangan" 
+                                alt="Preview Tanda Tangan"
+                                loading="lazy"
+                                decoding="async" 
                                 className="h-auto max-h-32 object-contain"
                               />
                             </div>
@@ -1240,6 +1244,8 @@ export default function TicketReplacementPage() {
                     src={pickupSignature} 
                     alt="Tanda Tangan Digital" 
                     className="w-full h-auto"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </div>
               )}

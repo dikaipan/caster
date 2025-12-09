@@ -205,6 +205,7 @@ Setelah seed database, gunakan credentials default:
 - 🔧 [Tech Stack](./TECH_STACK.md) - Detailed tech stack
 - 🚀 [Deployment Guide](./FREE_HOSTING_GUIDE.md) - Free hosting options
 - 📊 [Monitoring Guide](./GRAFANA_MONITORING_GUIDE.md) - Grafana setup
+- ⚡ [Performance Optimization](./doc/PERFORMANCE_OPTIMIZATION.md) - Load time optimization guide
 
 ### Additional Resources
 

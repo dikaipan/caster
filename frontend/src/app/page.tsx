@@ -1,21 +1,7 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
+// Server Component - redirect happens on server, no JavaScript needed
 export default function Home() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.push('/login');
-  }, [router]);
-
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold">Redirecting to login...</h1>
-      </div>
-    </div>
-  );
+  redirect('/login');
 }
 
