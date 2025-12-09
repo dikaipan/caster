@@ -202,7 +202,7 @@ export default function MachinesPage() {
 
       setDeleteDialogOpen(false);
       setMachineToDelete(null);
-      fetchMachines();
+      refetch();
     } catch (error: any) {
       console.error('Error deleting machine:', error);
       
@@ -494,7 +494,7 @@ export default function MachinesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={fetchMachines}
+                onClick={() => refetch()}
                 disabled={loading}
                 className="flex-shrink-0"
               >
