@@ -2012,29 +2012,24 @@ export class TicketsService {
     
     // Confirm pickup/disposal and update cassette status accordingly
     return this.prisma.$transaction(async (tx) => {
-      // For disposal confirmation: SCRAPPED cassettes remain SCRAPPED (stay at RC)
+      // For disposal confirmation: SCRAPPED cassettes remain SCRAPPED (stay at RC) - NO STATUS UPDATE
       // For normal pickup: READY_FOR_PICKUP cassettes become OK (picked up)
-      let cassettesToUpdate: string[] = [];
       
       if (isDisposalConfirmation) {
         // Disposal confirmation: SCRAPPED cassettes remain at RC, status stays SCRAPPED
-        // Get all SCRAPPED cassettes in this ticket
+        // DO NOT update SCRAPPED cassettes - they must remain SCRAPPED at RC
         if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
           const cassettesInTicket = ticket.cassetteDetails.map((detail: any) => detail.cassette);
           const scrappedCassettes = cassettesInTicket.filter((c: any) => c && c.status === 'SCRAPPED');
-          cassettesToUpdate = scrappedCassettes.map((c: any) => c.id);
-          this.logger.debug(`Disposal confirmation: Found ${scrappedCassettes.length} SCRAPPED cassette(s) - will remain at RC`);
+          this.logger.debug(`Disposal confirmation: Found ${scrappedCassettes.length} SCRAPPED cassette(s) - will remain SCRAPPED at RC (no status update)`);
         } else {
           // Single cassette ticket
-          if (cassette.status === 'SCRAPPED') {
-            cassettesToUpdate = [cassette.id];
-            this.logger.debug(`Disposal confirmation: Single SCRAPPED cassette ${cassette.serialNumber} - will remain at RC`);
-          }
+          this.logger.debug(`Disposal confirmation: Single SCRAPPED cassette ${cassette.serialNumber} - will remain SCRAPPED at RC (no status update)`);
         }
-        // Note: We don't update SCRAPPED cassettes - they stay SCRAPPED at RC
+        // IMPORTANT: SCRAPPED cassettes are NOT updated - they stay SCRAPPED at RC
       } else {
         // Normal pickup: READY_FOR_PICKUP cassettes become OK
-        cassettesToUpdate = [cassette.id];
+        let cassettesToUpdate: string[] = [cassette.id];
         
         // Check if this is a multi-cassette ticket
         if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {

@@ -29,7 +29,6 @@ import {
   Heart,
   Github,
   Send,
-  CheckCircle2,
   AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -93,7 +92,6 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
     }
   };
 
-  const [pendingConfirmationCount, setPendingConfirmationCount] = useState(0);
   const [newSOCount, setNewSOCount] = useState(0);
   const [pmTasksCount, setPmTasksCount] = useState(0);
   const [replacementRequestCount, setReplacementRequestCount] = useState(0);
@@ -105,24 +103,13 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
   useEffect(() => {
     let isMounted = true;
 
-    // Skip polling if user is on the pending confirmation or tickets page
-    const isOnPendingPage = pathname.includes('/pending-confirmation') || pathname === '/tickets';
+    // Skip polling if user is on the tickets page
+    const isOnPendingPage = pathname === '/tickets';
     if (isOnPendingPage) {
       // Still fetch once on mount, but don't poll
       const fetchOnce = async () => {
         if (!user || !isMounted) return;
         try {
-          if (user.userType === 'PENGELOLA') {
-            try {
-              // Use optimized count endpoint instead of full data endpoint
-              const countResponse = await api.get('/tickets/count/pending-confirmation');
-              if (isMounted) setPendingConfirmationCount(countResponse.data || 0);
-            } catch (error: any) {
-              if (error.response?.status !== 429) {
-                console.warn('Could not fetch pending confirmation count:', error);
-              }
-            }
-          }
           // Fetch new SO count (OPEN and IN_DELIVERY status) - use optimized endpoint
           try {
             const countResponse = await api.get('/tickets/count/new');
@@ -204,27 +191,6 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
       if (!user || !isMounted) return;
 
       try {
-
-        // Fetch pending confirmation count for Pengelola
-        if (user.userType === 'PENGELOLA') {
-          try {
-            // Use optimized count endpoint instead of full data endpoint
-            const countResponse = await api.get('/tickets/count/pending-confirmation');
-            if (isMounted) {
-              setPendingConfirmationCount(countResponse.data || 0);
-              retryDelayRef.current = 180000; // Reset to 180 seconds (3 minutes) on success
-            }
-          } catch (error: any) {
-            if (error.response?.status === 429) {
-              // Rate limited - increase delay significantly
-              retryDelayRef.current = Math.min(retryDelayRef.current * 2, 600000); // Max 10 minutes
-              console.warn('Rate limited for pending confirmation count, retrying in', retryDelayRef.current / 1000, 'seconds');
-            } else {
-              console.warn('Could not fetch pending confirmation count:', error);
-            }
-          }
-        }
-
         // Fetch new SO count (OPEN and IN_DELIVERY status) for all users
         // Use optimized count endpoint, then filter by viewed status in frontend
         try {
@@ -395,11 +361,10 @@ export default function Sidebar({ isMobileOpen = false, setIsMobileOpen, collaps
       items: [
         { icon: Plus, label: 'Buat SO', link: '/service-orders/create' },
         { icon: Ticket, label: 'Active SOs', link: '/tickets', badgeCount: newSOCount },
-        { icon: CheckCircle2, label: 'Pending Confirmation', link: '/tickets/pending-confirmation', pengelolaOnly: true, badgeCount: pendingConfirmationCount },
         { icon: History, label: 'SO History', link: '/history' },
       ],
     },
-  ], [pendingConfirmationCount, newSOCount]); // pmTasksCount removed - PM disabled temporarily
+  ], [newSOCount]); // pmTasksCount removed - PM disabled temporarily
 
   // Filter menu groups berdasarkan permissions
   const filteredGroups = menuGroups
