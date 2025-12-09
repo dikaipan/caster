@@ -1486,8 +1486,9 @@ function AnalyticsSection({ user, isHitachi }: { user: any; isHitachi: boolean }
                   {/* Top 10 Problematic */}
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Top 10 Kaset Bermasalah</h3>
-                    {cassetteAnalytics.top10Problematic.length > 0 ? (
+                  {cassetteAnalytics.top10Problematic.length > 0 ? (
                       <div className="h-64">
+                      {cassetteAnalytics.top10Problematic.length > 0 && (
                         <Bar
                           data={{
                             labels: cassetteAnalytics.top10Problematic.map((c: any) => c.serialNumber),
@@ -1519,6 +1520,7 @@ function AnalyticsSection({ user, isHitachi }: { user: any; isHitachi: boolean }
                             },
                           }}
                         />
+                      )}
                       </div>
                     ) : (
                       <p className="text-sm text-gray-500">Tidak ada data</p>
@@ -1528,57 +1530,28 @@ function AnalyticsSection({ user, isHitachi }: { user: any; isHitachi: boolean }
                   {/* Cycle Problem Distribution */}
                   <div>
                     <h3 className="text-lg font-semibold mb-4">Distribusi Cycle Problem</h3>
-                    <div className="h-64">
-                      <Bar
-                        data={{
-                          labels: Object.keys(cassetteAnalytics.cycleProblemDistribution),
-                          datasets: [{
-                            label: 'Jumlah Kaset',
-                            data: Object.values(cassetteAnalytics.cycleProblemDistribution),
-                            backgroundColor: [
-                              'rgba(34, 197, 94, 0.6)',
-                              'rgba(234, 179, 8, 0.6)',
-                              'rgba(249, 115, 22, 0.6)',
-                              'rgba(239, 68, 68, 0.6)',
-                              'rgba(185, 28, 28, 0.6)',
-                            ],
-                            borderColor: [
-                              'rgba(34, 197, 94, 1)',
-                              'rgba(234, 179, 8, 1)',
-                              'rgba(249, 115, 22, 1)',
-                              'rgba(239, 68, 68, 1)',
-                              'rgba(185, 28, 28, 1)',
-                            ],
-                            borderWidth: 1,
-                          }],
-                        }}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: {
-                            legend: { display: false },
-                          },
-                          scales: {
-                            y: { beginAtZero: true },
-                          },
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Age Distribution & Utilization */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4">Distribusi Usia Kaset</h3>
+                    {cassetteAnalytics.cycleProblemDistribution && Object.keys(cassetteAnalytics.cycleProblemDistribution).length > 0 ? (
                       <div className="h-64">
                         <Bar
                           data={{
-                            labels: Object.keys(cassetteAnalytics.ageDistribution),
+                            labels: Object.keys(cassetteAnalytics.cycleProblemDistribution),
                             datasets: [{
                               label: 'Jumlah Kaset',
-                              data: Object.values(cassetteAnalytics.ageDistribution),
-                              backgroundColor: 'rgba(99, 102, 241, 0.6)',
-                              borderColor: 'rgba(99, 102, 241, 1)',
+                              data: Object.values(cassetteAnalytics.cycleProblemDistribution),
+                              backgroundColor: [
+                                'rgba(34, 197, 94, 0.6)',
+                                'rgba(234, 179, 8, 0.6)',
+                                'rgba(249, 115, 22, 0.6)',
+                                'rgba(239, 68, 68, 0.6)',
+                                'rgba(185, 28, 28, 0.6)',
+                              ],
+                              borderColor: [
+                                'rgba(34, 197, 94, 1)',
+                                'rgba(234, 179, 8, 1)',
+                                'rgba(249, 115, 22, 1)',
+                                'rgba(239, 68, 68, 1)',
+                                'rgba(185, 28, 28, 1)',
+                              ],
                               borderWidth: 1,
                             }],
                           }}
@@ -1594,19 +1567,60 @@ function AnalyticsSection({ user, isHitachi }: { user: any; isHitachi: boolean }
                           }}
                         />
                       </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">Tidak ada data</p>
+                    )}
+                  </div>
+
+                  {/* Age Distribution & Utilization */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4">Distribusi Usia Kaset</h3>
+                      {cassetteAnalytics.ageDistribution && Object.keys(cassetteAnalytics.ageDistribution).length > 0 ? (
+                        <div className="h-64">
+                          <Bar
+                            data={{
+                              labels: Object.keys(cassetteAnalytics.ageDistribution),
+                              datasets: [{
+                                label: 'Jumlah Kaset',
+                                data: Object.values(cassetteAnalytics.ageDistribution),
+                                backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                                borderColor: 'rgba(99, 102, 241, 1)',
+                                borderWidth: 1,
+                              }],
+                            }}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                legend: { display: false },
+                              },
+                              scales: {
+                                y: { beginAtZero: true },
+                              },
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">Tidak ada data</p>
+                      )}
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold mb-4">Utilization Rate</h3>
-                      <div className="flex items-center justify-center h-64">
-                        <div className="text-center">
-                          <div className="text-6xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-                            {cassetteAnalytics.utilizationRate.toFixed(1)}%
+                      {cassetteAnalytics.utilizationRate !== undefined ? (
+                        <div className="flex items-center justify-center h-64">
+                          <div className="text-center">
+                            <div className="text-6xl font-bold text-blue-600 dark:text-blue-400 mb-2">
+                              {cassetteAnalytics.utilizationRate.toFixed(1)}%
+                            </div>
+                            <p className="text-sm text-gray-600 dark:text-slate-400">
+                              {cassetteAnalytics.activeCassettes} dari {cassetteAnalytics.totalCassettes} kaset aktif
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-600 dark:text-slate-400">
-                            {cassetteAnalytics.activeCassettes} dari {cassetteAnalytics.totalCassettes} kaset aktif
-                          </p>
                         </div>
-                      </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">Tidak ada data</p>
+                      )}
                     </div>
                   </div>
                 </div>
