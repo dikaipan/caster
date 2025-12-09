@@ -73,7 +73,7 @@ export default function CassettesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInputValue, setSearchInputValue] = useState(''); // Local state for input (immediate update)
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50); // Changed from 25 to 50 for better performance
+  const [itemsPerPage, setItemsPerPage] = useState(20); // Lower default to reduce initial render weight
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [sortField, setSortField] = useState<string>('serialNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -835,6 +835,7 @@ export default function CassettesPage() {
                   className="px-3 py-2 border rounded-md text-sm bg-white dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-900 dark:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
               >
                 <option value={10}>10</option>
+                <option value={20}>20</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
                 <option value={100}>100</option>
