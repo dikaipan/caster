@@ -64,10 +64,11 @@ export function SignaturePad({
         y: (e.changedTouches[0].clientY - rect.top) * scaleY,
       };
     } else {
-      // Mouse event
+      // Mouse event - TypeScript type guard ensures this is MouseEvent
+      const mouseEvent = e as React.MouseEvent<HTMLCanvasElement>;
       return {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY,
+        x: (mouseEvent.clientX - rect.left) * scaleX,
+        y: (mouseEvent.clientY - rect.top) * scaleY,
       };
     }
   };
