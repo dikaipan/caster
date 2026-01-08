@@ -1,7 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, LoggerService } from '@nestjs/common';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 @Injectable()
 export class SecurityLoggerService {
+  constructor(
+    @Inject(WINSTON_MODULE_NEST_PROVIDER) private readonly logger: LoggerService,
+  ) { }
+
   /**
    * Log security events for audit trail
    */
@@ -25,11 +30,8 @@ export class SecurityLoggerService {
       ...details,
     };
 
-    // In production, this should be sent to a proper logging service (e.g., Winston, Pino, CloudWatch)
-    console.log(`[SECURITY] ${JSON.stringify(logEntry)}`);
-
-    // TODO: Implement proper logging to file or external service
-    // Example: await this.loggingService.log(logEntry);
+    // Log to Winston with proper structure - writes to logs/combined-*.log and logs/error-*.log
+    this.logger.warn(`[SECURITY] ${event}`, { context: 'SecurityLogger', ...logEntry });
   }
 
   logLoginAttempt(username: string, ip: string, status: 'SUCCESS' | 'FAILED', reason?: string) {

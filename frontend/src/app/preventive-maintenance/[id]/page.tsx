@@ -1343,7 +1343,7 @@ export default function PMDetailPage() {
 
       {/* Edit Cassette Dialog */}
       <Dialog open={editingCassette !== null} onOpenChange={(open) => !open && handleCancelEdit()}>
-        <DialogContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <DialogHeader>
             <DialogTitle className="text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Package className="h-5 w-5 text-teal-500 dark:text-teal-400" />

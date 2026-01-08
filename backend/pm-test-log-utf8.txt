@@ -1,0 +1,279 @@
+﻿
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json preventive-maintenance.e2e-spec.ts --verbose
+
+  console.log
+    [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+[33m[HCM-Backend][39m [33m26544[39m 1/3/2026, 10:55:22 AM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T03:55:22.026Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "pm_admin_1767412521481784",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+node.exe : FAIL test/preventive-maintenance.e2e-spec.ts (17.052 s)
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL test/preve...c.ts (17.0 
+   52 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  ÔùÅ Preventive Maintenance (e2e) ÔÇ║ POST 
+/api/v1/preventive-maintenance ÔÇ║ should create a new PM task
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.machine.create()` invocation in
+    D:\Dev\HCS Cassete management\hcm\backend\test\test-helpers.ts:178:33
+
+      175     uniqueId: string,
+      176     prefix = 'MACH'
+      177 ): Promise<any> {
+    ÔåÆ 178     return await prisma.machine.create(
+    Foreign key constraint violated on the fields: (`customer_bank_id`)
+
+    [0m [90m 176 |[39m     prefix [33m=[39m [32m'MACH'[39m
+     [90m 177 |[39m )[33m:[39m 
+[33mPromise[39m[33m<[39m[33many[39m[33m>[39m {
+    [31m[1m>[22m[39m[90m 178 |[39m     [36mreturn[39m 
+[36mawait[39m prisma[33m.[39mmachine[33m.[39mcreate({
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 179 |[39m         data[33m:[39m {
+     [90m 180 |[39m             machineCode[33m:[39m 
+[32m`${prefix}-${uniqueId}`[39m[33m,[39m
+     [90m 181 |[39m             modelName[33m:[39m 
+[32m'TestModel'[39m[33m,[39m[0m
+
+      at ei.handleRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at ei.handleAndLogRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a 
+(../node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at createTestMachine (test-helpers.ts:178:12)
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:54:19)
+
+  ÔùÅ Preventive Maintenance (e2e) ÔÇ║ POST 
+/api/v1/preventive-maintenance ÔÇ║ should validate cassette availability 
+(cannot create simultaneous PM)
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.machine.create()` invocation in
+    D:\Dev\HCS Cassete management\hcm\backend\test\test-helpers.ts:178:33
+
+      175     uniqueId: string,
+      176     prefix = 'MACH'
+      177 ): Promise<any> {
+    ÔåÆ 178     return await prisma.machine.create(
+    Foreign key constraint violated on the fields: (`customer_bank_id`)
+
+    [0m [90m 176 |[39m     prefix [33m=[39m [32m'MACH'[39m
+     [90m 177 |[39m )[33m:[39m 
+[33mPromise[39m[33m<[39m[33many[39m[33m>[39m {
+    [31m[1m>[22m[39m[90m 178 |[39m     [36mreturn[39m 
+[36mawait[39m prisma[33m.[39mmachine[33m.[39mcreate({
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 179 |[39m         data[33m:[39m {
+     [90m 180 |[39m             machineCode[33m:[39m 
+[32m`${prefix}-${uniqueId}`[39m[33m,[39m
+     [90m 181 |[39m             modelName[33m:[39m 
+[32m'TestModel'[39m[33m,[39m[0m
+
+      at ei.handleRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at ei.handleAndLogRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a 
+(../node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at createTestMachine (test-helpers.ts:178:12)
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:54:19)
+
+  ÔùÅ Preventive Maintenance (e2e) ÔÇ║ GET /api/v1/preventive-maintenance 
+ÔÇ║ should list PM tasks
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.machine.create()` invocation in
+    D:\Dev\HCS Cassete management\hcm\backend\test\test-helpers.ts:178:33
+
+      175     uniqueId: string,
+      176     prefix = 'MACH'
+      177 ): Promise<any> {
+    ÔåÆ 178     return await prisma.machine.create(
+    Foreign key constraint violated on the fields: (`customer_bank_id`)
+
+    [0m [90m 176 |[39m     prefix [33m=[39m [32m'MACH'[39m
+     [90m 177 |[39m )[33m:[39m 
+[33mPromise[39m[33m<[39m[33many[39m[33m>[39m {
+    [31m[1m>[22m[39m[90m 178 |[39m     [36mreturn[39m 
+[36mawait[39m prisma[33m.[39mmachine[33m.[39mcreate({
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 179 |[39m         data[33m:[39m {
+     [90m 180 |[39m             machineCode[33m:[39m 
+[32m`${prefix}-${uniqueId}`[39m[33m,[39m
+     [90m 181 |[39m             modelName[33m:[39m 
+[32m'TestModel'[39m[33m,[39m[0m
+
+      at ei.handleRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at ei.handleAndLogRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a 
+(../node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at createTestMachine (test-helpers.ts:178:12)
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:54:19)
+
+  ÔùÅ Preventive Maintenance (e2e) ÔÇ║ POST 
+/api/v1/preventive-maintenance/:id/take ÔÇ║ should assign PM task to self
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.machine.create()` invocation in
+    D:\Dev\HCS Cassete management\hcm\backend\test\test-helpers.ts:178:33
+
+      175     uniqueId: string,
+      176     prefix = 'MACH'
+      177 ): Promise<any> {
+    ÔåÆ 178     return await prisma.machine.create(
+    Foreign key constraint violated on the fields: (`customer_bank_id`)
+
+    [0m [90m 176 |[39m     prefix [33m=[39m [32m'MACH'[39m
+     [90m 177 |[39m )[33m:[39m 
+[33mPromise[39m[33m<[39m[33many[39m[33m>[39m {
+    [31m[1m>[22m[39m[90m 178 |[39m     [36mreturn[39m 
+[36mawait[39m prisma[33m.[39mmachine[33m.[39mcreate({
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 179 |[39m         data[33m:[39m {
+     [90m 180 |[39m             machineCode[33m:[39m 
+[32m`${prefix}-${uniqueId}`[39m[33m,[39m
+     [90m 181 |[39m             modelName[33m:[39m 
+[32m'TestModel'[39m[33m,[39m[0m
+
+      at ei.handleRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at ei.handleAndLogRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a 
+(../node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at createTestMachine (test-helpers.ts:178:12)
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:54:19)
+
+  ÔùÅ Preventive Maintenance (e2e) ÔÇ║ PATCH 
+/api/v1/preventive-maintenance/:id/cassette/:cassetteId ÔÇ║ should update 
+cassette detail checklist
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.machine.create()` invocation in
+    D:\Dev\HCS Cassete management\hcm\backend\test\test-helpers.ts:178:33
+
+      175     uniqueId: string,
+      176     prefix = 'MACH'
+      177 ): Promise<any> {
+    ÔåÆ 178     return await prisma.machine.create(
+    Foreign key constraint violated on the fields: (`customer_bank_id`)
+
+    [0m [90m 176 |[39m     prefix [33m=[39m [32m'MACH'[39m
+     [90m 177 |[39m )[33m:[39m 
+[33mPromise[39m[33m<[39m[33many[39m[33m>[39m {
+    [31m[1m>[22m[39m[90m 178 |[39m     [36mreturn[39m 
+[36mawait[39m prisma[33m.[39mmachine[33m.[39mcreate({
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 179 |[39m         data[33m:[39m {
+     [90m 180 |[39m             machineCode[33m:[39m 
+[32m`${prefix}-${uniqueId}`[39m[33m,[39m
+     [90m 181 |[39m             modelName[33m:[39m 
+[32m'TestModel'[39m[33m,[39m[0m
+
+      at ei.handleRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at ei.handleAndLogRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a 
+(../node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at createTestMachine (test-helpers.ts:178:12)
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:54:19)
+
+  ÔùÅ Preventive Maintenance (e2e) ÔÇ║ PATCH 
+/api/v1/preventive-maintenance/:id ÔÇ║ should complete the PM task
+
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.machine.create()` invocation in
+    D:\Dev\HCS Cassete management\hcm\backend\test\test-helpers.ts:178:33
+
+      175     uniqueId: string,
+      176     prefix = 'MACH'
+      177 ): Promise<any> {
+    ÔåÆ 178     return await prisma.machine.create(
+    Foreign key constraint violated on the fields: (`customer_bank_id`)
+
+    [0m [90m 176 |[39m     prefix [33m=[39m [32m'MACH'[39m
+     [90m 177 |[39m )[33m:[39m 
+[33mPromise[39m[33m<[39m[33many[39m[33m>[39m {
+    [31m[1m>[22m[39m[90m 178 |[39m     [36mreturn[39m 
+[36mawait[39m prisma[33m.[39mmachine[33m.[39mcreate({
+     [90m     |[39m            [31m[1m^[22m[39m
+     [90m 179 |[39m         data[33m:[39m {
+     [90m 180 |[39m             machineCode[33m:[39m 
+[32m`${prefix}-${uniqueId}`[39m[33m,[39m
+     [90m 181 |[39m             modelName[33m:[39m 
+[32m'TestModel'[39m[33m,[39m[0m
+
+      at ei.handleRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:228:13)
+      at ei.handleAndLogRequestError 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:174:12)
+      at ei.request 
+(../node_modules/@prisma/client/src/runtime/RequestHandler.ts:143:12)
+      at a 
+(../node_modules/@prisma/client/src/runtime/getPrismaClient.ts:833:24)
+      at createTestMachine (test-helpers.ts:178:12)
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:54:19)
+
+
+  ÔùÅ Test suite failed to run
+
+    TypeError: Cannot read properties of undefined (reading 'id')
+
+    [0m [90m 61 |[39m         [36mawait[39m 
+cleanupTestData(prisma[33m,[39m {
+     [90m 62 |[39m             pmIds[33m:[39m pmId [33m?[39m [pmId] 
+[33m:[39m [][33m,[39m
+    [31m[1m>[22m[39m[90m 63 |[39m             
+cassetteIds[33m:[39m [cassette[33m.[39mid][33m,[39m
+     [90m    |[39m                                    
+[31m[1m^[22m[39m
+     [90m 64 |[39m             machineIds[33m:[39m 
+[machine[33m.[39mid][33m,[39m
+     [90m 65 |[39m             customerBankIds[33m:[39m 
+[customerBank[33m.[39mid][33m,[39m
+     [90m 66 |[39m             pengelolaIds[33m:[39m 
+[pengelolaOrg[33m.[39mid][33m,[39m[0m
+
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:63:36)
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 6 total
+Snapshots:   0 total
+Time:        17.743 s
+Ran all test suites matching /preventive-maintenance.e2e-spec.ts/i.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't 
+stopped in your tests. Consider running Jest with `--detectOpenHandles` 
+to troubleshoot this issue.

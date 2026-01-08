@@ -29,7 +29,12 @@ import {
   Disc,
   Building2,
   Search,
+  Users,
+  Share2,
+  X,
+  AlertTriangle,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export default function AssignmentsTab() {
   const { user, isAuthenticated } = useAuthStore();
@@ -46,6 +51,16 @@ export default function AssignmentsTab() {
   const [isAssignMachineDialogOpen, setIsAssignMachineDialogOpen] = useState(false);
   const [assignMachineForm, setAssignMachineForm] = useState({ pengelolaId: '' });
   const [machineSearch, setMachineSearch] = useState('');
+  const [selectedMachines, setSelectedMachines] = useState<string[]>([]);
+  const [isBulkAssignDialogOpen, setIsBulkAssignDialogOpen] = useState(false);
+  const [bulkAssignPengelolaId, setBulkAssignPengelolaId] = useState('');
+  const [isDistributeDialogOpen, setIsDistributeDialogOpen] = useState(false);
+  const [distributePengelolaIds, setDistributePengelolaIds] = useState<string[]>([]);
+  const [distributeBankId, setDistributeBankId] = useState('');
+  const [isUnassignDialogOpen, setIsUnassignDialogOpen] = useState(false);
+  const [unassignOption, setUnassignOption] = useState<'all' | 'pengelola' | 'bank'>('all');
+  const [unassignPengelolaId, setUnassignPengelolaId] = useState('');
+  const [unassignBankId, setUnassignBankId] = useState('');
 
   // Cassettes assignment (through bank-pengelola)
   const [cassettes, setCassettes] = useState<any[]>([]);
@@ -80,14 +95,14 @@ export default function AssignmentsTab() {
           const response = await api.get('/machines');
           const bankMachines = response.data.filter((m: any) => m.customerBankId === selectedBank);
           setMachinesForBranch(bankMachines);
-          
+
           // Extract unique branch codes
           const branches = Array.from(new Set(
             bankMachines
               .map((m: any) => m.branchCode)
               .filter((b: string) => b)
           )) as string[];
-          
+
           // Pre-fill assigned branches if editing existing assignment
           if (bankPengelolaAssignments.length > 0) {
             const existing = bankPengelolaAssignments.find(
@@ -111,9 +126,13 @@ export default function AssignmentsTab() {
 
   const fetchMachines = async () => {
     try {
-      const params = machineSearch.trim() ? { params: { search: machineSearch.trim() } } : {};
-      const response = await api.get('/machines', params);
-      setMachines(Array.isArray(response.data) ? response.data : []);
+      const params: any = { limit: 1000 };
+      if (machineSearch.trim()) {
+        params.search = machineSearch.trim();
+      }
+      const response = await api.get('/machines', { params });
+      const machinesData = response.data?.data || response.data?.machines || response.data;
+      setMachines(Array.isArray(machinesData) ? machinesData : []);
     } catch (err: any) {
       console.error('Error fetching machines:', err);
       setMachines([]);
@@ -132,16 +151,26 @@ export default function AssignmentsTab() {
   const fetchBanks = async () => {
     try {
       const response = await api.get('/banks');
-      setBanks(response.data);
+      const banksData = response.data?.data || response.data;
+      setBanks(Array.isArray(banksData) ? banksData : []);
     } catch (err: any) {
       console.error('Error fetching banks:', err);
+      setBanks([]); // Ensure banks is always an array even on error
     }
   };
 
   const fetchCassettes = async () => {
     try {
-      const response = await api.get('/cassettes');
-      setCassettes(Array.isArray(response.data) ? response.data : []);
+      // Fetch all cassettes with high limit to get complete count
+      const response = await api.get('/cassettes', {
+        params: {
+          page: 1,
+          limit: 10000, // High limit to get all cassettes for counting
+        },
+      });
+      // Handle both paginated and non-paginated response formats
+      const cassettesData = response.data?.data || response.data?.cassettes || response.data;
+      setCassettes(Array.isArray(cassettesData) ? cassettesData : []);
     } catch (err: any) {
       console.error('Error fetching cassettes:', err);
       setCassettes([]); // Ensure cassettes is always an array even on error
@@ -153,23 +182,31 @@ export default function AssignmentsTab() {
       // Get all banks with their pengelola assignments
       const banksResponse = await api.get('/banks');
       const assignments: any[] = [];
-      
-      for (const bank of banksResponse.data) {
-        if (bank.pengelolaAssignments && bank.pengelolaAssignments.length > 0) {
-          bank.pengelolaAssignments.forEach((assignment: any) => {
-            assignments.push({
-              ...assignment,
-              pengelola: assignment.pengelola || {},
-              bank: bank,
-              customerBank: bank,
+
+      // Handle different response structures (array or paginated object)
+      const banksData = Array.isArray(banksResponse.data) 
+        ? banksResponse.data 
+        : (banksResponse.data?.data || banksResponse.data?.banks || []);
+
+      if (Array.isArray(banksData)) {
+        for (const bank of banksData) {
+          if (bank.pengelolaAssignments && Array.isArray(bank.pengelolaAssignments) && bank.pengelolaAssignments.length > 0) {
+            bank.pengelolaAssignments.forEach((assignment: any) => {
+              assignments.push({
+                ...assignment,
+                pengelola: assignment.pengelola || {},
+                bank: bank,
+                customerBank: bank,
+              });
             });
-          });
+          }
         }
       }
-      
+
       setBankPengelolaAssignments(assignments);
     } catch (err: any) {
       console.error('Error fetching bank-pengelola assignments:', err);
+      setBankPengelolaAssignments([]); // Set empty array on error
     }
   };
 
@@ -210,13 +247,21 @@ export default function AssignmentsTab() {
     setLoading(true);
 
     try {
-      // Check if assignment already exists
-      const existing = bankPengelolaAssignments.find(
-        (a) => a.customerBankId === selectedBank && a.pengelolaId === selectedPengelolaForBank
-      );
+      // Check if assignment already exists (handle various data structures)
+      const existing = bankPengelolaAssignments.find((a) => {
+        const bankId = a.customerBankId || a.bank?.id || a.customerBank?.id;
+        const pengelolaId = a.pengelolaId || a.pengelola?.id;
+        return bankId === selectedBank && pengelolaId === selectedPengelolaForBank;
+      });
 
       if (existing) {
-        setError('This bank-pengelola assignment already exists');
+        const status = existing.status || 'ACTIVE';
+        setError(
+          `Assignment sudah ada! Status: ${status}. ` +
+          (status === 'INACTIVE'
+            ? 'Jika ingin mengaktifkan kembali, silakan edit assignment yang sudah ada.'
+            : 'Silakan edit assignment yang sudah ada jika ingin mengubah konfigurasi.')
+        );
         setLoading(false);
         return;
       }
@@ -231,7 +276,7 @@ export default function AssignmentsTab() {
       }
 
       await api.post(`/banks/${selectedBank}/pengelola/${selectedPengelolaForBank}`, payload);
-      
+
       let infoText = '';
       if (assignedCassetteCount && assignedCassetteCount.trim() !== '' && Number(assignedCassetteCount) > 0) {
         infoText = ` dengan ${assignedCassetteCount} kaset`;
@@ -241,7 +286,7 @@ export default function AssignmentsTab() {
       } else if (!assignedCassetteCount || assignedCassetteCount.trim() === '') {
         infoText = ' (semua kaset dari bank)';
       }
-      
+
       setSuccess(`Bank assigned to pengelola successfully${infoText}!`);
       setIsAssignBankPengelolaDialogOpen(false);
       setSelectedBank('');
@@ -267,6 +312,119 @@ export default function AssignmentsTab() {
 
   const removeBranch = (branch: string) => {
     setAssignedBranches(assignedBranches.filter((b) => b !== branch));
+  };
+
+  const handleBulkAssign = async () => {
+    if (!bulkAssignPengelolaId || selectedMachines.length === 0) {
+      setError('Please select pengelola and at least one machine');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const response = await api.post('/machines/bulk-assign', {
+        pengelolaId: bulkAssignPengelolaId,
+        machineIds: selectedMachines,
+      });
+      setSuccess(`Successfully assigned ${response.data.assignedCount} machine(s) to ${response.data.pengelola.companyName}!`);
+      setIsBulkAssignDialogOpen(false);
+      setBulkAssignPengelolaId('');
+      setSelectedMachines([]);
+      fetchMachines();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to bulk assign machines');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDistribute = async () => {
+    if (distributePengelolaIds.length === 0) {
+      setError('Please select at least one pengelola');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const payload: any = {
+        pengelolaIds: distributePengelolaIds,
+      };
+      if (distributeBankId) {
+        payload.customerBankId = distributeBankId;
+      }
+
+      const response = await api.post('/machines/distribute', payload);
+      const totalAssigned = response.data.assignments.reduce((sum: number, a: any) => sum + a.assignedCount, 0);
+      setSuccess(`Successfully distributed ${totalAssigned} machine(s) to ${distributePengelolaIds.length} pengelola!`);
+      setIsDistributeDialogOpen(false);
+      setDistributePengelolaIds([]);
+      setDistributeBankId('');
+      fetchMachines();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to distribute machines');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnassign = async () => {
+    if (unassignOption === 'pengelola' && !unassignPengelolaId) {
+      setError('Please select a pengelola');
+      return;
+    }
+    if (unassignOption === 'bank' && !unassignBankId) {
+      setError('Please select a bank');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const payload: any = {};
+      if (unassignOption === 'pengelola') {
+        payload.pengelolaId = unassignPengelolaId;
+      } else if (unassignOption === 'bank') {
+        payload.customerBankId = unassignBankId;
+      }
+      // If unassignOption === 'all', payload is empty {} which will unassign all machines
+
+      const response = await api.post('/machines/unassign', payload);
+      setSuccess(`Successfully unassigned ${response.data.unassignedCount} machine(s)!`);
+      setIsUnassignDialogOpen(false);
+      setUnassignOption('all');
+      setUnassignPengelolaId('');
+      setUnassignBankId('');
+      fetchMachines();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to unassign machines');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleMachineSelection = (machineId: string) => {
+    setSelectedMachines(prev =>
+      prev.includes(machineId)
+        ? prev.filter(id => id !== machineId)
+        : [...prev, machineId]
+    );
+  };
+
+  const toggleAllMachines = () => {
+    const unassignedMachines = machines.filter(m => !m.pengelolaId);
+    if (selectedMachines.length === unassignedMachines.length) {
+      setSelectedMachines([]);
+    } else {
+      setSelectedMachines(unassignedMachines.map(m => m.id));
+    }
   };
 
   const openAssignMachineDialog = (machine: any) => {
@@ -298,10 +456,37 @@ export default function AssignmentsTab() {
                 <span>Assign Machines to Pengelola</span>
               </CardTitle>
               <CardDescription>
-                Assign individual machines to pengelola for maintenance and service
+                Assign machines to pengelola. When a machine is assigned, all its cassettes (10 total: 5 main + 5 backup) are automatically accessible to the pengelola.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Quick Actions */}
+              <div className="flex flex-wrap gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <Button
+                  onClick={() => setIsDistributeDialogOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Distribute All Machines
+                </Button>
+                <Button
+                  onClick={() => setIsBulkAssignDialogOpen(true)}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Users className="h-4 w-4" />
+                  Bulk Assign to Pengelola
+                </Button>
+                <Button
+                  onClick={() => setIsUnassignDialogOpen(true)}
+                  variant="outline"
+                  className="flex items-center gap-2 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <X className="h-4 w-4" />
+                  Unassign Machines
+                </Button>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="machine-search">Search Machines</Label>
                 <div className="flex gap-2">
@@ -343,9 +528,8 @@ export default function AssignmentsTab() {
                     </thead>
                     <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
                       {machines && machines.length > 0 ? machines.map((machine, index) => (
-                        <tr key={machine.id} className={`hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors ${
-                          index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-gray-50/30 dark:bg-slate-800/50'
-                        }`}>
+                        <tr key={machine.id} className={`hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors ${index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-gray-50/30 dark:bg-slate-800/50'
+                          }`}>
                           <td className="p-3 font-mono text-gray-900 dark:text-slate-100">{machine.serialNumberManufacturer}</td>
                           <td className="p-3 text-gray-900 dark:text-slate-100">{machine.machineCode || 'N/A'}</td>
                           <td className="p-3 text-gray-900 dark:text-slate-100">{machine.customerBank?.bankName || 'N/A'}</td>
@@ -359,13 +543,12 @@ export default function AssignmentsTab() {
                           <td className="p-3 text-gray-900 dark:text-slate-100">{machine.branchCode || 'N/A'}</td>
                           <td className="p-3">
                             <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                machine.status === 'OPERATIONAL'
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${machine.status === 'OPERATIONAL'
                                   ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
                                   : machine.status === 'MAINTENANCE'
-                                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
-                                  : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
-                              }`}
+                                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
+                                    : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400'
+                                }`}
                             >
                               {machine.status}
                             </span>
@@ -422,7 +605,7 @@ export default function AssignmentsTab() {
             <CardContent className="space-y-4">
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
                 <p className="text-sm text-blue-800 dark:text-blue-300">
-                  <strong>Note:</strong> Cassettes are assigned to pengelola through bank assignments. 
+                  <strong>Note:</strong> Cassettes are assigned to pengelola through bank assignments.
                   When you assign a bank to a pengelola, all cassettes belonging to that bank become accessible to the pengelola.
                 </p>
               </div>
@@ -448,15 +631,15 @@ export default function AssignmentsTab() {
                     </thead>
                     <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
                       {bankPengelolaAssignments.map((assignment, index) => {
-                        const bankCassettes = Array.isArray(cassettes) 
+                        const bankCassettes = Array.isArray(cassettes)
                           ? cassettes.filter(
-                              (c) => c.customerBankId === (assignment.customerBankId || assignment.bank?.id || assignment.customerBank?.id)
-                            )
+                            (c) => c.customerBankId === (assignment.customerBankId || assignment.bank?.id || assignment.customerBank?.id)
+                          )
                           : [];
                         const branches = assignment.assignedBranches
                           ? (Array.isArray(assignment.assignedBranches) ? assignment.assignedBranches : [])
                           : [];
-                        
+
                         // Parse assignedCassetteCount from notes
                         let assignedCount = 0;
                         try {
@@ -467,11 +650,10 @@ export default function AssignmentsTab() {
                         } catch (e) {
                           // Ignore parse errors
                         }
-                        
+
                         return (
-                          <tr key={assignment.id} className={`hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors ${
-                            index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-gray-50/30 dark:bg-slate-800/50'
-                          }`}>
+                          <tr key={assignment.id} className={`hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors ${index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-gray-50/30 dark:bg-slate-800/50'
+                            }`}>
                             <td className="p-3 text-gray-900 dark:text-slate-100">
                               {assignment.bank?.bankName || assignment.customerBank?.bankName || 'N/A'}
                             </td>
@@ -507,11 +689,10 @@ export default function AssignmentsTab() {
                             <td className="p-3 text-gray-900 dark:text-slate-100">{assignment.contractNumber || 'N/A'}</td>
                             <td className="p-3">
                               <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  assignment.status === 'ACTIVE'
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${assignment.status === 'ACTIVE'
                                     ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
                                     : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300'
-                                }`}
+                                  }`}
                               >
                                 {assignment.status || 'ACTIVE'}
                               </span>
@@ -561,8 +742,8 @@ export default function AssignmentsTab() {
               <div className="space-y-2">
                 <Label htmlFor="pengelola-select">Select Pengelola *</Label>
                 <Select
-                  value={assignMachineForm.pengelolaId}
-                  onValueChange={(value) => setAssignMachineForm({ pengelolaId: value })}
+                  value={assignMachineForm.pengelolaId || undefined}
+                  onValueChange={(value) => setAssignMachineForm({ pengelolaId: value || '' })}
                 >
                   <SelectTrigger id="pengelola-select">
                     <SelectValue placeholder="Choose a pengelola..." />
@@ -619,22 +800,22 @@ export default function AssignmentsTab() {
 
       {/* Assign Bank to Pengelola Dialog */}
       <Dialog open={isAssignBankPengelolaDialogOpen} onOpenChange={setIsAssignBankPengelolaDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="max-h-[85vh] flex flex-col p-0 gap-0 max-w-2xl">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-slate-700 flex-shrink-0">
             <DialogTitle>Assign Bank to Pengelola</DialogTitle>
             <DialogDescription>
               Assign a bank to a pengelola. All cassettes belonging to this bank will be accessible to the pengelola.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1 min-h-0 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
             <div className="space-y-2">
               <Label htmlFor="bank-select">Select Bank *</Label>
-              <Select value={selectedBank} onValueChange={setSelectedBank}>
+              <Select value={selectedBank || undefined} onValueChange={setSelectedBank}>
                 <SelectTrigger id="bank-select">
                   <SelectValue placeholder="Choose a bank..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {banks.map((bank) => (
+                  {Array.isArray(banks) && banks.map((bank) => (
                     <SelectItem key={bank.id} value={bank.id}>
                       {bank.bankName} ({bank.bankCode})
                     </SelectItem>
@@ -645,7 +826,7 @@ export default function AssignmentsTab() {
 
             <div className="space-y-2">
               <Label htmlFor="pengelola-bank-select">Select Pengelola *</Label>
-              <Select value={selectedPengelolaForBank} onValueChange={setSelectedPengelolaForBank}>
+              <Select value={selectedPengelolaForBank || undefined} onValueChange={setSelectedPengelolaForBank}>
                 <SelectTrigger id="pengelola-bank-select">
                   <SelectValue placeholder="Choose a pengelola..." />
                 </SelectTrigger>
@@ -659,105 +840,176 @@ export default function AssignmentsTab() {
               </Select>
             </div>
 
-            {selectedBank && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cassette-count">Jumlah Kaset yang Di-assign (Optional)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Masukkan jumlah kaset yang akan di-assign ke pengelola ini. Contoh: 700 kaset. Kosongkan jika pengelola mengelola semua kaset dari bank.
-                  </p>
-                  <Input
-                    id="cassette-count"
-                    type="number"
-                    min="1"
-                    placeholder="e.g., 700"
-                    value={assignedCassetteCount}
-                    onChange={(e) => {
-                      setAssignedCassetteCount(e.target.value);
-                    }}
-                    className="max-w-xs"
-                  />
-                  {assignedCassetteCount && Number(assignedCassetteCount) > 0 && (
-                    <p className="text-xs text-blue-600">
-                      Pengelola akan mengelola maksimal {assignedCassetteCount} kaset dari bank ini.
-                    </p>
-                  )}
-                </div>
+            {selectedBank && (() => {
+              const selectedBankData = Array.isArray(banks) ? banks.find((b) => b.id === selectedBank) : null;
+              const totalMachines = selectedBankData?._count?.machines || 0;
+              const totalCassettes = selectedBankData?._count?.cassettes || 0;
+              const assignedCassetteCountNum = assignedCassetteCount ? Number(assignedCassetteCount) : 0;
+              const remainingCassettes = totalCassettes - assignedCassetteCountNum;
+              const activeAssignmentsForBank = bankPengelolaAssignments.filter(
+                (a) => (a.customerBankId || a.bank?.id || a.customerBank?.id) === selectedBank && a.status === 'ACTIVE'
+              );
 
-                <div className="space-y-2">
-                  <Label htmlFor="branch-assignment">Assign Specific Branches (Optional)</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Kosongkan jika pengelola mengelola semua branch. Isi branch codes jika pengelola hanya mengelola branch tertentu.
-                  </p>
-                
-                  <div className="flex gap-2">
-                    <Input
-                      id="branch-assignment"
-                      placeholder="e.g., BNI-JKT-SUDIRMAN"
-                      value={branchInput}
-                      onChange={(e) => setBranchInput(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          addBranch();
-                        }
-                      }}
-                    />
-                    <Button type="button" variant="outline" onClick={addBranch}>
-                      Add
-                    </Button>
+              // Check if assignment already exists for selected bank-pengelola combination
+              const existingAssignment = selectedPengelolaForBank
+                ? bankPengelolaAssignments.find((a) => {
+                  const bankId = a.customerBankId || a.bank?.id || a.customerBank?.id;
+                  const pengelolaId = a.pengelolaId || a.pengelola?.id;
+                  return bankId === selectedBank && pengelolaId === selectedPengelolaForBank;
+                })
+                : null;
+
+              return (
+                <div className="space-y-4">
+                  {/* Warning if assignment already exists */}
+                  {existingAssignment && (
+                    <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                      <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-300 mb-2">⚠️ Assignment Sudah Ada</h4>
+                      <p className="text-sm text-amber-800 dark:text-amber-400">
+                        Kombinasi bank dan pengelola ini sudah memiliki assignment dengan status: <strong>{existingAssignment.status || 'ACTIVE'}</strong>.
+                        {existingAssignment.status === 'INACTIVE'
+                          ? ' Silakan edit assignment yang ada untuk mengaktifkannya kembali.'
+                          : ' Silakan edit assignment yang ada jika ingin mengubah konfigurasi.'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Bank Resource Information */}
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3">Informasi Bank</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-blue-700 dark:text-blue-400 font-medium">Total Mesin:</span>
+                        <span className="ml-2 text-blue-900 dark:text-blue-200">{totalMachines.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-700 dark:text-blue-400 font-medium">Total Kaset:</span>
+                        <span className="ml-2 text-blue-900 dark:text-blue-200">{totalCassettes.toLocaleString()}</span>
+                      </div>
+                      {activeAssignmentsForBank.length > 0 && (
+                        <div className="col-span-2 mt-2 pt-2 border-t border-blue-300 dark:border-blue-700">
+                          <span className="text-blue-700 dark:text-blue-400 font-medium">Pengelola Aktif:</span>
+                          <span className="ml-2 text-blue-900 dark:text-blue-200">{activeAssignmentsForBank.length} pengelola</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {machinesForBranch.length > 0 && (
-                    <div className="p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs text-gray-600 dark:text-slate-400">
-                      <p className="font-semibold mb-1 text-gray-900 dark:text-slate-100">Available branches from machines:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {Array.from(new Set(machinesForBranch.map((m: any) => m.branchCode).filter(Boolean))).map((branch: string) => (
-                          <button
+                  <div className="space-y-2">
+                    <Label htmlFor="cassette-count">Jumlah Kaset yang Di-assign (Optional)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Masukkan jumlah kaset yang akan di-assign ke pengelola ini. Contoh: 700 kaset. Kosongkan jika pengelola mengelola semua kaset dari bank.
+                    </p>
+                    <Input
+                      id="cassette-count"
+                      type="number"
+                      min="1"
+                      max={totalCassettes}
+                      placeholder="e.g., 700"
+                      value={assignedCassetteCount}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value || Number(value) <= totalCassettes) {
+                          setAssignedCassetteCount(value);
+                        }
+                      }}
+                      className="max-w-xs"
+                    />
+                    {assignedCassetteCount && Number(assignedCassetteCount) > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          Pengelola akan mengelola maksimal {Number(assignedCassetteCount).toLocaleString()} kaset dari bank ini.
+                        </p>
+                        {totalCassettes > 0 && (
+                          <p className={`text-xs ${remainingCassettes >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            Kaset tersisa: {Math.max(0, remainingCassettes).toLocaleString()} dari {totalCassettes.toLocaleString()} total kaset
+                            {remainingCassettes < 0 && ' (melebihi total kaset!)'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {!assignedCassetteCount && totalCassettes > 0 && (
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Jika dikosongkan, pengelola akan mengelola semua {totalCassettes.toLocaleString()} kaset dari bank ini.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="branch-assignment">Assign Specific Branches (Optional)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Kosongkan jika pengelola mengelola semua branch. Isi branch codes jika pengelola hanya mengelola branch tertentu.
+                    </p>
+
+                    <div className="flex gap-2">
+                      <Input
+                        id="branch-assignment"
+                        placeholder="e.g., BNI-JKT-SUDIRMAN"
+                        value={branchInput}
+                        onChange={(e) => setBranchInput(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addBranch();
+                          }
+                        }}
+                      />
+                      <Button type="button" variant="outline" onClick={addBranch}>
+                        Add
+                      </Button>
+                    </div>
+
+                    {machinesForBranch.length > 0 && (
+                      <div className="p-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs text-gray-600 dark:text-slate-400">
+                        <p className="font-semibold mb-1 text-gray-900 dark:text-slate-100">Available branches from machines:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {Array.from(new Set(machinesForBranch.map((m: any) => m.branchCode).filter(Boolean))).map((branch: string) => (
+                            <button
+                              key={branch}
+                              type="button"
+                              onClick={() => {
+                                if (!assignedBranches.includes(branch)) {
+                                  setAssignedBranches([...assignedBranches, branch]);
+                                }
+                              }}
+                              className="px-2 py-1 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-100 dark:hover:bg-slate-600 text-xs text-gray-900 dark:text-slate-100"
+                            >
+                              {branch}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {assignedBranches.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {assignedBranches.map((branch) => (
+                          <span
                             key={branch}
-                            type="button"
-                            onClick={() => {
-                              if (!assignedBranches.includes(branch)) {
-                                setAssignedBranches([...assignedBranches, branch]);
-                              }
-                            }}
-                            className="px-2 py-1 bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded hover:bg-gray-100 dark:hover:bg-slate-600 text-xs text-gray-900 dark:text-slate-100"
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 rounded text-sm"
                           >
                             {branch}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => removeBranch(branch)}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                            >
+                              ×
+                            </button>
+                          </span>
                         ))}
                       </div>
-                    </div>
-                  )}
-
-                  {assignedBranches.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {assignedBranches.map((branch) => (
-                        <span
-                          key={branch}
-                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 rounded text-sm"
-                        >
-                          {branch}
-                          <button
-                            type="button"
-                            onClick={() => removeBranch(branch)}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {selectedBank && selectedPengelolaForBank && (
               <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
                 <p className="text-sm text-blue-800 dark:text-blue-300">
                   <strong>Note:</strong> {pengelola.find((p) => p.id === selectedPengelolaForBank)?.companyName} akan mengelola cassettes dari{' '}
-                  {banks.find((b) => b.id === selectedBank)?.bankName}
+                  {Array.isArray(banks) ? banks.find((b) => b.id === selectedBank)?.bankName : ''}
                   {assignedCassetteCount && assignedCassetteCount.trim() !== '' && Number(assignedCassetteCount) > 0
                     ? ` (maksimal ${assignedCassetteCount} kaset)`
                     : ' (semua kaset)'}
@@ -780,7 +1032,7 @@ export default function AssignmentsTab() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50 flex-shrink-0">
             <Button
               variant="outline"
               onClick={() => {
@@ -798,8 +1050,17 @@ export default function AssignmentsTab() {
             </Button>
             <Button
               onClick={handleAssignBankPengelola}
-              disabled={loading || !selectedBank || !selectedPengelolaForBank}
-              className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 text-white"
+              disabled={
+                loading ||
+                !selectedBank ||
+                !selectedPengelolaForBank ||
+                Boolean(selectedBank && selectedPengelolaForBank && bankPengelolaAssignments.some((a) => {
+                  const bankId = a.customerBankId || a.bank?.id || a.customerBank?.id;
+                  const pengelolaId = a.pengelolaId || a.pengelola?.id;
+                  return bankId === selectedBank && pengelolaId === selectedPengelolaForBank;
+                }))
+              }
+              className="bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
@@ -808,6 +1069,307 @@ export default function AssignmentsTab() {
                 </>
               ) : (
                 'Assign Bank to Pengelola'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Assign Machines Dialog */}
+      <Dialog open={isBulkAssignDialogOpen} onOpenChange={setIsBulkAssignDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bulk Assign Machines to Pengelola</DialogTitle>
+            <DialogDescription>
+              Select machines and assign them to a pengelola. All cassettes (10 per machine: 5 main + 5 backup) will be automatically accessible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="bulk-pengelola-select">Select Pengelola *</Label>
+              <Select value={bulkAssignPengelolaId || undefined} onValueChange={setBulkAssignPengelolaId}>
+                <SelectTrigger id="bulk-pengelola-select">
+                  <SelectValue placeholder="Choose a pengelola..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {pengelola.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.companyName} ({p.pengelolaCode})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Select Machines (Unassigned Only)</Label>
+              <div className="border rounded-md p-3 max-h-60 overflow-y-auto space-y-2">
+                {machines.filter(m => !m.pengelolaId).length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-slate-400 text-center py-4">No unassigned machines found</p>
+                ) : (
+                  machines.filter(m => !m.pengelolaId).map((machine) => (
+                    <label key={machine.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 p-2 rounded">
+                      <Checkbox
+                        checked={selectedMachines.includes(machine.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedMachines([...selectedMachines, machine.id]);
+                          } else {
+                            setSelectedMachines(selectedMachines.filter(id => id !== machine.id));
+                          }
+                        }}
+                      />
+                      <span className="text-sm flex-1">
+                        <span className="font-mono font-medium">{machine.serialNumberManufacturer}</span>
+                        <span className="text-gray-500 dark:text-slate-400 ml-2">({machine.machineCode || 'N/A'})</span>
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {selectedMachines.length > 0 && (
+                <p className="text-xs text-gray-600 dark:text-slate-400">
+                  Selected: {selectedMachines.length} machine(s)
+                </p>
+              )}
+            </div>
+            {error && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                <p className="text-sm text-green-800 dark:text-green-300">{success}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsBulkAssignDialogOpen(false);
+                setBulkAssignPengelolaId('');
+                setSelectedMachines([]);
+                setError('');
+                setSuccess('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkAssign}
+              disabled={loading || !bulkAssignPengelolaId || selectedMachines.length === 0}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                `Assign ${selectedMachines.length} Machine(s)`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Distribute Machines Dialog */}
+      <Dialog open={isDistributeDialogOpen} onOpenChange={setIsDistributeDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Distribute Machines to Pengelola</DialogTitle>
+            <DialogDescription>
+              Distribute all unassigned machines evenly across selected pengelola. Each machine has 10 cassettes (5 main + 5 backup) that will be automatically accessible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="distribute-bank-select">Filter by Bank (Optional)</Label>
+              <Select value={distributeBankId ? distributeBankId : "all"} onValueChange={(value) => setDistributeBankId(value === "all" ? "" : value)}>
+                <SelectTrigger id="distribute-bank-select">
+                  <SelectValue placeholder="All banks (or select specific bank)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Banks</SelectItem>
+                  {Array.isArray(banks) && banks.map((bank) => (
+                    <SelectItem key={bank.id} value={bank.id}>
+                      {bank.bankName} ({bank.bankCode})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Select Pengelola * (Select multiple)</Label>
+              <div className="border rounded-md p-3 max-h-60 overflow-y-auto space-y-2">
+                {pengelola.map((p) => (
+                  <label key={p.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 p-2 rounded">
+                    <Checkbox
+                      checked={distributePengelolaIds.includes(p.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setDistributePengelolaIds([...distributePengelolaIds, p.id]);
+                        } else {
+                          setDistributePengelolaIds(distributePengelolaIds.filter(id => id !== p.id));
+                        }
+                      }}
+                    />
+                    <span className="text-sm">{p.companyName} ({p.pengelolaCode})</span>
+                  </label>
+                ))}
+              </div>
+              {distributePengelolaIds.length > 0 && (
+                <p className="text-xs text-gray-600 dark:text-slate-400">
+                  Selected: {distributePengelolaIds.length} pengelola
+                </p>
+              )}
+            </div>
+            {error && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                <p className="text-sm text-green-800 dark:text-green-300">{success}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDistributeDialogOpen(false);
+                setDistributePengelolaIds([]);
+                setDistributeBankId('');
+                setError('');
+                setSuccess('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDistribute}
+              disabled={loading || distributePengelolaIds.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Distributing...
+                </>
+              ) : (
+                'Distribute Machines'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unassign Machines Dialog */}
+      <Dialog open={isUnassignDialogOpen} onOpenChange={setIsUnassignDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              Unassign Machines
+            </DialogTitle>
+            <DialogDescription>
+              Unassign machines from pengelola. This will set pengelolaId to null for selected machines. Bank assignments will remain unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Unassign Option *</Label>
+              <Select value={unassignOption} onValueChange={(value: 'all' | 'pengelola' | 'bank') => setUnassignOption(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Unassign All Machines</SelectItem>
+                  <SelectItem value="pengelola">Unassign from Specific Pengelola</SelectItem>
+                  <SelectItem value="bank">Unassign from Specific Bank</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {unassignOption === 'pengelola' && (
+              <div className="space-y-2">
+                <Label htmlFor="unassign-pengelola-select">Select Pengelola *</Label>
+                <Select value={unassignPengelolaId || undefined} onValueChange={setUnassignPengelolaId}>
+                  <SelectTrigger id="unassign-pengelola-select">
+                    <SelectValue placeholder="Choose a pengelola..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pengelola.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.companyName} ({p.pengelolaCode})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {unassignOption === 'bank' && (
+              <div className="space-y-2">
+                <Label htmlFor="unassign-bank-select">Select Bank *</Label>
+                <Select value={unassignBankId || undefined} onValueChange={setUnassignBankId}>
+                  <SelectTrigger id="unassign-bank-select">
+                    <SelectValue placeholder="Choose a bank..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.isArray(banks) && banks.map((bank) => (
+                      <SelectItem key={bank.id} value={bank.id}>
+                        {bank.bankName} ({bank.bankCode})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {error && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                <p className="text-sm text-green-800 dark:text-green-300">{success}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsUnassignDialogOpen(false);
+                setUnassignOption('all');
+                setUnassignPengelolaId('');
+                setUnassignBankId('');
+                setError('');
+                setSuccess('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUnassign}
+              disabled={loading || (unassignOption === 'pengelola' && !unassignPengelolaId) || (unassignOption === 'bank' && !unassignBankId)}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Unassigning...
+                </>
+              ) : (
+                <>
+                  <X className="mr-2 h-4 w-4" />
+                  Unassign Machines
+                </>
               )}
             </Button>
           </DialogFooter>

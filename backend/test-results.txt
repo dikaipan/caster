@@ -1,0 +1,109 @@
+﻿
+> hcm-backend@0.1.0 test
+> jest --verbose
+
+node.exe : [31m[Nest] 31820  - [39m01/02/2026, 3:11:32 PM [31m  
+ERROR[39m [38;5;3m[TicketsService] [39m[31mError in findOne ticket[39m
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([31m[Nest] 318...One ticket   
+ [39m:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+PASS src/cassettes/cassettes.service.spec.ts (13.498 s)
+  CassettesService
+    ÔêÜ should be defined (51 ms)
+    findAll
+      ÔêÜ should return paginated cassettes for HITACHI user (16 ms)
+      ÔêÜ should filter by status when provided (11 ms)
+      ÔêÜ should search by keyword (5 ms)
+      ÔêÜ should filter by customerBankId when provided (12 ms)
+    findOne
+      ÔêÜ should return a cassette by id (5 ms)
+      ÔêÜ should throw NotFoundException if cassette not found (91 ms)
+    getCassetteTypes
+      ÔêÜ should return all cassette types (4 ms)
+    getStatisticsByBank
+      ÔêÜ should return statistics for a bank (5 ms)
+
+[31m[Nest] 31820  - [39m01/02/2026, 3:11:32 PM [31m  ERROR[39m 
+[38;5;3m[TicketsService] [39m[31mObject:[39m
+{
+  "ticketId": "non-existent",
+  "userType": "HITACHI",
+  "error": "Ticket with ID non-existent not found",
+  "stack": "NotFoundException: Ticket with ID non-existent not found\n    
+at TicketsService.findOne (D:\\Dev\\HCS Cassete 
+management\\hcm\\backend\\src\\tickets\\tickets.service.ts:357:15)\n    at 
+processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at 
+Object.<anonymous> (D:\\Dev\\HCS Cassete 
+management\\hcm\\backend\\src\\tickets\\tickets.service.spec.ts:164:13)"
+}
+
+[31m[Nest] 31820  - [39m01/02/2026, 3:11:32 PM [31m  ERROR[39m 
+[38;5;3m[TicketsService] [39m[31mError in findOne ticket[39m
+[31m[Nest] 31820  - [39m01/02/2026, 3:11:32 PM [31m  ERROR[39m 
+[38;5;3m[TicketsService] [39m[31mObject:[39m
+{
+  "ticketId": "ticket-123",
+  "userType": "PENGELOLA",
+  "error": "You do not have access to this ticket",
+  "stack": "ForbiddenException: You do not have access to this ticket\n    
+at TicketsService.findOne (D:\\Dev\\HCS Cassete 
+management\\hcm\\backend\\src\\tickets\\tickets.service.ts:368:17)\n    at 
+processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at 
+Object.<anonymous> (D:\\Dev\\HCS Cassete 
+management\\hcm\\backend\\src\\tickets\\tickets.service.spec.ts:179:13)"
+}
+
+PASS src/tickets/tickets.service.spec.ts (13.543 s)
+  TicketsService
+    ÔêÜ should be defined (57 ms)
+    findAll
+      ÔêÜ should return paginated tickets for HITACHI user (14 ms)
+      ÔêÜ should filter tickets by pengelolaId for PENGELOLA user (16 ms)
+      ÔêÜ should filter by status when provided (5 ms)
+      ÔêÜ should search tickets by keyword (6 ms)
+    findOne
+      ÔêÜ should return a ticket by id for HITACHI user (5 ms)
+      ÔêÜ should throw NotFoundException if ticket not found (116 ms)
+      ÔêÜ should throw ForbiddenException for PENGELOLA accessing 
+unassigned ticket (8 ms)
+      ÔêÜ should allow PENGELOLA to access their own ticket (7 ms)
+    getStatistics
+      ÔêÜ should return ticket statistics (9 ms)
+    getNewTicketsCount
+      ÔêÜ should return count of new tickets for HITACHI (7 ms)
+      ÔêÜ should filter by pengelolaId for PENGELOLA user (2 ms)
+
+PASS src/repairs/repairs.service.spec.ts (13.697 s)
+  RepairsService
+    ÔêÜ should be defined (68 ms)
+    findAll
+      ÔêÜ should return paginated repair tickets for HITACHI user with 
+RC_STAFF role (14 ms)
+      ÔêÜ should filter by status when provided (7 ms)
+      ÔêÜ should search by keyword (5 ms)
+      ÔêÜ should throw ForbiddenException for non-HITACHI users (67 ms)
+    findOne
+      ÔêÜ should return a repair ticket by id (5 ms)
+      ÔêÜ should throw NotFoundException if repair not found (8 ms)
+    findByTicketId
+      ÔêÜ should return repair tickets for a service order ticket (4 ms)
+      ÔêÜ should throw ForbiddenException for non-HITACHI users (5 ms)
+    getStatistics
+      ÔêÜ should return repair statistics (7 ms)
+    takeTicket
+      ÔêÜ should assign repair ticket to user and update status (3 ms)
+      ÔêÜ should throw error if ticket already assigned (5 ms)
+
+PASS src/auth/auth.service.spec.ts (14.054 s)
+  AuthService
+    ÔêÜ should be defined (36 ms)
+
+Test Suites: 4 passed, 4 total
+Tests:       34 passed, 34 total
+Snapshots:   0 total
+Time:        15.645 s, estimated 34 s
+Ran all test suites.

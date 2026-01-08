@@ -34,12 +34,12 @@ if (Test-Path ".env") {
         }
     } else {
         Write-Host "⚠️  DATABASE_URL doesn't seem to be MySQL. Please update .env file." -ForegroundColor Yellow
-        Write-Host "   For XAMPP: DATABASE_URL='mysql://root:@localhost:3306/hcm_mysql_dev'" -ForegroundColor Gray
+        Write-Host "   For XAMPP: DATABASE_URL='mysql://root:@localhost:3306/caster'" -ForegroundColor Gray
         Write-Host "   For Remote: DATABASE_URL='mysql://user:password@host:3306/database'" -ForegroundColor Gray
     }
 } else {
     Write-Host "⚠️  .env file not found. Please create it with DATABASE_URL." -ForegroundColor Yellow
-    Write-Host "   For XAMPP: DATABASE_URL='mysql://root:@localhost:3306/hcm_mysql_dev'" -ForegroundColor Gray
+    Write-Host "   For XAMPP: DATABASE_URL='mysql://root:@localhost:3306/caster'" -ForegroundColor Gray
 }
 
 # Step 4: Generate Prisma Client

@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsEnum, IsOptional, IsDateString, IsInt } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsOptional, IsInt } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateStringFlexible } from '../../common/validators/date-string.validator';
 
 export enum MachineStatus {
   OPERATIONAL = 'OPERATIONAL',
@@ -54,8 +55,8 @@ export class CreateMachineDto {
   @IsOptional()
   province?: string;
 
-  @ApiPropertyOptional({ example: '2023-06-15' })
-  @IsDateString()
+  @ApiPropertyOptional({ example: '2023-06-15', description: 'Installation date in format YYYY-MM-DD or ISO 8601 DateTime (YYYY-MM-DDTHH:mm:ssZ)' })
+  @IsDateStringFlexible({ message: 'installationDate must be a valid date string in format YYYY-MM-DD or ISO 8601 DateTime (YYYY-MM-DDTHH:mm:ssZ)' })
   @IsOptional()
   installationDate?: string;
 

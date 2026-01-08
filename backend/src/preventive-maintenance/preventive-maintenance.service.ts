@@ -5,7 +5,7 @@ import { UpdatePreventiveMaintenanceDto } from './dto/update-pm.dto';
 
 @Injectable()
 export class PreventiveMaintenanceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   /**
    * Generate PM Number: PM-YYMMDD[urutan]
@@ -142,7 +142,7 @@ export class PreventiveMaintenanceService {
 
     // Determine type and requester based on user type
     const isVendorRequest = userType?.toUpperCase() === 'PENGELOLA';
-    
+
     // Validate and set PM type
     let pmType: PreventiveMaintenanceType;
     if (isVendorRequest) {
@@ -160,7 +160,7 @@ export class PreventiveMaintenanceService {
       // Use the type from DTO directly (already validated by DTO)
       pmType = createDto.type;
     }
-    
+
     const requestedByType = isVendorRequest ? 'pengelola' : 'HITACHI';
 
     // Create PM with cassette details
@@ -168,7 +168,7 @@ export class PreventiveMaintenanceService {
       // Calculate nextPmDate for ROUTINE PMs
       const scheduledDate = new Date(createDto.scheduledDate);
       const interval = createDto.nextPmInterval || 90;
-      const nextPmDate = createDto.type === PreventiveMaintenanceType.ROUTINE 
+      const nextPmDate = createDto.type === PreventiveMaintenanceType.ROUTINE
         ? new Date(scheduledDate.getTime() + interval * 24 * 60 * 60 * 1000)
         : null;
 
@@ -258,7 +258,7 @@ export class PreventiveMaintenanceService {
     if (dateFilter) {
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
+
       let dateFilterClause: any = {};
       switch (dateFilter) {
         case 'TODAY':
@@ -555,25 +555,25 @@ export class PreventiveMaintenanceService {
         if (!updateDto.scheduledDate) {
           throw new BadRequestException('Scheduled date is required when rescheduling PM');
         }
-        
+
         const newScheduledDate = new Date(updateDto.scheduledDate);
         const oldScheduledDate = pm.scheduledDate;
-        
+
         // Validate new date is in the future
         if (newScheduledDate <= new Date()) {
           throw new BadRequestException('New scheduled date must be in the future');
         }
-        
+
         // Update scheduled date
         updateData.scheduledDate = newScheduledDate;
-        
+
         // Add reschedule note to track history
         const rescheduleReason = updateDto.rescheduledReason || 'Tidak ada alasan yang diberikan';
         const rescheduleNote = `PM dijadwalkan ulang dari ${oldScheduledDate.toLocaleDateString('id-ID')} ke ${newScheduledDate.toLocaleDateString('id-ID')} pada ${new Date().toLocaleDateString('id-ID')}. Alasan: ${rescheduleReason}`;
-        updateData.notes = pm.notes 
-          ? `${pm.notes}\n\n${rescheduleNote}` 
+        updateData.notes = pm.notes
+          ? `${pm.notes}\n\n${rescheduleNote}`
           : rescheduleNote;
-        
+
         // After reschedule, status returns to SCHEDULED with new date
         updateData.status = 'SCHEDULED';
       } else {
@@ -599,7 +599,9 @@ export class PreventiveMaintenanceService {
       updateData.actionsTaken = updateDto.actionsTaken;
     }
     if (updateDto.partsReplaced !== undefined) {
-      updateData.partsReplaced = updateDto.partsReplaced;
+      updateData.partsReplaced = typeof updateDto.partsReplaced === 'string'
+        ? updateDto.partsReplaced
+        : JSON.stringify(updateDto.partsReplaced);
     }
     if (updateDto.recommendations !== undefined) {
       updateData.recommendations = updateDto.recommendations;
@@ -611,7 +613,9 @@ export class PreventiveMaintenanceService {
       updateData.nextPmInterval = updateDto.nextPmInterval;
     }
     if (updateDto.checklist !== undefined) {
-      updateData.checklist = updateDto.checklist;
+      updateData.checklist = typeof updateDto.checklist === 'string'
+        ? updateDto.checklist
+        : JSON.stringify(updateDto.checklist);
     }
     if (updateDto.notes !== undefined) {
       updateData.notes = updateDto.notes;
@@ -732,7 +736,15 @@ export class PreventiveMaintenanceService {
           cassetteId,
         },
       },
-      data: updateData,
+      data: {
+        ...updateData,
+        checklist: updateData.checklist && typeof updateData.checklist !== 'string'
+          ? JSON.stringify(updateData.checklist)
+          : updateData.checklist,
+        partsReplaced: updateData.partsReplaced && typeof updateData.partsReplaced !== 'string'
+          ? JSON.stringify(updateData.partsReplaced)
+          : updateData.partsReplaced,
+      },
       include: {
         cassette: {
           include: {
@@ -825,7 +837,7 @@ export class PreventiveMaintenanceService {
       data: {
         nextPmDate: null,
         nextPmInterval: null,
-        notes: pm.notes 
+        notes: pm.notes
           ? `${pm.notes}\n[Auto-scheduling dinonaktifkan pada ${new Date().toLocaleDateString('id-ID')} oleh ${userType === 'PENGELOLA' ? 'Pengelola' : 'Hitachi'}]`
           : `Auto-scheduling dinonaktifkan pada ${new Date().toLocaleDateString('id-ID')} oleh ${userType === 'PENGELOLA' ? 'Pengelola' : 'Hitachi'}`,
       },
@@ -873,7 +885,7 @@ export class PreventiveMaintenanceService {
       data: {
         deletedAt: new Date(),
         deletedBy: userId,
-        notes: pm.notes 
+        notes: pm.notes
           ? `${pm.notes}\n[DELETED on ${new Date().toLocaleDateString('id-ID')} by ${userRole === 'SUPER_ADMIN' ? 'Super Admin' : 'RC Manager'}]`
           : `[DELETED on ${new Date().toLocaleDateString('id-ID')} by ${userRole === 'SUPER_ADMIN' ? 'Super Admin' : 'RC Manager'}]`,
       },

@@ -4,14 +4,19 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const requestId = (request as any).id || request.headers['x-request-id'] || 'unknown';
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
@@ -53,20 +58,45 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (exception.message.includes('Unknown argument') || 
           exception.message.includes('Unknown field') ||
           exception.message.includes('Argument') && exception.message.includes('is missing')) {
-        console.error('❌ Prisma Error Details:', {
+        this.logger.error('Prisma Error', {
+          requestId,
           message: exception.message,
           stack: exception.stack,
           name: exception.name,
+          path: request.url,
+          method: request.method,
         });
         message = `Database error: ${exception.message}. Please ensure Prisma client is up-to-date by running 'npx prisma generate' in the backend directory.`;
       } else {
-        // Log all other errors
-        console.error('❌ Unhandled Error:', {
+        // Log all other errors with structured logging
+        this.logger.error('Unhandled Error', {
+          requestId,
           message: exception.message,
           stack: exception.stack,
           name: exception.name,
+          path: request.url,
+          method: request.method,
         });
       }
+    }
+
+    // Log error response for monitoring
+    if (status >= 500) {
+      this.logger.error(`HTTP ${status} Error Response`, {
+        requestId,
+        status,
+        message,
+        path: request.url,
+        method: request.method,
+      });
+    } else if (status >= 400) {
+      this.logger.warn(`HTTP ${status} Client Error`, {
+        requestId,
+        status,
+        message,
+        path: request.url,
+        method: request.method,
+      });
     }
 
     response.status(status).json({
@@ -74,6 +104,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       message,
       errors,
+      requestId, // Include request ID in error response for debugging
     });
   }
 }

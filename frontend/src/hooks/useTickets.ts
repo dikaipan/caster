@@ -42,8 +42,16 @@ export function useTickets(filters: {
       const response = await api.get('/tickets', { params });
       return response.data;
     },
-    // Data dianggap fresh selama 2 menit
-    staleTime: 2 * 60 * 1000,
+    // Data dianggap fresh selama 3 menit - balance antara freshness dan performance
+    staleTime: 3 * 60 * 1000,
+    // Auto-refetch setiap 3 menit untuk update (sama dengan useTicketCounts)
+    refetchInterval: 3 * 60 * 1000,
+    // Enable refetch on window focus untuk update saat user kembali ke tab
+    refetchOnWindowFocus: true,
+    // Enable refetch on reconnect
+    refetchOnReconnect: true,
+    // Always refetch on mount untuk memastikan data terbaru
+    refetchOnMount: true,
     enabled, // Hanya fetch jika enabled
   });
 }

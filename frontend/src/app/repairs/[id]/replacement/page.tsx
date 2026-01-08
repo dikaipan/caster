@@ -62,7 +62,12 @@ export default function ReplacementPage() {
           try {
             // Find ticket via cassette delivery
             const deliveriesResponse = await api.get(`/tickets?cassetteId=${repairResponse.data.cassette.id}`);
-            const tickets = deliveriesResponse.data?.tickets || deliveriesResponse.data || [];
+            // API returns { data: [...], pagination: {...} } structure
+            const tickets = Array.isArray(deliveriesResponse.data?.data) 
+              ? deliveriesResponse.data.data 
+              : Array.isArray(deliveriesResponse.data) 
+                ? deliveriesResponse.data 
+                : [];
             const replacementTicket = tickets.find((t: any) => {
               // Check if ticket has replacement request
               if (t.cassetteDetails && t.cassetteDetails.length > 0) {

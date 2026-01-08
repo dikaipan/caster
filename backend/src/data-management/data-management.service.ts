@@ -95,17 +95,41 @@ export class DataManagementService {
     }
   }
 
-  async executeQuery(query: string) {
+  async executeQuery(query: string, requestId?: string) {
     // Security: Only allow SELECT queries
     const trimmedQuery = query.trim().toUpperCase();
     if (!trimmedQuery.startsWith('SELECT')) {
       throw new Error('Only SELECT queries are allowed for safety');
     }
 
+    // Security: Query size limit (prevent extremely large queries)
+    const MAX_QUERY_LENGTH = 50000; // 50KB limit
+    if (query.length > MAX_QUERY_LENGTH) {
+      throw new Error(`Query exceeds maximum length of ${MAX_QUERY_LENGTH} characters`);
+    }
+
+    // Security: Query timeout (5 seconds)
+    const QUERY_TIMEOUT_MS = 5000;
+
     try {
       const startTime = Date.now();
-      const result = await this.prisma.$queryRawUnsafe(query);
-      const executionTime = `${Date.now() - startTime}ms`;
+      
+      // Execute query with timeout
+      const queryPromise = this.prisma.$queryRawUnsafe(query);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Query execution timeout')), QUERY_TIMEOUT_MS)
+      );
+
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      const executionTime = Date.now() - startTime;
+
+      // Log query execution for audit (security logging)
+      console.log(`[DataManagement] Query executed`, {
+        requestId,
+        executionTime: `${executionTime}ms`,
+        queryLength: query.length,
+        timestamp: new Date().toISOString(),
+      });
 
       // Convert result to array if it's not already
       const rows = Array.isArray(result) ? result : [result];
@@ -118,10 +142,21 @@ export class DataManagementService {
       return {
         rows,
         columns,
-        executionTime,
+        executionTime: `${executionTime}ms`,
         affectedRows: rows.length,
       };
     } catch (error: any) {
+      // Log query execution error for audit
+      console.error(`[DataManagement] Query execution failed`, {
+        requestId,
+        error: error.message,
+        queryLength: query.length,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (error.message === 'Query execution timeout') {
+        throw new Error(`Query execution timeout after ${QUERY_TIMEOUT_MS}ms`);
+      }
       throw new Error(`Query execution failed: ${error.message}`);
     }
   }
@@ -718,6 +753,109 @@ export class DataManagementService {
       return files;
     } catch (error: any) {
       throw new Error(`Failed to list backups: ${error.message}`);
+    }
+  }
+
+  /**
+   * Delete all machines and cassettes from database
+   * This will also delete all related data (tickets, repairs, deliveries, etc.)
+   * Use with caution - this operation cannot be undone!
+   */
+  async deleteAllMachinesAndCassettes(): Promise<{ 
+    success: boolean; 
+    message: string; 
+    deletedCounts: {
+      machines: number;
+      cassettes: number;
+      problemTickets: number;
+      repairTickets: number;
+      cassetteDeliveries: number;
+      cassetteReturns: number;
+      pmCassetteDetails: number;
+      ticketCassetteDetails: number;
+      machineIdentifierHistory: number;
+      preventiveMaintenances: number;
+    }
+  }> {
+    try {
+      // Use transaction to ensure data consistency
+      return await this.prisma.$transaction(async (tx) => {
+        // Count records before deletion (for reporting)
+        const [
+          machineCount,
+          cassetteCount,
+          problemTicketCount,
+          repairTicketCount,
+          cassetteDeliveryCount,
+          cassetteReturnCount,
+          pmCassetteDetailCount,
+          ticketCassetteDetailCount,
+          machineIdentifierHistoryCount,
+          preventiveMaintenanceCount,
+        ] = await Promise.all([
+          tx.machine.count(),
+          tx.cassette.count(),
+          tx.problemTicket.count(),
+          tx.repairTicket.count(),
+          tx.cassetteDelivery.count(),
+          tx.cassetteReturn.count(),
+          tx.pMCassetteDetail.count(),
+          tx.ticketCassetteDetail.count(),
+          tx.machineIdentifierHistory.count(),
+          tx.preventiveMaintenance.count(),
+        ]);
+
+        // Delete in correct order (respecting foreign key constraints)
+        // 1. Delete data that references cassettes/machines first
+        await tx.ticketCassetteDetail.deleteMany();
+        await tx.pMCassetteDetail.deleteMany();
+        await tx.cassetteDelivery.deleteMany();
+        await tx.cassetteReturn.deleteMany();
+        await tx.repairTicket.deleteMany();
+        await tx.problemTicket.deleteMany();
+        await tx.preventiveMaintenance.deleteMany();
+        await tx.machineIdentifierHistory.deleteMany();
+        
+        // 2. Delete cassettes (handle self-references by clearing them first)
+        // Clear self-references first
+        await tx.cassette.updateMany({
+          where: {
+            OR: [
+              { replacedCassetteId: { not: null } },
+              { replacementTicketId: { not: null } },
+            ],
+          },
+          data: {
+            replacedCassetteId: null,
+            replacementTicketId: null,
+          },
+        });
+        
+        // Now delete all cassettes
+        await tx.cassette.deleteMany();
+        
+        // 3. Delete machines
+        await tx.machine.deleteMany();
+
+        return {
+          success: true,
+          message: `Successfully deleted ${machineCount} machines and ${cassetteCount} cassettes with all related data`,
+          deletedCounts: {
+            machines: machineCount,
+            cassettes: cassetteCount,
+            problemTickets: problemTicketCount,
+            repairTickets: repairTicketCount,
+            cassetteDeliveries: cassetteDeliveryCount,
+            cassetteReturns: cassetteReturnCount,
+            pmCassetteDetails: pmCassetteDetailCount,
+            ticketCassetteDetails: ticketCassetteDetailCount,
+            machineIdentifierHistory: machineIdentifierHistoryCount,
+            preventiveMaintenances: preventiveMaintenanceCount,
+          },
+        };
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete machines and cassettes: ${error.message}`);
     }
   }
 }

@@ -23,6 +23,11 @@ import { DataManagementModule } from './data-management/data-management.module';
 import { UsersModule } from './users/users.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { WarrantyModule } from './warranty/warranty.module';
+import { AuditModule } from './audit/audit.module';
+import { SystemConfigModule } from './system-config/system-config.module';
+import { WinstonModule } from 'nest-winston';
+import { winstonConfig } from './common/config/winston.config';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -31,24 +36,34 @@ import { WarrantyModule } from './warranty/warranty.module';
     }),
     // Scheduled Tasks
     ScheduleModule.forRoot(),
-    // Security: Rate Limiting
-    ThrottlerModule.forRoot([
-      {
-        name: 'short',
-        ttl: 60000, // 1 minute
-        limit: 30, // 30 requests per minute (increased to accommodate polling)
+    // Security: Rate Limiting (disabled in test environment)
+    ThrottlerModule.forRootAsync({
+      useFactory: () => {
+        return process.env.NODE_ENV === 'test'
+          ? [
+            { name: 'short', ttl: 60000, limit: 10000 },
+            { name: 'medium', ttl: 60000, limit: 10000 },
+            { name: 'long', ttl: 60000, limit: 10000 },
+          ]
+          : [
+            {
+              name: 'short',
+              ttl: 60000, // 1 minute
+              limit: 30, // 30 requests per minute (increased to accommodate polling)
+            },
+            {
+              name: 'medium',
+              ttl: 600000, // 10 minutes
+              limit: 200, // 200 requests per 10 minutes
+            },
+            {
+              name: 'long',
+              ttl: 3600000, // 1 hour
+              limit: 1000, // 1000 requests per hour
+            },
+          ];
       },
-      {
-        name: 'medium',
-        ttl: 600000, // 10 minutes
-        limit: 200, // 200 requests per 10 minutes
-      },
-      {
-        name: 'long',
-        ttl: 3600000, // 1 hour
-        limit: 1000, // 1000 requests per hour
-      },
-    ]),
+    }),
     PrismaModule,
     AuthModule,
     BanksModule,
@@ -64,6 +79,10 @@ import { WarrantyModule } from './warranty/warranty.module';
     UsersModule,
     AnalyticsModule,
     WarrantyModule,
+    AuditModule,
+    SystemConfigModule,
+    WinstonModule.forRoot(winstonConfig),
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
@@ -75,5 +94,9 @@ import { WarrantyModule } from './warranty/warranty.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule {
+  constructor() {
+    console.log(`[AppModule] NODE_ENV: ${process.env.NODE_ENV}`);
+  }
+}
 

@@ -9,6 +9,7 @@ import {
   UseInterceptors,
   UploadedFile,
   Res,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
@@ -155,7 +156,7 @@ export class ImportController {
   }))
   @ApiOperation({ 
     summary: 'Bulk import machines and cassettes from CSV (Admin only)',
-    description: 'Import machines with 10 cassettes (5 main + 5 backup) from CSV file. Format: SN Mesin, SN Kaset Utama 1-5, SN Kaset Cadangan 1-5. Requires bank_code and pengelola_code as query parameters.'
+    description: 'Import machines with 10 cassettes (5 main + 5 backup) from CSV file. Format: SN Mesin, SN Kaset Utama 1-5, SN Kaset Cadangan 1-5. Requires bank_code as query parameter. pengelola_code is optional - if not provided, can be assigned manually later.'
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -170,11 +171,11 @@ export class ImportController {
         },
         bank_code: {
           type: 'string',
-          description: 'Bank code (query parameter)',
+          description: 'Bank code (required query parameter)',
         },
         pengelola_code: {
           type: 'string',
-          description: 'Pengelola code (query parameter)',
+          description: 'Pengelola code (optional query parameter - if not provided, can be assigned manually later)',
         },
       },
     },
@@ -189,15 +190,16 @@ export class ImportController {
       throw new Error('File is required');
     }
     
-    // Get bank_code and pengelola_code from query or use defaults
-    const finalBankCode = bankCode || 'BNI001';
-    const finalVendorCode = pengelolaCode || 'VND-TAG-001';
+    // bank_code is required, pengelola_code is optional (can be assigned manually later)
+    if (!bankCode) {
+      throw new BadRequestException('bank_code is required as query parameter');
+    }
 
     return this.importService.importMachineCassettesFromCSV(
       file,
       req.user.id,
-      finalBankCode,
-      finalVendorCode,
+      bankCode,
+      pengelolaCode, // Optional - can be undefined if not provided
     );
   }
 
@@ -210,6 +212,18 @@ export class ImportController {
     const template = this.importService.generateMachineCassetteCSVTemplate();
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="machine_cassettes_import_template.csv"');
+    return res.send(template);
+  }
+
+  @Get('excel/template')
+  @ApiOperation({ 
+    summary: 'Download Excel import template (Admin only)',
+    description: 'Download a template Excel file for bulk import with example data for Banks and Cassettes sheets'
+  })
+  async downloadExcelTemplate(@Res() res: Response) {
+    const template = this.importService.generateExcelTemplate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="bulk_import_template.xlsx"');
     return res.send(template);
   }
 }

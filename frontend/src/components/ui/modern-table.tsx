@@ -48,7 +48,7 @@ export function ModernTable<T extends { id?: string | number }>({
 
   return (
     <div className={cn('overflow-hidden rounded-xl border border-gray-200/60 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft', className)}>
-      <div className="overflow-x-auto custom-scrollbar">
+      <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-200/60 dark:border-slate-700 bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-slate-700 dark:to-slate-700/50">

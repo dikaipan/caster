@@ -626,7 +626,35 @@ aside[class*="fixed"] {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Modern scrollbar */
+  /* Global Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.5); /* gray-400 equivalent */
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 114, 128, 0.8); /* gray-500 */
+  }
+
+  /* Dark mode global scrollbar */
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(71, 85, 105, 0.6); /* slate-600 */
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.8); /* slate-500 */
+  }
+
+  /* Modern scrollbar utility */
   .custom-scrollbar::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -670,6 +698,27 @@ aside[class*="fixed"] {
 
   .scrollbar-track-slate-800::-webkit-scrollbar-track {
     background: rgba(30, 41, 59, 0.3);
+  }
+
+  /* Scrollbar thumb colors for light and dark mode */
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+    background: rgba(209, 213, 219, 0.5);
+  }
+
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb:hover {
+    background: rgba(209, 213, 219, 0.7);
+  }
+
+  .dark .scrollbar-thumb-slate-600::-webkit-scrollbar-thumb {
+    background: rgba(71, 85, 105, 0.5);
+  }
+
+  .dark .scrollbar-thumb-slate-600::-webkit-scrollbar-thumb:hover {
+    background: rgba(71, 85, 105, 0.7);
+  }
+
+  .scrollbar-track-transparent::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   /* Card hover effect */

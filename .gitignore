@@ -29,7 +29,6 @@ build/
 prisma/migrations/
 
 # IDEs
-.vscode/
 .idea/
 *.swp
 *.swo

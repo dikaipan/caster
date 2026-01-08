@@ -146,9 +146,8 @@
 
   
 
-  <!-- Circular Background -->
-
-  <circle cx="400" cy="400" r="400" class="bg-layer"/>
+  <!-- Circular Background (removed for transparency) -->
+  <!-- <circle cx="400" cy="400" r="400" class="bg-layer"/> -->
 
   
 

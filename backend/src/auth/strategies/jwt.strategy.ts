@@ -32,6 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role,
       userType: payload.userType,
       pengelolaId: payload.pengelolaId,
+      customerBankId: payload.customerBankId, // Added for BANK users
       department: payload.department,
     };
   }

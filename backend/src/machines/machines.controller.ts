@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { MachinesService } from './machines.service';
 import { CreateMachineDto, UpdateMachineDto } from './dto';
+import { BulkAssignMachinesDto, DistributeMachinesDto, UnassignMachinesDto } from './dto/bulk-assign-machines.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, AllowUserTypes, UserType } from '../common/decorators/roles.decorator';
@@ -22,12 +23,13 @@ import { Roles, AllowUserTypes, UserType } from '../common/decorators/roles.deco
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class MachinesController {
-  constructor(private readonly machinesService: MachinesService) {}
+  constructor(private readonly machinesService: MachinesService) { }
 
   @Get('dashboard/stats')
   @ApiOperation({ summary: 'Get dashboard statistics (all authenticated users)' })
   getDashboardStats(@Request() req) {
-    return this.machinesService.getDashboardStats(req.user.userType, req.user.pengelolaId);
+    const customerBankId = req.user.userType === 'BANK' ? req.user.customerBankId : undefined;
+    return this.machinesService.getDashboardStats(req.user.userType, req.user.pengelolaId, customerBankId);
   }
 
   @Get()
@@ -50,6 +52,11 @@ export class MachinesController {
     @Query('customerBankId') customerBankId?: string,
   ) {
     const validSortOrder = sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
+    // For BANK users, use their customerBankId; for others, use the query param if provided
+    const effectiveBankId = req.user.userType === 'BANK' 
+      ? req.user.customerBankId 
+      : customerBankId;
+    
     return this.machinesService.findAll(
       req.user.userType,
       req.user.pengelolaId,
@@ -60,8 +67,61 @@ export class MachinesController {
       status && status !== 'ALL' ? status : undefined,
       sortBy,
       validSortOrder,
-      customerBankId,
+      effectiveBankId,
     );
+  }
+
+  @Post('bulk-assign')
+  @AllowUserTypes(UserType.HITACHI)
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Bulk assign machines to pengelola (Super Admin only)' })
+  bulkAssignMachines(@Body() dto: BulkAssignMachinesDto, @Request() req) {
+    return this.machinesService.bulkAssignMachines(dto.pengelolaId, dto.machineIds, req.user.id);
+  }
+
+  @Post('distribute')
+  @AllowUserTypes(UserType.HITACHI)
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Distribute unassigned machines evenly to multiple pengelola (Super Admin only)',
+    description: 'Distributes unassigned machines evenly across the provided pengelola. If customerBankId is provided, only distributes machines from that bank.'
+  })
+  distributeMachines(@Body() dto: DistributeMachinesDto, @Request() req) {
+    // Convert empty string to undefined for optional field
+    const customerBankId = dto.customerBankId && dto.customerBankId.trim() !== ''
+      ? dto.customerBankId.trim()
+      : undefined;
+    return this.machinesService.distributeMachines(dto.pengelolaIds, customerBankId, req.user.id);
+  }
+
+  @Post('unassign')
+  @AllowUserTypes(UserType.HITACHI)
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Unassign machines from pengelola (Super Admin only)',
+    description: 'Unassigns machines by setting pengelolaId to null. Can unassign all machines, machines from specific pengelola, machines from specific bank, or specific machines by IDs.'
+  })
+  unassignMachines(@Body() dto: UnassignMachinesDto, @Request() req) {
+    // Convert empty strings to undefined for optional fields
+    const pengelolaId = dto.pengelolaId && dto.pengelolaId.trim() !== ''
+      ? dto.pengelolaId.trim()
+      : undefined;
+    const customerBankId = dto.customerBankId && dto.customerBankId.trim() !== ''
+      ? dto.customerBankId.trim()
+      : undefined;
+    return this.machinesService.unassignMachines(pengelolaId, customerBankId, dto.machineIds, req.user.id);
+  }
+
+  @Get(':id/analytics')
+  @ApiOperation({ summary: 'Get machine statistics' })
+  getMachineStatistics(@Param('id') id: string) {
+    return this.machinesService.getMachineStatistics(id);
+  }
+
+  @Get(':id/cassettes')
+  @ApiOperation({ summary: 'Get cassettes linked to machine' })
+  getMachineCassettes(@Param('id') id: string) {
+    return this.machinesService.getMachineCassettes(id);
   }
 
   @Get(':id')

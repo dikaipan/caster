@@ -20,12 +20,13 @@ import { Roles, AllowUserTypes, UserType } from '../common/decorators/roles.deco
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class BanksController {
-  constructor(private readonly banksService: BanksService) {}
+  constructor(private readonly banksService: BanksService) { }
 
   @Get()
   @ApiOperation({ summary: 'Get all banks' })
-  findAll() {
-    return this.banksService.findAll();
+  async findAll() {
+    const banks = await this.banksService.findAll();
+    return { data: banks };
   }
 
   @Get(':id')
@@ -34,7 +35,7 @@ export class BanksController {
     return this.banksService.findOne(id);
   }
 
-  @Get(':id/statistics')
+  @Get(':id/analytics')
   @ApiOperation({ summary: 'Get bank statistics' })
   getStatistics(@Param('id') id: string) {
     return this.banksService.getStatistics(id);
@@ -64,16 +65,15 @@ export class BanksController {
     return this.banksService.remove(id);
   }
 
-  @Post(':id/pengelola/:pengelolaId')
+  @Post(':id/assign-pengelola')
   @AllowUserTypes(UserType.HITACHI)
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Assign Pengelola to bank (Super Admin only)' })
   assignPengelolaToBank(
     @Param('id') id: string,
-    @Param('pengelolaId') pengelolaId: string,
-    @Body() assignmentDto?: any,
+    @Body() body: any,
   ) {
-    return this.banksService.assignPengelolaToBank(id, pengelolaId, assignmentDto);
+    return this.banksService.assignPengelolaToBank(id, body.pengelolaId, body);
   }
 }
 

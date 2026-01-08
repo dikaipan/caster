@@ -477,11 +477,31 @@ const SOReportPDF: React.FC<SOReportPDFProps> = ({ ticket, repairs, user }) => {
         </View>
         <View style={[styles.tableCell, { flex: 0.6 }]}>
           <Text style={{ fontSize: 6, lineHeight: 1.3 }}>
-            {repair.partsReplaced && Array.isArray(repair.partsReplaced) && repair.partsReplaced.length > 0
-              ? repair.partsReplaced.length > 5
-                ? `${repair.partsReplaced.slice(0, 5).join(', ')}\n+${repair.partsReplaced.length - 5} lainnya`
-                : repair.partsReplaced.join(', ')
-              : '-'}
+            {(() => {
+              // Handle partsReplaced - can be array, JSON string, or null/undefined
+              let partsArray: string[] = [];
+              
+              if (repair.partsReplaced) {
+                if (Array.isArray(repair.partsReplaced)) {
+                  partsArray = repair.partsReplaced;
+                } else if (typeof repair.partsReplaced === 'string') {
+                  try {
+                    const parsed = JSON.parse(repair.partsReplaced);
+                    partsArray = Array.isArray(parsed) ? parsed : [parsed];
+                  } catch (e) {
+                    // If parsing fails, treat as single string
+                    partsArray = [repair.partsReplaced];
+                  }
+                }
+              }
+              
+              if (partsArray.length > 0) {
+                return partsArray.length > 5
+                  ? `${partsArray.slice(0, 5).join(', ')}\n+${partsArray.length - 5} lainnya`
+                  : partsArray.join(', ');
+              }
+              return '-';
+            })()}
           </Text>
         </View>
         <Text style={[styles.tableCell, { flex: 0.5, fontSize: 6 }]}>
@@ -615,14 +635,19 @@ const SOReportPDF: React.FC<SOReportPDFProps> = ({ ticket, repairs, user }) => {
             {/* Digital Signature - Always show section */}
             <View style={[styles.signatureBox, { marginTop: 10, backgroundColor: '#ffffff', border: '2 solid #1e293b' }]}>
               <Text style={[styles.signatureLabel, { fontSize: 9, marginBottom: 10 }]}>TANDA TANGAN DIGITAL PENGAMBIL</Text>
-              {ticket.cassetteReturn?.signature ? (
-                <>
-                  <View style={{ border: '1 solid #cbd5e1', borderRadius: 4, padding: 8, backgroundColor: '#ffffff' }}>
-                    <Image 
-                      src={ticket.cassetteReturn.signature} 
-                      style={styles.signatureImage}
-                    />
-                  </View>
+              {(() => {
+                // Try rcSignature first (new field), then fallback to signature (backward compatibility)
+                const signature = ticket.cassetteReturn?.rcSignature || ticket.cassetteReturn?.signature;
+                return signature ? (
+                  <>
+                    <View style={{ border: '1 solid #cbd5e1', borderRadius: 4, padding: 8, backgroundColor: '#ffffff' }}>
+                      {/* Note: @react-pdf/renderer Image doesn't support alt prop - this is for PDF generation, not HTML */}
+                      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                      <Image 
+                        src={signature} 
+                        style={styles.signatureImage}
+                      />
+                    </View>
                   {recipientName && (
                     <View style={{ marginTop: 8, borderTop: '1 solid #e2e8f0', paddingTop: 8 }}>
                       <Text style={{ fontSize: 8, textAlign: 'center', color: '#1e293b', fontWeight: 'bold' }}>
@@ -633,8 +658,10 @@ const SOReportPDF: React.FC<SOReportPDFProps> = ({ ticket, repairs, user }) => {
                       </Text>
                     </View>
                   )}
-                </>
-              ) : (
+                  </>
+                ) : null;
+              })()}
+              {!ticket.cassetteReturn?.rcSignature && !ticket.cassetteReturn?.signature && (
                 <View style={{ padding: 20, border: '1 dashed #cbd5e1', borderRadius: 4, backgroundColor: '#f8fafc' }}>
                   <Text style={{ fontSize: 8, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
                     Tanda tangan tidak tersedia
@@ -714,6 +741,14 @@ const SOReportPDF: React.FC<SOReportPDFProps> = ({ ticket, repairs, user }) => {
             <Text style={styles.label}>Prioritas:</Text>
             <Text style={styles.value}>{ticket.priority || 'N/A'}</Text>
           </View>
+          {ticket.repairLocation && (
+            <View style={styles.row}>
+              <Text style={styles.label}>Lokasi Perbaikan:</Text>
+              <Text style={styles.value}>
+                {ticket.repairLocation === 'ON_SITE' ? 'Di Lokasi Pengelola (On-Site)' : 'Di Repair Center (RC)'}
+              </Text>
+            </View>
+          )}
           <View style={styles.row}>
             <Text style={styles.label}>Tanggal Dibuat:</Text>
             <Text style={styles.value}>{formatDate(ticket.createdAt)}</Text>

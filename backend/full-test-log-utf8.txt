@@ -1,0 +1,415 @@
+﻿
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json
+
+node.exe : PASS test/app.e2e-spec.ts (49.527 s)
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (PASS test/app.e2e-spec.ts (4 
+   9.527 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+PASS test/banks.e2e-spec.ts (51.375 s)
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      [33m[HCM-Backend][39m [33m8204[39m 1/3/2026, 10:41:33 AM [33m  
+ WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:33.441Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "bank_admin_1767411692580543",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+FAIL test/machines.e2e-spec.ts (51.901 s)
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      [33m[HCM-Backend][39m [33m24896[39m 1/3/2026, 10:41:33 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:33.562Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "mach_admin_176741169260367",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  ÔùÅ Machines (e2e) ÔÇ║ GET /api/v1/machines ÔÇ║ should filter machines 
+by pengelola
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "bef3ab8f-9aa1-406a-9255-294dc050c747"
+    Received: "19bca2e0-01f1-4058-98c4-dd249ee96331"
+
+    [0m [90m 165 |[39m             expect(response[33m.[39mbody[33m.
+[39mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[
+39m
+     [90m 166 |[39m             
+response[33m.[39mbody[33m.[39mdata[33m.[39mforEach((m[33m:[39m 
+any) [33m=>[39m {
+    [31m[1m>[22m[39m[90m 167 |[39m                 expect(m[33m.[3
+9mpengelolaId)[33m.[39mtoBe(pengelolaOrg[33m.[39mid)[33m;[39m
+     [90m     |[39m                                       
+[31m[1m^[22m[39m
+     [90m 168 |[39m             })[33m;[39m
+     [90m 169 |[39m         })[33m;[39m
+     [90m 170 |[39m[0m
+
+      at machines.e2e-spec.ts:167:39
+          at Array.forEach (<anonymous>)
+      at Object.<anonymous> (machines.e2e-spec.ts:166:32)
+
+PASS test/tickets.e2e-spec.ts (52.346 s)
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      [33m[HCM-Backend][39m [33m21392[39m 1/3/2026, 10:41:33 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:33.623Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "admin_1767411691399",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      [33m[HCM-Backend][39m [33m21392[39m 1/3/2026, 10:41:34 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:34.086Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "pengelola_1767411691399",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+457ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+PASS test/auth.e2e-spec.ts (52.835 s)
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      [33m[HCM-Backend][39m [33m18808[39m 1/3/2026, 10:41:33 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:33.892Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "auth_admin_1767411692570559",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      [33m[HCM-Backend][39m [33m18808[39m 1/3/2026, 10:41:34 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:34.424Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "auth_pengelola_1767411692570559",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+527ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      [33m[HCM-Backend][39m [33m18808[39m 1/3/2026, 10:41:35 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:35.271Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "auth_admin_1767411692570559",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+847ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      [33m[HCM-Backend][39m [33m18808[39m 1/3/2026, 10:41:35 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:35.594Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "auth_admin_1767411692570559",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+322ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      [33m[HCM-Backend][39m [33m18808[39m 1/3/2026, 10:41:35 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:35.892Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "auth_admin_1767411692570559",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+299ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+PASS test/cassettes.e2e-spec.ts (53.744 s)
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      [33m[HCM-Backend][39m [33m33520[39m 1/3/2026, 10:41:33 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:33.562Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "cass_admin_1767411692559341",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      [33m[HCM-Backend][39m [33m33520[39m 1/3/2026, 10:41:34 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:34.304Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "cass_peng_1767411692559341",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+739ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+PASS test/users.e2e-spec.ts (54.109 s)
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      [33m[HCM-Backend][39m [33m5060[39m 1/3/2026, 10:41:33 AM [33m  
+ WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:33.581Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "usr_admin_1767411692577815",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+PASS test/repairs.e2e-spec.ts
+  ÔùÅ Console
+
+    console.log
+      [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+    console.log
+      [33m[HCM-Backend][39m [33m24936[39m 1/3/2026, 10:41:37 AM [33m 
+  WARN[39m [33m[{
+        "context": "SecurityLogger",
+        "timestamp": "2026-01-03T03:41:37.121Z",
+        "event": "LOGIN_ATTEMPT",
+        "username": "admin_r_1767411696347607",
+        "ip": "::ffff:127.0.0.1",
+        "action": "LOGIN",
+        "status": "SUCCESS"
+      }][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+
+      at Console.log 
+(../node_modules/winston/lib/winston/transports/console.js:87:23)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+    console.log
+      ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+
+Test Suites: 1 failed, 7 passed, 8 total
+Tests:       1 failed, 74 passed, 75 total
+Snapshots:   0 total
+Time:        57.553 s
+Ran all test suites.

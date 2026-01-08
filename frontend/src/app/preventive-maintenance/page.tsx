@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
+import { usePreventiveMaintenance, useTakePMTask } from '@/hooks/usePreventiveMaintenance';
 import PageLayout from '@/components/layout/PageLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 import {
   CalendarCheck,
   Search,
@@ -34,12 +36,11 @@ import {
   Building2,
 } from 'lucide-react';
 
-export default function PreventiveMaintenancePage() {
+function PreventiveMaintenanceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
-  const [pms, setPms] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('ALL');
@@ -47,13 +48,50 @@ export default function PreventiveMaintenancePage() {
     const page = searchParams.get('page');
     return page ? parseInt(page, 10) : 1;
   });
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [takingPMTask, setTakingPMTask] = useState<string | null>(null);
   const itemsPerPage = 15;
 
-  const isHitachi = user?.userType === 'HITACHI';
+  // User type check - needed for hook conditions
   const isPengelola = user?.userType === 'PENGELOLA';
+  const isHitachi = user?.userType === 'HITACHI';
+
+  // Debounced search term
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Use React Query hook for better caching and performance
+  const { data: pmsData, isLoading: loading } = usePreventiveMaintenance({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: debouncedSearchTerm,
+    status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
+    dateFilter: dateFilter !== 'ALL' ? dateFilter : undefined,
+  }, isAuthenticated && !isPengelola);
+
+  // Extract data from React Query response
+  const pms = useMemo(() => {
+    if (!pmsData) return [];
+    return Array.isArray(pmsData) ? pmsData : (pmsData?.data || []);
+  }, [pmsData]);
+
+  const total = useMemo(() => {
+    if (!pmsData || Array.isArray(pmsData)) return pms.length;
+    return pmsData?.pagination?.total || 0;
+  }, [pmsData, pms.length]);
+
+  const totalPages = useMemo(() => {
+    if (!pmsData || Array.isArray(pmsData)) return Math.ceil(pms.length / itemsPerPage);
+    return pmsData?.pagination?.totalPages || 0;
+  }, [pmsData, pms.length, itemsPerPage]);
+
+  // Take PM task mutation
+  const takePMTaskMutation = useTakePMTask();
 
   useEffect(() => {
     loadUser();
@@ -91,80 +129,12 @@ export default function PreventiveMaintenancePage() {
     }
   }, [currentPage, router, searchParams]);
 
-  // Debounced search term
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, selectedStatus, dateFilter, itemsPerPage]);
+  }, [debouncedSearchTerm, selectedStatus, dateFilter]);
 
-  const fetchPMs = useCallback(async () => {
-    if (!isAuthenticated) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const params: any = {
-        params: {
-          page: currentPage,
-          limit: itemsPerPage,
-        },
-      };
-
-      if (debouncedSearchTerm.trim()) {
-        params.params.search = debouncedSearchTerm.trim();
-      }
-
-      if (selectedStatus && selectedStatus !== 'ALL') {
-        params.params.status = selectedStatus;
-      }
-
-      if (dateFilter && dateFilter !== 'ALL') {
-        params.params.dateFilter = dateFilter;
-      }
-
-      const response = await api.get('/preventive-maintenance', params);
-      
-      // Handle both old format (array) and new format (object with data & pagination)
-      if (Array.isArray(response.data)) {
-        // Old format - backward compatibility
-        setPms(response.data);
-        setTotal(response.data.length);
-        setTotalPages(Math.ceil(response.data.length / itemsPerPage));
-      } else {
-        // New format with pagination
-        setPms(response.data?.data || []);
-        setTotal(response.data?.pagination?.total || 0);
-        setTotalPages(response.data?.pagination?.totalPages || 0);
-      }
-    } catch (error: any) {
-      console.error('Error fetching PMs:', error);
-      setPms([]);
-      setTotal(0);
-      setTotalPages(0);
-      if (error.response?.status === 403) {
-        alert('Access denied. You need proper permissions to view PM tasks.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [isAuthenticated, currentPage, itemsPerPage, debouncedSearchTerm, selectedStatus, dateFilter]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchPMs();
-    }
-  }, [isAuthenticated, fetchPMs]);
+  // React Query handles data fetching automatically - no manual useEffect needed!
 
   // Use server-side filtered and sorted data directly
   const paginatedPMs = pms; // Already filtered, sorted, and paginated from server
@@ -173,11 +143,11 @@ export default function PreventiveMaintenancePage() {
   // Note: For accurate counts across all pages, backend should provide statusCounts
   const statusSummary = useMemo(() => ({
     total: total, // Use total from pagination
-    scheduled: pms.filter(pm => pm.status === 'SCHEDULED').length,
-    inProgress: pms.filter(pm => pm.status === 'IN_PROGRESS').length,
-    completed: pms.filter(pm => pm.status === 'COMPLETED').length,
-    cancelled: pms.filter(pm => pm.status === 'CANCELLED').length,
-    rescheduled: pms.filter(pm => pm.status === 'RESCHEDULED').length,
+    scheduled: pms.filter((pm: any) => pm.status === 'SCHEDULED').length,
+    inProgress: pms.filter((pm: any) => pm.status === 'IN_PROGRESS').length,
+    completed: pms.filter((pm: any) => pm.status === 'COMPLETED').length,
+    cancelled: pms.filter((pm: any) => pm.status === 'CANCELLED').length,
+    rescheduled: pms.filter((pm: any) => pm.status === 'RESCHEDULED').length,
   }), [pms, total]);
 
   const getStatusBadge = (status: string) => {
@@ -194,17 +164,19 @@ export default function PreventiveMaintenancePage() {
   const handleTakePMTask = async (pmId: string) => {
     try {
       setTakingPMTask(pmId);
-      const response = await api.post(`/preventive-maintenance/${pmId}/take`);
-      
-      // Update the PM task in the list
-      setPms(prevPMs => 
-        prevPMs.map(pm => 
-          pm.id === pmId ? response.data : pm
-        )
-      );
+      await takePMTaskMutation.mutateAsync(pmId);
+      // React Query akan otomatis update cache dan refetch
+      toast({
+        title: 'Berhasil',
+        description: 'PM task berhasil di-assign ke Anda',
+      });
     } catch (error: any) {
       console.error('Error taking PM task:', error);
-      alert(error.response?.data?.message || 'Failed to take PM task');
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Gagal mengambil PM task',
+        variant: 'destructive',
+      });
     } finally {
       setTakingPMTask(null);
     }
@@ -238,11 +210,10 @@ export default function PreventiveMaintenancePage() {
           <button
             key={key}
             onClick={() => setSelectedStatus(selectedStatus === key ? 'ALL' : key)}
-            className={`p-4 rounded-lg border-2 transition-all text-left ${
-              selectedStatus === key
-                ? `${borderActive} ${bgActive} shadow-lg`
-                : `border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 ${bgHover}`
-            }`}
+            className={`p-4 rounded-lg border-2 transition-all text-left ${selectedStatus === key
+              ? `${borderActive} ${bgActive} shadow-lg`
+              : `border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 ${bgHover}`
+              }`}
           >
             <Icon className={`h-5 w-5 ${iconColor} mb-2`} />
             <p className="text-xs text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">{label}</p>
@@ -281,14 +252,15 @@ export default function PreventiveMaintenancePage() {
                 </SelectContent>
               </Select>
             </div>
-            {(isHitachi || isPengelola) && (
+            {/* PM Create Button - DISABLED */}
+            {/* {(isHitachi || isPengelola) && (
               <Link href="/preventive-maintenance/create">
                 <Button size="sm" className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-600 dark:to-teal-700 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-700 dark:hover:to-teal-800 text-white">
                   <Plus className="h-4 w-4 mr-2" />
                   {isPengelola ? 'Request PM' : 'Buat PM'}
                 </Button>
               </Link>
-            )}
+            )} */}
           </div>
         </CardContent>
       </Card>
@@ -325,21 +297,21 @@ export default function PreventiveMaintenancePage() {
                       <CalendarCheck className="h-16 w-16 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
                       <p className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-lg">Tidak ada PM tasks</p>
                       <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-md mx-auto">
-                        {pms.length === 0 
+                        {pms.length === 0
                           ? 'Belum ada PM tasks yang dibuat. Klik "Buat PM" untuk membuat PM task baru.'
                           : `Tidak ada PM tasks yang sesuai dengan filter "${selectedStatus !== 'ALL' ? getStatusBadge(selectedStatus).label : 'yang dipilih'}"`}
                       </p>
                     </td>
                   </tr>
                 ) : (
-                  paginatedPMs.map((pm) => {
+                  paginatedPMs.map((pm: any) => {
                     const statusBadge = getStatusBadge(pm.status);
                     const StatusIcon = statusBadge.icon;
                     const isAssigned = pm.engineer !== null;
                     const isAssignedToMe = pm.assignedEngineer === user?.id || pm.engineer?.id === user?.id;
                     const canTakeTask = !isAssigned && pm.status !== 'COMPLETED' && pm.status !== 'CANCELLED';
                     const cassetteCount = pm.cassetteDetails?.length || 0;
-                    
+
                     // Get type badge config
                     const getTypeBadge = (type: string) => {
                       const typeConfigs: Record<string, { label: string; variant: string }> = {
@@ -361,9 +333,9 @@ export default function PreventiveMaintenancePage() {
                     if ((pm as any).requesterPengelola) {
                       const requester = (pm as any).requesterPengelola;
                       // Prefer company name, then fullName, then fallback to 'Pengelola'
-                      requestedBy = requester.pengelola?.companyName 
-                        || requester.fullName 
-                        || requester.name 
+                      requestedBy = requester.pengelola?.companyName
+                        || requester.fullName
+                        || requester.name
                         || 'Pengelola';
                     } else if ((pm as any).requesterHitachi) {
                       const requester = (pm as any).requesterHitachi;
@@ -373,7 +345,7 @@ export default function PreventiveMaintenancePage() {
                     } else if (pm.requestedByHitachi) {
                       requestedBy = pm.requestedByHitachi.fullName || pm.requestedByHitachi.name || 'Hitachi';
                     }
-                    
+
                     return (
                       <tr key={pm.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                         <td className="p-4">
@@ -431,10 +403,10 @@ export default function PreventiveMaintenancePage() {
                             <Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                             {pm.scheduledDate
                               ? new Date(pm.scheduledDate).toLocaleDateString('id-ID', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  year: '2-digit'
-                                })
+                                day: '2-digit',
+                                month: 'short',
+                                year: '2-digit'
+                              })
                               : 'N/A'}
                           </div>
                         </td>
@@ -444,10 +416,10 @@ export default function PreventiveMaintenancePage() {
                               <CheckCircle2 className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                               {pm.completedAt || pm.completedDate
                                 ? new Date(pm.completedAt || pm.completedDate).toLocaleDateString('id-ID', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    year: '2-digit'
-                                  })
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: '2-digit'
+                                })
                                 : <span className="text-slate-400 dark:text-slate-500 italic">-</span>}
                             </div>
                           </td>
@@ -498,9 +470,9 @@ export default function PreventiveMaintenancePage() {
                               </>
                             )}
                             <Link href={`/preventive-maintenance/${pm.id}${currentPage > 1 ? `?page=${currentPage}` : ''}`}>
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 className="h-8 px-3 text-xs font-bold border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
                               >
                                 {pm.status === 'COMPLETED' ? 'View' : 'Manage'}
@@ -547,5 +519,13 @@ export default function PreventiveMaintenancePage() {
         </CardContent>
       </Card>
     </PageLayout>
+  );
+}
+
+export default function PreventiveMaintenancePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-teal-600 dark:text-teal-400" /></div>}>
+      <PreventiveMaintenanceContent />
+    </Suspense>
   );
 }

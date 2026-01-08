@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsEnum, IsOptional, IsDateString, IsInt } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsOptional, IsDateString, IsInt, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum CassetteStatus {
@@ -22,10 +22,16 @@ export class CreateCassetteDto {
   @IsNotEmpty()
   serialNumber: string;
 
-  @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000' })
+  @ApiPropertyOptional({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'UUID of cassette type (use this OR cassetteTypeCode)' })
   @IsString()
-  @IsNotEmpty()
-  cassetteTypeId: string;
+  @ValidateIf(o => !o.cassetteTypeCode)
+  @IsNotEmpty({ message: 'Either cassetteTypeId or cassetteTypeCode must be provided' })
+  cassetteTypeId?: string;
+
+  @ApiPropertyOptional({ example: 'RB', description: 'Type code (RB, AB, URJB) - alternative to cassetteTypeId' })
+  @IsString()
+  @IsOptional()
+  cassetteTypeCode?: string;
 
   @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174001' })
   @IsString()
@@ -62,4 +68,5 @@ export class CreateCassetteDto {
   @IsOptional()
   replacementTicketId?: string;
 }
+
 

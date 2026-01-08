@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
+import { useCassettes } from '@/hooks/useCassettes';
+import { useMachines } from '@/hooks/useMachines';
 import PageLayout from '@/components/layout/PageLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,42 +45,92 @@ import {
   TrendingUp,
   AlertCircle,
 } from 'lucide-react';
-import AddMachineDialog from '@/components/machines/AddMachineDialog';
-import EditMachineDialog from '@/components/machines/EditMachineDialog';
+// Lazy load dialog components to reduce initial bundle size
+const AddMachineDialog = dynamic(() => import('@/components/machines/AddMachineDialog'), {
+  ssr: false,
+  loading: () => null, // Dialog handles its own loading state
+});
+const EditMachineDialog = dynamic(() => import('@/components/machines/EditMachineDialog'), {
+  ssr: false,
+  loading: () => null, // Dialog handles its own loading state
+});
 
-export default function ResourcesPage() {
+function ResourcesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
-  
+
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'cassettes');
-  
+
   // Cassettes State
-  const [cassettes, setCassettes] = useState<any[]>([]);
-  const [loadingCassettes, setLoadingCassettes] = useState(true);
   const [cassetteSearchTerm, setCassetteSearchTerm] = useState('');
   const [cassetteStatusFilter, setCassetteStatusFilter] = useState<string>('all');
   const [cassetteCurrentPage, setCassetteCurrentPage] = useState(1);
   const [cassetteItemsPerPage, setCassetteItemsPerPage] = useState(50); // Increased from 20 to 50
-  const [cassetteTotal, setCassetteTotal] = useState(0);
-  const [cassetteTotalPages, setCassetteTotalPages] = useState(1);
-  
+
   // Machines State
-  const [machines, setMachines] = useState<any[]>([]);
-  const [loadingMachines, setLoadingMachines] = useState(true);
   const [machineSearchTerm, setMachineSearchTerm] = useState('');
   const [machineStatusFilter, setMachineStatusFilter] = useState<string>('all');
   const [machineCurrentPage, setMachineCurrentPage] = useState(1);
   const [machineItemsPerPage, setMachineItemsPerPage] = useState(20);
-  const [machineTotal, setMachineTotal] = useState(0);
-  const [machineTotalPages, setMachineTotalPages] = useState(0);
-  
+
+  // User type check - needed for hook conditions
+  const isPengelola = user?.userType === 'PENGELOLA';
+  const isHitachi = user?.userType === 'HITACHI';
+
+  // Use React Query hooks for better caching and performance
+  const { data: cassettesData, isLoading: loadingCassettes } = useCassettes({
+    page: cassetteCurrentPage,
+    limit: cassetteItemsPerPage,
+    search: cassetteSearchTerm,
+    status: cassetteStatusFilter !== 'all' ? cassetteStatusFilter : undefined,
+  }, isAuthenticated && activeTab === 'cassettes');
+
+  const { data: machinesData, isLoading: loadingMachines } = useMachines({
+    page: machineCurrentPage,
+    limit: machineItemsPerPage,
+    search: machineSearchTerm,
+    status: machineStatusFilter !== 'all' ? machineStatusFilter : undefined,
+  }, isAuthenticated && activeTab === 'machines');
+
+  // Extract data from React Query response
+  const cassettes = useMemo(() => {
+    if (!cassettesData) return [];
+    return Array.isArray(cassettesData) ? cassettesData : (cassettesData?.data || []);
+  }, [cassettesData]);
+
+  const machines = useMemo(() => {
+    if (!machinesData) return [];
+    return Array.isArray(machinesData) ? machinesData : (machinesData?.data || []);
+  }, [machinesData]);
+
+  // Extract pagination info
+  const cassetteTotal = useMemo(() => {
+    if (!cassettesData || Array.isArray(cassettesData)) return cassettes.length;
+    return cassettesData?.pagination?.total || 0;
+  }, [cassettesData, cassettes.length]);
+
+  const cassetteTotalPages = useMemo(() => {
+    if (!cassettesData || Array.isArray(cassettesData)) return Math.ceil(cassettes.length / cassetteItemsPerPage);
+    return cassettesData?.pagination?.totalPages || 1;
+  }, [cassettesData, cassettes.length, cassetteItemsPerPage]);
+
+  const machineTotal = useMemo(() => {
+    if (!machinesData || Array.isArray(machinesData)) return machines.length;
+    return machinesData?.pagination?.total || 0;
+  }, [machinesData, machines.length]);
+
+  const machineTotalPages = useMemo(() => {
+    if (!machinesData || Array.isArray(machinesData)) return Math.ceil(machines.length / machineItemsPerPage);
+    return machinesData?.pagination?.totalPages || 0;
+  }, [machinesData, machines.length, machineItemsPerPage]);
+
   // Machine Cassettes Dialog
   const [selectedMachine, setSelectedMachine] = useState<any>(null);
   const [machineCassettes, setMachineCassettes] = useState<any[]>([]);
   const [cassetteDialogOpen, setCassetteDialogOpen] = useState(false);
   const [loadingMachineCassettes, setLoadingMachineCassettes] = useState(false);
-  
+
   // Machine Dialogs
   const [addMachineDialogOpen, setAddMachineDialogOpen] = useState(false);
   const [editMachineDialogOpen, setEditMachineDialogOpen] = useState(false);
@@ -94,88 +147,7 @@ export default function ResourcesPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Fetch Cassettes with pagination
-  useEffect(() => {
-    const fetchCassettes = async () => {
-      if (activeTab !== 'cassettes') return;
-      
-      try {
-        setLoadingCassettes(true);
-        const params: any = {
-          page: cassetteCurrentPage,
-          limit: cassetteItemsPerPage,
-        };
-        
-        if (cassetteSearchTerm.trim()) {
-          params.keyword = cassetteSearchTerm.trim();
-        }
-        
-        const response = await api.get('/cassettes', { params });
-        
-        let allCassettes: any[] = [];
-        if (Array.isArray(response.data)) {
-          allCassettes = response.data;
-          setCassetteTotal(response.data.length);
-          setCassetteTotalPages(Math.ceil(response.data.length / cassetteItemsPerPage));
-        } else if (response.data.data) {
-          allCassettes = response.data.data;
-          setCassetteTotal(response.data.pagination?.total || 0);
-          setCassetteTotalPages(response.data.pagination?.totalPages || 1);
-        }
-        
-        setCassettes(allCassettes);
-      } catch (error) {
-        console.error('Error fetching cassettes:', error);
-      } finally {
-        setLoadingCassettes(false);
-      }
-    };
-
-    if (isAuthenticated) {
-      fetchCassettes();
-    }
-  }, [isAuthenticated, activeTab, cassetteCurrentPage, cassetteItemsPerPage, cassetteSearchTerm]);
-
-  // Fetch Machines
-  useEffect(() => {
-    const fetchMachines = async () => {
-      if (activeTab !== 'machines') return;
-      
-      try {
-        setLoadingMachines(true);
-        const params: any = {
-          page: machineCurrentPage,
-          limit: machineItemsPerPage,
-        };
-        
-        if (machineSearchTerm.trim()) {
-          params.search = machineSearchTerm.trim();
-        }
-        
-        const response = await api.get('/machines', { params });
-        
-        if (Array.isArray(response.data)) {
-          setMachines(response.data);
-          setMachineTotal(response.data.length);
-          setMachineTotalPages(Math.ceil(response.data.length / machineItemsPerPage));
-        } else {
-          setMachines(response.data?.data || []);
-          setMachineTotal(response.data?.pagination?.total || 0);
-          setMachineTotalPages(response.data?.pagination?.totalPages || 0);
-        }
-      } catch (error) {
-        console.error('Error fetching machines:', error);
-        setMachines([]);
-      } finally {
-        setLoadingMachines(false);
-      }
-    };
-
-    if (isAuthenticated) {
-      const timeoutId = setTimeout(fetchMachines, 300); // Debounce
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isAuthenticated, activeTab, machineSearchTerm, machineCurrentPage, machineItemsPerPage]);
+  // React Query handles data fetching automatically - no manual useEffect needed!
 
   // Reset pagination on search/filter change
   useEffect(() => {
@@ -184,24 +156,24 @@ export default function ResourcesPage() {
 
   useEffect(() => {
     setMachineCurrentPage(1);
-  }, [machineSearchTerm, machineStatusFilter, machineItemsPerPage]);
+  }, [machineSearchTerm, machineStatusFilter]);
 
   // Fetch cassettes for selected machine
   const fetchMachineCassettes = async (machine: any) => {
     setSelectedMachine(machine);
     setCassetteDialogOpen(true);
     setLoadingMachineCassettes(true);
-    
+
     try {
       const response = await api.get(`/cassettes/by-machine/${machine.id}`);
       const cassetteData = response.data?.cassettes || response.data?.data || (Array.isArray(response.data) ? response.data : []);
-      
+
       const sortedCassettes = cassetteData.sort((a: any, b: any) => {
         if (a.usageType === 'MAIN' && b.usageType === 'BACKUP') return -1;
         if (a.usageType === 'BACKUP' && b.usageType === 'MAIN') return 1;
         return 0;
       });
-      
+
       setMachineCassettes(sortedCassettes);
     } catch (error) {
       console.error('Error fetching cassettes:', error);
@@ -227,24 +199,28 @@ export default function ResourcesPage() {
     setMachineCurrentPage(1);
   };
 
-  if (isLoading) {
-    return (
-      <PageLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading resources...</p>
-          </div>
-        </div>
-      </PageLayout>
-    );
-  }
+  // No need for client-side filtering - server handles it via React Query
+  // Data is already paginated and filtered by server
+  const paginatedCassettes = cassettes;
+  const filteredMachines = machines;
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  // Status counts - calculated from current page data
+  // Note: For accurate counts across all pages, consider adding a dedicated stats endpoint
+  const cassetteStatusCounts = useMemo(() => {
+    return cassettes.reduce((acc: Record<string, number>, c: any) => {
+      acc[c.status] = (acc[c.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [cassettes]);
 
-  // Status colors
+  const machineStatusCounts = useMemo(() => {
+    return machines.reduce((acc: Record<string, number>, m: any) => {
+      acc[m.status] = (acc[m.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [machines]);
+
+  // Status colors - helper functions
   const getCassetteStatusColor = (status: string) => {
     const colors = {
       OK: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -267,39 +243,22 @@ export default function ResourcesPage() {
     return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
-  // Filter cassettes
-  const filteredCassettes = cassettes.filter((cassette) => {
-    const matchesSearch = !cassetteSearchTerm.trim() || 
-      cassette.serialNumber?.toLowerCase().includes(cassetteSearchTerm.toLowerCase()) ||
-      cassette.cassetteType?.typeCode?.toLowerCase().includes(cassetteSearchTerm.toLowerCase()) ||
-      cassette.customerBank?.bankName?.toLowerCase().includes(cassetteSearchTerm.toLowerCase());
-    
-    const matchesStatus = cassetteStatusFilter === 'all' || cassette.status === cassetteStatusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  if (isLoading) {
+    return (
+      <PageLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Loading resources...</p>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
 
-  // Paginate cassettes (use filtered length for local pagination, renamed to avoid conflict with state)
-  const filteredCassetteTotalPages = Math.ceil(filteredCassettes.length / cassetteItemsPerPage);
-  const cassetteStartIndex = (cassetteCurrentPage - 1) * cassetteItemsPerPage;
-  const cassetteEndIndex = cassetteStartIndex + cassetteItemsPerPage;
-  const paginatedCassettes = filteredCassettes.slice(cassetteStartIndex, cassetteEndIndex);
-
-  // Filter machines
-  const filteredMachines = machineStatusFilter === 'all' 
-    ? machines 
-    : machines.filter(m => m.status === machineStatusFilter);
-
-  // Status counts
-  const cassetteStatusCounts = cassettes.reduce((acc, c) => {
-    acc[c.status] = (acc[c.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const machineStatusCounts = machines.reduce((acc, m) => {
-    acc[m.status] = (acc[m.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <PageLayout>
@@ -340,11 +299,10 @@ export default function ResourcesPage() {
               { status: 'READY_FOR_PICKUP', label: 'Ready Pickup', icon: '✓', color: 'teal' },
               { status: 'SCRAPPED', label: 'Scrapped', icon: '🗑', color: 'gray' },
             ].map(({ status, label, icon, color }) => (
-              <Card 
+              <Card
                 key={status}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  cassetteStatusFilter === status ? `ring-2 ring-${color}-500` : ''
-                }`}
+                className={`cursor-pointer transition-all hover:shadow-md ${cassetteStatusFilter === status ? `ring-2 ring-${color}-500` : ''
+                  }`}
                 onClick={() => setCassetteStatusFilter(cassetteStatusFilter === status ? 'all' : status)}
               >
                 <CardContent className="pt-6">
@@ -413,7 +371,7 @@ export default function ResourcesPage() {
                   <Package className="h-5 w-5 text-primary" />
                   Cassettes Inventory
                   <Badge variant="secondary" className="ml-2">
-                    {filteredCassettes.length} items
+                    {cassetteTotal} items
                   </Badge>
                 </CardTitle>
               </div>
@@ -423,13 +381,13 @@ export default function ResourcesPage() {
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-              ) : filteredCassettes.length === 0 ? (
+              ) : paginatedCassettes.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16">
                   <Disc className="h-16 w-16 text-muted-foreground/30 mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No cassettes found</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {cassetteSearchTerm || cassetteStatusFilter !== 'all' 
-                      ? 'Try adjusting your search or filters' 
+                    {cassetteSearchTerm || cassetteStatusFilter !== 'all'
+                      ? 'Try adjusting your search or filters'
                       : 'No cassettes available in the system'}
                   </p>
                 </div>
@@ -448,12 +406,11 @@ export default function ResourcesPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedCassettes.map((cassette, index) => (
+                        {paginatedCassettes.map((cassette: any, index: number) => (
                           <tr
                             key={cassette.id}
-                            className={`border-b hover:bg-muted/30 transition-colors ${
-                              index % 2 === 0 ? 'bg-white' : 'bg-muted/10'
-                            }`}
+                            className={`border-b hover:bg-muted/30 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-muted/10'
+                              }`}
                           >
                             <td className="p-4">
                               <span className="font-mono font-semibold text-sm">
@@ -465,18 +422,13 @@ export default function ResourcesPage() {
                                 <span className="font-medium text-sm">
                                   {cassette.cassetteType?.typeCode || 'N/A'}
                                 </span>
-                                {cassette.cassetteType?.typeName && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {cassette.cassetteType.typeName}
-                                  </span>
-                                )}
                               </div>
                             </td>
                             <td className="p-4">
                               <div className="flex items-center gap-2">
                                 <Building2 className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-sm">
-                                  {cassette.customerBank?.bankName || 'N/A'}
+                                  {cassette.customerBank?.bankCode || cassette.customerBank?.bankName || 'N/A'}
                                 </span>
                               </div>
                             </td>
@@ -504,12 +456,14 @@ export default function ResourcesPage() {
                   </div>
 
                   {/* Pagination */}
-                  {filteredCassetteTotalPages > 1 && (
+                  {cassetteTotalPages > 1 && (
                     <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/20">
                       <div className="text-sm text-muted-foreground">
-                        Showing <span className="font-medium">{cassetteStartIndex + 1}</span> to{' '}
-                        <span className="font-medium">{Math.min(cassetteEndIndex, filteredCassettes.length)}</span> of{' '}
-                        <span className="font-medium">{filteredCassettes.length}</span> cassettes
+                        Showing <span className="font-medium">{(cassetteCurrentPage - 1) * cassetteItemsPerPage + 1}</span> to{' '}
+                        <span className="font-medium">
+                          {Math.min(cassetteCurrentPage * cassetteItemsPerPage, cassetteTotal)}
+                        </span> of{' '}
+                        <span className="font-medium">{cassetteTotal}</span> cassettes
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -522,13 +476,13 @@ export default function ResourcesPage() {
                           Previous
                         </Button>
                         <div className="text-sm font-medium px-4">
-                          Page {cassetteCurrentPage} of {filteredCassetteTotalPages}
+                          Page {cassetteCurrentPage} of {cassetteTotalPages}
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setCassetteCurrentPage(cassetteCurrentPage + 1)}
-                          disabled={cassetteCurrentPage >= filteredCassetteTotalPages}
+                          disabled={cassetteCurrentPage >= cassetteTotalPages}
                         >
                           Next
                           <ChevronRight className="h-4 w-4 ml-1" />
@@ -552,11 +506,10 @@ export default function ResourcesPage() {
               { status: 'UNDER_REPAIR', label: 'Under Repair', icon: '🔧', color: 'rose' },
               { status: 'DECOMMISSIONED', label: 'Decommissioned', icon: '✕', color: 'gray' },
             ].map(({ status, label, icon, color }) => (
-              <Card 
+              <Card
                 key={status}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  machineStatusFilter === status ? `ring-2 ring-${color}-500` : ''
-                }`}
+                className={`cursor-pointer transition-all hover:shadow-md ${machineStatusFilter === status ? `ring-2 ring-${color}-500` : ''
+                  }`}
                 onClick={() => setMachineStatusFilter(machineStatusFilter === status ? 'all' : status)}
               >
                 <CardContent className="pt-6">
@@ -648,15 +601,15 @@ export default function ResourcesPage() {
                   <Monitor className="h-16 w-16 text-muted-foreground/30 mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No machines found</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {machineSearchTerm || machineStatusFilter !== 'all' 
-                      ? 'Try adjusting your search or filters' 
+                    {machineSearchTerm || machineStatusFilter !== 'all'
+                      ? 'Try adjusting your search or filters'
                       : 'No machines available in the system'}
                   </p>
                 </div>
               ) : (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredMachines.map((machine) => (
+                    {filteredMachines.map((machine: any) => (
                       <Card key={machine.id} className="hover:shadow-lg transition-all border-2">
                         <CardHeader className="pb-3">
                           <div className="flex items-start justify-between">
@@ -677,7 +630,7 @@ export default function ResourcesPage() {
                           <div className="space-y-2 text-sm">
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <Building2 className="h-4 w-4" />
-                              <span className="truncate">{machine.customerBank?.bankName}</span>
+                              <span className="truncate">{machine.customerBank?.bankCode || machine.customerBank?.bankName}</span>
                             </div>
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <MapPin className="h-4 w-4" />
@@ -695,7 +648,7 @@ export default function ResourcesPage() {
                               </div>
                             )}
                           </div>
-                          
+
                           <div className="flex items-center justify-between pt-3 border-t">
                             <Button
                               variant="outline"
@@ -765,7 +718,7 @@ export default function ResourcesPage() {
 
       {/* Machine Cassettes Dialog */}
       <Dialog open={cassetteDialogOpen} onOpenChange={handleCloseCassetteDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Package className="h-5 w-5 text-primary" />
@@ -793,7 +746,7 @@ export default function ResourcesPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {machineCassettes.map((cassette) => (
+              {machineCassettes.map((cassette: any) => (
                 <Card key={cassette.id} className="border-2">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
@@ -812,7 +765,7 @@ export default function ResourcesPage() {
                         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                           <span>Type: {cassette.cassetteType?.typeCode || 'N/A'}</span>
                           <span>•</span>
-                          <span>{cassette.customerBank?.bankName || 'N/A'}</span>
+                          <span>{cassette.customerBank?.bankCode || cassette.customerBank?.bankName || 'N/A'}</span>
                         </div>
                       </div>
                     </div>
@@ -841,6 +794,14 @@ export default function ResourcesPage() {
         </>
       )}
     </PageLayout>
+  );
+}
+
+export default function ResourcesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+      <ResourcesPageContent />
+    </Suspense>
   );
 }
 

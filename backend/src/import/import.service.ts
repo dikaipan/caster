@@ -21,6 +21,7 @@ export interface CassetteData {
   cassetteTypeCode?: string; // Optional: will be auto-detected from serial number if not provided
   customerBankCode: string;
   status?: 'OK' | 'BAD' | 'IN_TRANSIT_TO_RC' | 'IN_REPAIR' | 'READY_FOR_PICKUP' | 'IN_TRANSIT_TO_PENGELOLA' | 'SCRAPPED';
+  usageType?: string;
   notes?: string;
 }
 
@@ -67,6 +68,12 @@ export interface ImportResult {
     results: Array<{ success: boolean; bankCode?: string; bankName?: string; error?: string }>;
   };
   cassettes?: {
+    total: number;
+    successful: number;
+    failed: number;
+    results: Array<{ success: boolean; serialNumber?: string; error?: string }>;
+  };
+  machines?: {
     total: number;
     successful: number;
     failed: number;
@@ -142,7 +149,7 @@ export class ImportService {
 
   async importFromExcel(file: Express.Multer.File, userId: string): Promise<ImportResult> {
     try {
-      // Validate file type
+      // Validate file type by extension
       const validExtensions = ['.xlsx', '.xls'];
       const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
       
@@ -150,11 +157,61 @@ export class ImportService {
         throw new BadRequestException('Invalid file type. Please upload Excel file (.xlsx or .xls)');
       }
 
+      // Validate MIME type (more secure than extension alone)
+      const validMimeTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+        'application/vnd.ms-excel', // .xls
+        'application/excel',
+        'application/x-excel',
+      ];
+      
+      if (file.mimetype && !validMimeTypes.includes(file.mimetype.toLowerCase())) {
+        throw new BadRequestException(
+          `Invalid file MIME type: ${file.mimetype}. Expected Excel file`
+        );
+      }
+
       // Parse Excel file
       const workbook = XLSX.read(file.buffer, { type: 'buffer' });
       
       // Get sheet names
       const sheetNames = workbook.SheetNames;
+      
+      console.log(`📊 [ImportService] Excel file opened. Sheets found: ${sheetNames.join(', ')}`);
+      
+      // Check if it's Machine-Cassette-Pengelola format (untuk bulk import mesin, kaset, dan pengelola)
+      if (sheetNames.includes('Machine-Cassette') || sheetNames.some(name => name.toLowerCase().includes('machine'))) {
+        // Parse Machine-Cassette sheet untuk bulk import mesin, kaset, dan pengelola
+        const machineCassetteSheetName = sheetNames.find(name => name.includes('Machine') || name.includes('machine')) || 'Machine-Cassette';
+        const machineCassetteSheet = workbook.Sheets[machineCassetteSheetName];
+        
+        console.log(`📊 [ImportService] Found Machine-Cassette sheet: ${machineCassetteSheetName}`);
+        
+        try {
+          const machineCassetteData = this.parseMachineCassetteSheet(machineCassetteSheet);
+          
+          console.log(`📊 [ImportService] Parsed ${machineCassetteData.length} records from Machine-Cassette sheet`);
+          
+          if (machineCassetteData.length === 0) {
+            throw new BadRequestException(
+              'No valid data found in Machine-Cassette sheet. ' +
+              'Please ensure the sheet contains data rows with columns: ' +
+              'machine_serial_number (optional), cassette_serial_number, bank_code, pengelola_code'
+            );
+          }
+          
+          // Convert to CSV format and use CSV import logic
+          return this.importMachineCassetteFromExcelData(machineCassetteData, userId);
+        } catch (error) {
+          if (error instanceof BadRequestException) {
+            throw error;
+          }
+          throw new BadRequestException(
+            `Error parsing Machine-Cassette sheet: ${error.message}. ` +
+            'Please ensure the sheet has columns: cassette_serial_number, bank_code (machine_serial_number and pengelola_code are optional)'
+          );
+        }
+      }
       
       // Parse Banks sheet
       let banks: BankData[] = [];
@@ -171,7 +228,11 @@ export class ImportService {
       }
 
       if (banks.length === 0 && cassettes.length === 0) {
-        throw new BadRequestException('Excel file must contain "Banks" and/or "Cassettes" sheets');
+        throw new BadRequestException(
+          `Excel file must contain "Machine-Cassette", "Banks", and/or "Cassettes" sheets. ` +
+          `Found sheets: ${sheetNames.join(', ')}. ` +
+          `Please ensure your Excel file has one of these sheets with valid data.`
+        );
       }
 
       // Import data
@@ -305,6 +366,7 @@ export class ImportService {
       };
 
       const statusIdx = getColIndex('status');
+      const usageTypeIdx = getColIndex('usagetype') >= 0 ? getColIndex('usagetype') : getColIndex('usage_type');
       const notesIdx = getColIndex('notes');
 
       const normalizeStatus = (status?: string): CassetteData['status'] => {
@@ -336,11 +398,433 @@ export class ImportService {
         cassetteTypeCode: cassetteTypeCode || '',
         customerBankCode: getValue(bankCodeIdx) || '',
         status: normalizeStatus(getValue(statusIdx)),
+        usageType: usageTypeIdx >= 0 ? getValue(usageTypeIdx) : undefined,
         notes: getValue(notesIdx),
       });
     }
 
     return cassettes;
+  }
+
+  private parseMachineCassetteSheet(sheet: XLSX.WorkSheet): MachineCassetteVendorData[] {
+    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    
+    console.log(`📊 [ImportService] Parsing sheet, total rows: ${jsonData.length}`);
+    
+    if (jsonData.length < 2) {
+      console.warn(`⚠️ [ImportService] Sheet has less than 2 rows (header + data). Total rows: ${jsonData.length}`);
+      return [];
+    }
+
+    // First row is header
+    const headers = (jsonData[0] as string[]).map(h => h.toString().trim().toLowerCase());
+    
+    console.log(`📊 [ImportService] Headers found: ${headers.join(', ')}`);
+    console.log(`📊 [ImportService] First row (header) raw:`, JSON.stringify(jsonData[0]));
+    
+    // Find column indices
+    const getColIndex = (name: string): number => {
+      return headers.findIndex(h => h.includes(name.toLowerCase()));
+    };
+
+    const machineSNIdx = getColIndex('machine_serial_number') >= 0 ? getColIndex('machine_serial_number') : 
+                        getColIndex('machine') >= 0 ? getColIndex('machine') : -1;
+    const cassetteSNIdx = getColIndex('cassette_serial_number') >= 0 ? getColIndex('cassette_serial_number') : 
+                         getColIndex('cassette') >= 0 ? getColIndex('cassette') : -1;
+    const bankCodeIdx = getColIndex('bank_code') >= 0 ? getColIndex('bank_code') : 
+                       getColIndex('bank') >= 0 ? getColIndex('bank') : -1;
+    const pengelolaCodeIdx = getColIndex('pengelola_code') >= 0 ? getColIndex('pengelola_code') : 
+                            getColIndex('pengelola') >= 0 ? getColIndex('pengelola') : -1;
+    
+    console.log(`📊 [ImportService] Column indices - Machine: ${machineSNIdx}, Cassette: ${cassetteSNIdx}, Bank: ${bankCodeIdx}, Pengelola: ${pengelolaCodeIdx}`);
+    
+    if (cassetteSNIdx === -1 || bankCodeIdx === -1) {
+      const missingCols: string[] = [];
+      if (cassetteSNIdx === -1) missingCols.push('cassette_serial_number (or cassette)');
+      if (bankCodeIdx === -1) missingCols.push('bank_code (or bank)');
+      
+      throw new BadRequestException(
+        `Excel Machine-Cassette sheet is missing required columns: ${missingCols.join(', ')}. ` +
+        `Found columns: ${headers.join(', ')}. ` +
+        'Please ensure the sheet has columns: cassette_serial_number, bank_code (machine_serial_number and pengelola_code are optional)'
+      );
+    }
+
+    const records: MachineCassetteVendorData[] = [];
+    let skippedRows = 0;
+    
+    // Parse data rows
+    for (let i = 1; i < jsonData.length; i++) {
+      const row = jsonData[i] as any[];
+      
+      // Log first few rows for debugging
+      if (i <= 3) {
+        console.log(`📊 [ImportService] Row ${i + 1} data:`, JSON.stringify(row));
+      }
+      
+      // Skip empty rows - only cassette and bank are required, pengelola is optional
+      const cassetteSN = row && row[cassetteSNIdx] !== undefined && row[cassetteSNIdx] !== null 
+        ? row[cassetteSNIdx].toString().trim() 
+        : '';
+      const bankCode = row && row[bankCodeIdx] !== undefined && row[bankCodeIdx] !== null
+        ? row[bankCodeIdx].toString().trim()
+        : '';
+      const pengelolaCode = pengelolaCodeIdx >= 0 && row && row[pengelolaCodeIdx] !== undefined && row[pengelolaCodeIdx] !== null
+        ? row[pengelolaCodeIdx].toString().trim()
+        : undefined;
+      
+      if (i <= 3) {
+        console.log(`📊 [ImportService] Row ${i + 1} extracted - Cassette: "${cassetteSN}", Bank: "${bankCode}", Pengelola: "${pengelolaCode || '(optional, will skip assignment)'}"`);
+      }
+      
+      // Only cassette and bank are required
+      if (!cassetteSN || !bankCode) {
+        skippedRows++;
+        if (skippedRows <= 10) {
+          console.log(`⚠️ [ImportService] Skipping row ${i + 1}: missing required fields - Cassette: "${cassetteSN}", Bank: "${bankCode}"`);
+        }
+        continue;
+      }
+
+      const getValue = (idx: number): string | undefined => {
+        if (idx === -1) return undefined;
+        if (!row || row[idx] === undefined || row[idx] === null) return undefined;
+        const val = row[idx];
+        return val ? val.toString().trim() : undefined;
+      };
+
+      records.push({
+        machine_serial_number: getValue(machineSNIdx),
+        cassette_serial_number: cassetteSN,
+        bank_code: bankCode,
+        pengelola_code: pengelolaCode || undefined, // Optional
+      });
+      
+      if (records.length <= 3) {
+        console.log(`✅ [ImportService] Added record ${records.length}:`, {
+          machine: getValue(machineSNIdx),
+          cassette: cassetteSN,
+          bank: bankCode,
+          pengelola: pengelolaCode,
+        });
+      }
+    }
+
+    console.log(`📊 [ImportService] Parsed ${records.length} valid records, skipped ${skippedRows} empty/invalid rows`);
+    
+    return records;
+  }
+
+  private async importMachineCassetteFromExcelData(
+    records: MachineCassetteVendorData[],
+    userId: string
+  ): Promise<ImportResult> {
+    // Reuse the CSV import logic by calling importFromCSV logic
+    // Convert records to the same format as CSV import
+    return this.processMachineCassetteRecords(records, userId);
+  }
+
+  private async processMachineCassetteRecords(
+    records: MachineCassetteVendorData[],
+    userId: string
+  ): Promise<ImportResult> {
+    const result: ImportResult = {
+      success: true,
+    };
+
+    // Process records (same logic as CSV import)
+    const machineResults: Array<{ success: boolean; serialNumber?: string; error?: string }> = [];
+    const cassetteResults: Array<{ success: boolean; serialNumber?: string; error?: string }> = [];
+    
+    // Track unique machines to avoid duplicate processing
+    // Use Map to store machine serial number -> machine ID for cassette linking
+    const processedMachines = new Map<string, string>();
+    // Track cassette count per machine for usageType assignment (first 5 = MAIN, next 5 = BACKUP)
+    const machineCassetteCounts = new Map<string, number>();
+    // Track bank-pengelola pairs that have already been assigned to avoid duplicate assignments
+    const processedAssignments = new Set<string>(); // Format: "bankId:pengelolaId"
+
+    let processedCount = 0;
+    const logInterval = 1000;
+
+    for (const record of records) {
+      processedCount++;
+      
+      if (processedCount % logInterval === 0) {
+        console.log(`🔄 [ImportService] Processing record ${processedCount}/${records.length}...`);
+      }
+
+      const machineSN = record.machine_serial_number?.trim();
+      const cassetteSN = record.cassette_serial_number?.trim();
+      const bankCode = record.bank_code?.trim();
+      const pengelolaCode = record.pengelola_code?.trim();
+
+      // Only cassette and bank are required. Machine and Pengelola are optional
+      if (!cassetteSN || !bankCode) {
+        cassetteResults.push({
+          success: false,
+          serialNumber: cassetteSN || 'N/A',
+          error: 'Missing required fields (cassette or bank)',
+        });
+        if (machineSN) {
+          machineResults.push({
+            success: false,
+            serialNumber: machineSN,
+            error: 'Missing required fields (cassette or bank)',
+          });
+        }
+        continue;
+      }
+
+      try {
+        // Get bank
+        const bank = await this.prisma.customerBank.findUnique({
+          where: { bankCode },
+        });
+
+        if (!bank) {
+          throw new BadRequestException(`Bank ${bankCode} not found`);
+        }
+
+        // Get pengelola (optional - can be assigned manually later)
+        let pengelola: { id: string } | null = null;
+        if (pengelolaCode) {
+          const foundPengelola = await this.prisma.pengelola.findUnique({
+            where: { pengelolaCode },
+          });
+
+          if (!foundPengelola) {
+            console.warn(`⚠️ [ImportService] Pengelola ${pengelolaCode} not found. Skipping pengelola assignment. You can assign manually later.`);
+            // Don't throw error, just skip pengelola assignment
+          } else {
+            pengelola = foundPengelola;
+          }
+        }
+
+        // Process machine if provided (same logic as CSV import)
+        let machineId: string | null = null;
+        if (machineSN && !processedMachines.has(machineSN)) {
+          try {
+            // Check if machine exists by serial number
+            const existingMachine = await this.prisma.machine.findFirst({
+              where: { serialNumberManufacturer: machineSN },
+            });
+
+            if (existingMachine) {
+              machineId = existingMachine.id;
+              // Update existing machine Pengelola assignment (only if pengelola provided)
+              if (pengelola) {
+                await this.prisma.machine.update({
+                  where: { id: existingMachine.id },
+                  data: { pengelolaId: pengelola.id },
+                });
+              }
+              machineResults.push({
+                success: true,
+                serialNumber: machineSN,
+              });
+            } else {
+              // Create new machine (minimal required fields)
+              // Use more digits from serial number to avoid duplicate machineCode
+              // Use last 8 characters instead of 6, and sanitize to ensure uniqueness
+              const serialSuffix = machineSN.slice(-8).replace(/[^A-Z0-9]/g, '') || machineSN.slice(-6);
+              const machineCode = `M-${bankCode}-${serialSuffix}`;
+              
+              // Try to create machine, if machineCode duplicate, use upsert instead
+              try {
+                const machineData: any = {
+                  customerBankId: bank.id,
+                  machineCode,
+                  modelName: 'SR7500VS', // Default model
+                  serialNumberManufacturer: machineSN,
+                  physicalLocation: `Bank ${bank.bankName}`,
+                  status: 'OPERATIONAL',
+                };
+                // pengelolaId is now optional - can be assigned manually later
+                if (pengelola?.id) {
+                  machineData.pengelolaId = pengelola.id;
+                }
+                const newMachine = await this.prisma.machine.create({
+                  data: machineData as any, // Type assertion needed due to Prisma client type mismatch
+                });
+                machineId = newMachine.id;
+                machineResults.push({
+                  success: true,
+                  serialNumber: machineSN,
+                });
+              } catch (createError: any) {
+                // If machineCode duplicate, try to find existing machine with this code and use it
+                if (createError.code === 'P2002' && createError.meta?.target?.includes('machine_code')) {
+                  console.warn(`⚠️ [ImportService] Machine code ${machineCode} already exists, trying to find existing machine...`);
+                  const existingMachineByCode = await this.prisma.machine.findUnique({
+                    where: { machineCode },
+                  });
+                  
+                  if (existingMachineByCode) {
+                    machineId = existingMachineByCode.id;
+                    // Update pengelola if provided
+                    if (pengelola?.id) {
+                      await this.prisma.machine.update({
+                        where: { id: existingMachineByCode.id },
+                        data: { pengelolaId: pengelola.id },
+                      });
+                    }
+                    machineResults.push({
+                      success: true,
+                      serialNumber: machineSN,
+                    });
+                  } else {
+                    // If not found, try upsert based on serial number (fallback)
+                    throw createError;
+                  }
+                } else {
+                  throw createError;
+                }
+              }
+            }
+            processedMachines.set(machineSN, machineId); // Store machine ID for cassette linking
+          } catch (error: any) {
+            machineResults.push({
+              success: false,
+              serialNumber: machineSN,
+              error: error.message,
+            });
+            processedMachines.set(machineSN, ''); // Mark as processed even if failed to avoid retry
+          }
+        } else if (machineSN && processedMachines.has(machineSN)) {
+          // Machine already processed, get its ID
+          machineId = processedMachines.get(machineSN) as string | null;
+        }
+
+        // Process cassette
+        // Auto-detect cassette type from serial number
+        let cassetteTypeCode = this.extractCassetteTypeFromSN(cassetteSN);
+        if (!cassetteTypeCode) {
+          // Default to RB if cannot detect
+          cassetteTypeCode = 'RB';
+          console.warn(`⚠️ Could not detect cassette type from SN: ${cassetteSN}, defaulting to RB`);
+        }
+
+        const cassetteType = await this.prisma.cassetteType.findUnique({
+          where: { typeCode: cassetteTypeCode as any },
+        });
+
+        if (!cassetteType) {
+          throw new BadRequestException(`Cassette type ${cassetteTypeCode} not found`);
+        }
+
+        // Determine usageType based on position in Excel (first 5 = MAIN, next 5 = BACKUP)
+        let usageType: 'MAIN' | 'BACKUP' | undefined = undefined;
+        if (machineSN && machineId) {
+          const currentCount = machineCassetteCounts.get(machineSN) || 0;
+          usageType = currentCount < 5 ? 'MAIN' : 'BACKUP';
+          machineCassetteCounts.set(machineSN, currentCount + 1);
+        }
+
+        const cassetteData: any = {
+          serialNumber: cassetteSN,
+          cassetteTypeId: cassetteType.id,
+          customerBankId: bank.id,
+          status: 'OK',
+        };
+        if (usageType) {
+          cassetteData.usageType = usageType;
+        }
+        if (machineId) {
+          cassetteData.machineId = machineId;
+        }
+
+        const updateData: any = {
+          cassetteTypeId: cassetteType.id,
+          customerBankId: bank.id,
+          status: 'OK',
+        };
+        if (machineId) {
+          updateData.machineId = machineId;
+        }
+        if (usageType) {
+          updateData.usageType = usageType;
+        }
+
+        await this.prisma.cassette.upsert({
+          where: { serialNumber: cassetteSN },
+          update: updateData,
+          create: cassetteData,
+        });
+
+        cassetteResults.push({ success: true, serialNumber: cassetteSN });
+
+        // Create or update Pengelola-bank assignment (only if pengelola provided and not already processed)
+        if (pengelola) {
+          const assignmentKey = `${bank.id}:${pengelola.id}`;
+          if (!processedAssignments.has(assignmentKey)) {
+            try {
+              await this.prisma.bankPengelolaAssignment.upsert({
+                where: {
+                  customerBankId_pengelolaId: {
+                    customerBankId: bank.id,
+                    pengelolaId: pengelola.id,
+                  },
+                },
+                update: {
+                  status: 'ACTIVE',
+                },
+                create: {
+                  customerBankId: bank.id,
+                  pengelolaId: pengelola.id,
+                  status: 'ACTIVE',
+                },
+              });
+              processedAssignments.add(assignmentKey); // Mark as processed
+            } catch (error: any) {
+              // Log but don't fail the import if assignment fails
+              console.warn(`⚠️ Failed to create/update pengelola assignment: ${error.message}`);
+            }
+          }
+          // If already processed, skip silently (assignment already exists)
+        } else {
+          console.log(`ℹ️ [ImportService] Pengelola not provided for bank ${bankCode}. Assignment can be done manually later.`);
+        }
+      } catch (error: any) {
+        cassetteResults.push({
+          success: false,
+          serialNumber: cassetteSN,
+          error: error.message,
+        });
+        // Don't mark machine as failed if only cassette failed
+        // Machine might have been successfully created/updated earlier
+        // Only mark machine as failed if it hasn't been processed yet
+        if (machineSN && !processedMachines.has(machineSN)) {
+          machineResults.push({
+            success: false,
+            serialNumber: machineSN,
+            error: `Failed to process cassette: ${error.message}`,
+          });
+        }
+      }
+    }
+
+    result.cassettes = {
+      total: cassetteResults.length,
+      successful: cassetteResults.filter(r => r.success).length,
+      failed: cassetteResults.filter(r => !r.success).length,
+      results: cassetteResults,
+    };
+
+    if (machineResults.length > 0) {
+      result.machines = {
+        total: machineResults.length,
+        successful: machineResults.filter(r => r.success).length,
+        failed: machineResults.filter(r => !r.success).length,
+        results: machineResults,
+      };
+    }
+
+    result.success = 
+      (!result.cassettes || result.cassettes.failed === 0) &&
+      (!result.machines || result.machines.failed === 0);
+
+    return result;
   }
 
   private async importBanks(banks: BankData[]) {
@@ -435,12 +919,22 @@ export class ImportService {
           throw new BadRequestException(`Bank ${cassetteData.customerBankCode} not found`);
         }
 
+        // Normalize usageType
+        const normalizeUsageType = (usageType?: string): any => {
+          if (!usageType) return undefined;
+          const normalized = usageType.toUpperCase().trim();
+          if (normalized === 'PRIMARY' || normalized === 'MAIN') return 'MAIN';
+          if (normalized === 'SPARE' || normalized === 'BACKUP') return 'BACKUP';
+          return normalized as any;
+        };
+
         const cassette = await this.prisma.cassette.upsert({
           where: { serialNumber: cassetteData.serialNumber },
           update: {
             cassetteTypeId: cassetteType.id,
             customerBankId: bank.id,
             status: (cassetteData.status || 'OK') as any,
+            usageType: normalizeUsageType(cassetteData.usageType),
             notes: cassetteData.notes,
           },
           create: {
@@ -448,6 +942,7 @@ export class ImportService {
             cassetteTypeId: cassetteType.id,
             customerBankId: bank.id,
             status: (cassetteData.status || 'OK') as any,
+            usageType: normalizeUsageType(cassetteData.usageType),
             notes: cassetteData.notes,
           },
         });
@@ -473,12 +968,26 @@ export class ImportService {
 
   async importFromCSV(file: Express.Multer.File, userId: string): Promise<ImportResult> {
     try {
-      // Validate file type
+      // Validate file type by extension
       const validExtensions = ['.csv'];
       const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
       
       if (!validExtensions.includes(fileExtension)) {
         throw new BadRequestException('Invalid file type. Please upload CSV file (.csv)');
+      }
+
+      // Validate MIME type (more secure than extension alone)
+      const validMimeTypes = [
+        'text/csv',
+        'application/csv',
+        'text/plain', // Some systems report CSV as text/plain
+        'application/vnd.ms-excel', // Excel CSV variant
+      ];
+      
+      if (file.mimetype && !validMimeTypes.includes(file.mimetype.toLowerCase())) {
+        throw new BadRequestException(
+          `Invalid file MIME type: ${file.mimetype}. Expected CSV file (text/csv or application/csv)`
+        );
       }
 
       // Parse CSV file
@@ -531,7 +1040,12 @@ export class ImportService {
       const vendorAssignmentResults: Array<{ success: boolean; pengelolaCode?: string; bankCode?: string; error?: string }> = [];
       
       // Track unique machines to avoid duplicate processing
-      const processedMachines = new Set<string>();
+      // Use Map to store machine serial number -> machine ID for cassette linking
+      const processedMachines = new Map<string, string>();
+      // Track cassette count per machine for usageType assignment (first 5 = MAIN, next 5 = BACKUP)
+      const machineCassetteCounts = new Map<string, number>();
+      // Track bank-pengelola pairs that have already been assigned to avoid duplicate assignments
+      const processedAssignments = new Set<string>(); // Format: "bankId:pengelolaId"
 
       let processedCount = 0;
       const logInterval = 1000; // Log every 1000 records
@@ -550,19 +1064,19 @@ export class ImportService {
         const bankCode = record.bank_code?.trim();
         const pengelolaCode = record.pengelola_code?.trim();
 
-        // Cassette, bank, and Pengelola are required. Machine is optional (cassette can exist without machine)
-        if (!cassetteSN || !bankCode || !pengelolaCode) {
-          console.warn(`⚠️ [ImportService] Record ${processedCount} has missing required fields - Cassette: ${cassetteSN || 'N/A'}, Bank: ${bankCode || 'N/A'}, pengelola: ${pengelolaCode || 'N/A'}`);
+        // Only cassette and bank are required. Machine and Pengelola are optional
+        if (!cassetteSN || !bankCode) {
+          console.warn(`⚠️ [ImportService] Record ${processedCount} has missing required fields - Cassette: ${cassetteSN || 'N/A'}, Bank: ${bankCode || 'N/A'}`);
           cassetteResults.push({
             success: false,
             serialNumber: cassetteSN || 'N/A',
-            error: 'Missing required fields (cassette, bank, or Pengelola)',
+            error: 'Missing required fields (cassette or bank)',
           });
           if (machineSN) {
             machineResults.push({
               success: false,
               serialNumber: machineSN,
-              error: 'Missing required fields (cassette, bank, or Pengelola)',
+              error: 'Missing required fields (cassette or bank)',
             });
           }
           continue; // Skip this record but continue processing
@@ -583,13 +1097,19 @@ export class ImportService {
             throw new BadRequestException(`Bank with code ${bankCode} not found. Please create the bank first.`);
           }
 
-          // Get or create Pengelola
-          let Pengelola = await this.prisma.pengelola.findUnique({
-            where: { pengelolaCode },
-          });
+          // Get Pengelola (optional - can be assigned manually later)
+          let Pengelola: { id: string } | null = null;
+          if (pengelolaCode) {
+            const foundPengelola = await this.prisma.pengelola.findUnique({
+              where: { pengelolaCode },
+            });
 
-          if (!Pengelola) {
-            throw new BadRequestException(`Pengelola with code ${pengelolaCode} not found. Please create the Pengelola first.`);
+            if (!foundPengelola) {
+              console.warn(`⚠️ [ImportService] Pengelola ${pengelolaCode} not found. Skipping pengelola assignment. You can assign manually later.`);
+              // Don't throw error, just skip pengelola assignment
+            } else {
+              Pengelola = foundPengelola;
+            }
           }
 
           // Auto-detect cassette type from serial number
@@ -615,6 +1135,7 @@ export class ImportService {
           }
 
           // Create or update machine (only if machine SN exists and only once per unique machine SN)
+          let machineId: string | null = null;
           if (machineSN && !processedMachines.has(machineSN)) {
             try {
               // Check if machine exists by serial number
@@ -623,11 +1144,14 @@ export class ImportService {
               });
 
               if (existingMachine) {
-                // Update existing machine Pengelola assignment
-                await this.prisma.machine.update({
-                  where: { id: existingMachine.id },
-                  data: { pengelolaId: Pengelola.id },
-                });
+                machineId = existingMachine.id;
+                // Update existing machine Pengelola assignment (only if pengelola provided)
+                if (Pengelola) {
+                  await this.prisma.machine.update({
+                    where: { id: existingMachine.id },
+                    data: { pengelolaId: Pengelola.id },
+                  });
+                }
                 machineResults.push({
                   success: true,
                   serialNumber: machineSN,
@@ -636,53 +1160,80 @@ export class ImportService {
                 // Create new machine (minimal required fields)
                 // Note: Some fields are required but we'll use defaults
                 const machineCode = `M-${bankCode}-${machineSN.slice(-6)}`;
-                await this.prisma.machine.create({
-                  data: {
-                    customerBankId: bank.id,
-                    pengelolaId: Pengelola.id,
-                    machineCode,
-                    modelName: 'SR7500VS', // Default model (options: SR7500 or SR7500VS)
-                    serialNumberManufacturer: machineSN,
-                    physicalLocation: `Bank ${bank.bankName}`,
-                    status: 'OPERATIONAL',
-                  },
+                const machineData: any = {
+                  customerBankId: bank.id,
+                  machineCode,
+                  modelName: 'SR7500VS', // Default model (options: SR7500 or SR7500VS)
+                  serialNumberManufacturer: machineSN,
+                  physicalLocation: `Bank ${bank.bankName}`,
+                  status: 'OPERATIONAL',
+                };
+                // pengelolaId is now optional - can be assigned manually later
+                if (Pengelola?.id) {
+                  machineData.pengelolaId = Pengelola.id;
+                }
+                const newMachine = await this.prisma.machine.create({
+                  data: machineData as any, // Type assertion needed due to Prisma client type mismatch
                 });
+                machineId = newMachine.id;
                 machineResults.push({
                   success: true,
                   serialNumber: machineSN,
                 });
               }
-              processedMachines.add(machineSN);
+              processedMachines.set(machineSN, machineId); // Store machine ID for cassette linking
             } catch (error: any) {
               machineResults.push({
                 success: false,
                 serialNumber: machineSN,
                 error: error.message,
               });
-              processedMachines.add(machineSN); // Mark as processed even if failed to avoid retry
+              processedMachines.set(machineSN, ''); // Mark as processed even if failed to avoid retry
             }
           } else if (machineSN && processedMachines.has(machineSN)) {
-            // Machine already processed, just add success result for tracking
-            machineResults.push({
-              success: true,
-              serialNumber: machineSN,
-            });
+            // Machine already processed, get its ID
+            machineId = processedMachines.get(machineSN) || null;
           }
 
           // Create or update cassette
           try {
+            // Determine usageType based on position in Excel (first 5 = MAIN, next 5 = BACKUP)
+            let usageType: 'MAIN' | 'BACKUP' | undefined = undefined;
+            if (machineSN && machineId) {
+              const currentCount = machineCassetteCounts.get(machineSN) || 0;
+              usageType = currentCount < 5 ? 'MAIN' : 'BACKUP';
+              machineCassetteCounts.set(machineSN, currentCount + 1);
+            }
+
+            const cassetteData: any = {
+              serialNumber: cassetteSN,
+              cassetteTypeId: cassetteType.id,
+              customerBankId: bank.id,
+              status: 'OK',
+              ...(usageType && { usageType }),
+            };
+            
+            // Link cassette to machine if machine exists
+            if (machineId) {
+              cassetteData.machineId = machineId;
+            }
+
+            const updateData: any = {
+              cassetteTypeId: cassetteType.id,
+              customerBankId: bank.id,
+              status: 'OK',
+            };
+            if (machineId) {
+              updateData.machineId = machineId;
+            }
+            if (usageType) {
+              updateData.usageType = usageType;
+            }
+
             await this.prisma.cassette.upsert({
               where: { serialNumber: cassetteSN },
-              update: {
-                cassetteTypeId: cassetteType.id,
-                customerBankId: bank.id,
-              },
-              create: {
-                serialNumber: cassetteSN,
-                cassetteTypeId: cassetteType.id,
-                customerBankId: bank.id,
-                status: 'OK',
-              },
+              update: updateData,
+              create: cassetteData,
             });
             cassetteResults.push({
               success: true,
@@ -696,36 +1247,51 @@ export class ImportService {
             });
           }
 
-          // Create or update Pengelola-bank assignment
-          try {
-            await this.prisma.bankPengelolaAssignment.upsert({
-              where: {
-                customerBankId_pengelolaId: {
-                  customerBankId: bank.id,
-                  pengelolaId: Pengelola.id,
-                },
-              },
-              update: {
-                status: 'ACTIVE',
-              },
-              create: {
-                customerBankId: bank.id,
-                pengelolaId: Pengelola.id,
-                status: 'ACTIVE',
-              },
-            });
-            vendorAssignmentResults.push({
-              success: true,
-              pengelolaCode,
-              bankCode,
-            });
-          } catch (error: any) {
-            vendorAssignmentResults.push({
-              success: false,
-              pengelolaCode,
-              bankCode,
-              error: error.message,
-            });
+          // Create or update Pengelola-bank assignment (only if pengelola provided and not already processed)
+          if (Pengelola) {
+            const assignmentKey = `${bank.id}:${Pengelola.id}`;
+            if (!processedAssignments.has(assignmentKey)) {
+              try {
+                await this.prisma.bankPengelolaAssignment.upsert({
+                  where: {
+                    customerBankId_pengelolaId: {
+                      customerBankId: bank.id,
+                      pengelolaId: Pengelola.id,
+                    },
+                  },
+                  update: {
+                    status: 'ACTIVE',
+                  },
+                  create: {
+                    customerBankId: bank.id,
+                    pengelolaId: Pengelola.id,
+                    status: 'ACTIVE',
+                  },
+                });
+                processedAssignments.add(assignmentKey); // Mark as processed
+                vendorAssignmentResults.push({
+                  success: true,
+                  pengelolaCode,
+                  bankCode,
+                });
+              } catch (error: any) {
+                vendorAssignmentResults.push({
+                  success: false,
+                  pengelolaCode,
+                  bankCode,
+                  error: error.message,
+                });
+              }
+            } else {
+              // Already processed, skip silently (assignment already exists)
+              vendorAssignmentResults.push({
+                success: true,
+                pengelolaCode,
+                bankCode,
+              });
+            }
+          } else {
+            console.log(`ℹ️ [ImportService] Pengelola not provided for bank ${bankCode}. Assignment can be done manually later.`);
           }
         } catch (error: any) {
           console.error(`❌ [ImportService] Error processing record ${processedCount}:`, error.message);
@@ -805,7 +1371,7 @@ export class ImportService {
     file: Express.Multer.File,
     userId: string,
     bankCode: string,
-    pengelolaCode: string,
+    pengelolaCode?: string, // Optional - can be undefined if not provided (will be assigned manually later)
   ): Promise<MachineCassetteImportResult> {
     try {
       // Validate file type
@@ -859,12 +1425,19 @@ export class ImportService {
         throw new BadRequestException(`Bank with code ${bankCode} not found`);
       }
 
-      const Pengelola = await this.prisma.pengelola.findUnique({
-        where: { pengelolaCode },
-      });
+      // Get Pengelola (optional - can be assigned manually later)
+      let Pengelola: { id: string } | null = null;
+      if (pengelolaCode) {
+        const foundPengelola = await this.prisma.pengelola.findUnique({
+          where: { pengelolaCode },
+        });
 
-      if (!Pengelola) {
-        throw new BadRequestException(`Pengelola with code ${pengelolaCode} not found`);
+        if (!foundPengelola) {
+          console.warn(`⚠️ [ImportService] Pengelola ${pengelolaCode} not found. Skipping pengelola assignment. You can assign manually later.`);
+          // Don't throw error, just skip pengelola assignment
+        } else {
+          Pengelola = foundPengelola;
+        }
       }
 
       // Parse records into machine-cassette structure
@@ -1178,7 +1751,7 @@ export class ImportService {
               where: { id: existingMachine.id },
               data: {
                 customerBankId: bank.id,
-                pengelolaId: Pengelola.id,
+                ...(Pengelola?.id && { pengelolaId: Pengelola.id }), // Only include if Pengelola exists
                 machineCode,
                 modelName: 'SR7500VS',
                 physicalLocation: `Bank ${bank.bankName}`,
@@ -1186,16 +1759,19 @@ export class ImportService {
               },
             });
           } else {
+            const machineData: any = {
+              customerBankId: bank.id,
+              machineCode,
+              modelName: 'SR7500VS',
+              serialNumberManufacturer: machineSerialNumber,
+              physicalLocation: `Bank ${bank.bankName}`,
+              status: 'OPERATIONAL',
+            };
+            if (Pengelola?.id) {
+              machineData.pengelolaId = Pengelola.id;
+            }
             await this.prisma.machine.create({
-              data: {
-                customerBankId: bank.id,
-                pengelolaId: Pengelola.id,
-                machineCode,
-                modelName: 'SR7500VS',
-                serialNumberManufacturer: machineSerialNumber,
-                physicalLocation: `Bank ${bank.bankName}`,
-                status: 'OPERATIONAL',
-              },
+              data: machineData,
             });
           }
 
@@ -1360,6 +1936,52 @@ export class ImportService {
     ];
 
     return [header, ...examples].join('\n');
+  }
+
+  generateExcelTemplate(): Buffer {
+    const workbook = XLSX.utils.book_new();
+
+    // Machine-Cassette-Pengelola sheet (untuk bulk import mesin, kaset, dan pengelola assignments)
+    // Note: pengelola_code is optional - can be assigned manually later via assignment menu
+    const machineCassetteData = [
+      // Header row
+      ['machine_serial_number', 'cassette_serial_number', 'bank_code', 'pengelola_code'],
+      // Example rows (pengelola_code is optional - leave empty to assign manually later)
+      ['HTCH-SRM100-2023-0001', 'RB-BNI-0001', 'BNI', 'VND-TAG-001'],
+      ['HTCH-SRM100-2023-0002', 'RB-BNI-0002', 'BNI', 'VND-TAG-001'],
+      ['HTCH-SRM100-2023-0003', 'RB-BNI-0003', 'BNI', ''], // Empty pengelola_code - can assign manually
+      ['HTCH-SRM100-2023-0004', 'AB-BNI-0001', 'BNI', 'VND-ADV-001'],
+      ['HTCH-SRM100-2023-0005', 'RB-BNI-0004', 'BNI', ''], // Empty pengelola_code - can assign manually
+    ];
+    const machineCassetteSheet = XLSX.utils.aoa_to_sheet(machineCassetteData);
+    XLSX.utils.book_append_sheet(workbook, machineCassetteSheet, 'Machine-Cassette');
+
+    // Banks sheet (optional - untuk import banks)
+    const banksData = [
+      // Header row - hanya field yang ada di schema
+      ['BankCode', 'BankName', 'ContactPerson', 'ContactPhone', 'ContactEmail'],
+      // Example rows
+      ['BNI001', 'PT Bank Negara Indonesia', 'John Doe', '021-12345678', 'contact@bni.co.id'],
+      ['BNI002', 'PT Bank Negara Indonesia', 'Jane Smith', '031-87654321', 'sby@bni.co.id'],
+    ];
+    const banksSheet = XLSX.utils.aoa_to_sheet(banksData);
+    XLSX.utils.book_append_sheet(workbook, banksSheet, 'Banks');
+
+    // Cassettes sheet (optional - untuk import cassettes saja)
+    const cassettesData = [
+      // Header row
+      ['SerialNumber', 'CassetteTypeCode', 'CustomerBankCode', 'Status', 'UsageType', 'Notes'],
+      // Example rows
+      ['RB-BNI-0001', 'RB', 'BNI001', 'OK', 'MAIN', 'Main cassette'],
+      ['RB-BNI-0002', 'RB', 'BNI001', 'OK', 'BACKUP', 'Backup cassette'],
+      ['AB-BNI-0001', 'AB', 'BNI001', 'OK', 'MAIN', 'AB cassette'],
+      ['RB-BNI-0003', 'RB', 'BNI002', 'OK', 'MAIN', 'Surabaya cassette'],
+    ];
+    const cassettesSheet = XLSX.utils.aoa_to_sheet(cassettesData);
+    XLSX.utils.book_append_sheet(workbook, cassettesSheet, 'Cassettes');
+
+    // Generate buffer
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   }
 }
 

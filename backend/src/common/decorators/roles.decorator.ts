@@ -3,6 +3,7 @@ import { SetMetadata } from '@nestjs/common';
 export enum UserType {
   HITACHI = 'HITACHI',
   PENGELOLA = 'PENGELOLA',
+  BANK = 'BANK',
 }
 
 export const ROLES_KEY = 'roles';

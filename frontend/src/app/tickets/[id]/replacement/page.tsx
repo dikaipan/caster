@@ -866,7 +866,8 @@ export default function TicketReplacementPage() {
                                         Tanda Tangan Digital
                                       </p>
                                       <div className="inline-block border border-green-200 dark:border-green-700 rounded bg-white dark:bg-slate-900 p-2">
-                                        <img 
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img 
                                           src={ticket.cassetteReturn.signature} 
                                           alt="Tanda Tangan Digital" 
                                           className="h-auto max-h-24 object-contain"
@@ -931,7 +932,7 @@ export default function TicketReplacementPage() {
         {/* Pickup Confirmation Dialog - Only for RC staff */}
         {(user?.userType === 'HITACHI') ? (
           <Dialog open={showPickupDialog} onOpenChange={setShowPickupDialog}>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
               <Package className="h-5 w-5" />
@@ -1149,6 +1150,7 @@ export default function TicketReplacementPage() {
                             <div className="relative inline-block border-2 border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 p-2 cursor-pointer hover:border-teal-400 transition-colors"
                                  onClick={() => setShowSignaturePreview(true)}
                             >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img 
                                 src={pickupSignature} 
                                 alt="Preview Tanda Tangan"
@@ -1239,7 +1241,8 @@ export default function TicketReplacementPage() {
             
             <div className="py-4">
               {pickupSignature && (
-                <div className="relative border-4 border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 p-4 overflow-auto max-h-[60vh]">
+                <div className="relative border-4 border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 p-4 overflow-auto max-h-[60vh] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
                     src={pickupSignature} 
                     alt="Tanda Tangan Digital" 

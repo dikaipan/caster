@@ -42,7 +42,7 @@ async function main() {
 
   // 2. Create Hitachi Super Admin User
   console.log('👤 Creating Hitachi users...');
-  const superAdminPassword = await bcrypt.hash('admin123', 10);
+  const superAdminPassword = await bcrypt.hash('admin123', 12);
   const superAdmin = await prisma.hitachiUser.upsert({
     where: { username: 'admin' },
     update: {},
@@ -57,7 +57,7 @@ async function main() {
     },
   });
 
-  const rcManagerPassword = await bcrypt.hash('rcmanager123', 10);
+  const rcManagerPassword = await bcrypt.hash('rcmanager123', 12);
   const rcManager = await prisma.hitachiUser.upsert({
     where: { username: 'rc_manager' },
     update: {},
@@ -72,7 +72,7 @@ async function main() {
     },
   });
 
-  const rcStaffPassword = await bcrypt.hash('rcstaff123', 10);
+  const rcStaffPassword = await bcrypt.hash('rcstaff123', 12);
   const rcStaff = await prisma.hitachiUser.upsert({
     where: { username: 'rc_staff_1' },
     update: {},
@@ -167,7 +167,7 @@ async function main() {
       contractStartDate: new Date('2024-01-01'),
       contractEndDate: new Date('2026-12-31'),
       serviceScope: 'DKI Jakarta and surrounding areas',
-      assignedBranches: ['BNI-JKT-SUDIRMAN', 'BNI-JKT-THAMRIN', 'BNI-JKT-SENAYAN'],
+      assignedBranches: JSON.stringify(['BNI-JKT-SUDIRMAN', 'BNI-JKT-THAMRIN', 'BNI-JKT-SENAYAN']),
       slaResponseTimeHours: 4,
       slaResolutionTimeHours: 24,
       status: 'ACTIVE',
@@ -190,7 +190,7 @@ async function main() {
       contractStartDate: new Date('2024-01-01'),
       contractEndDate: new Date('2026-12-31'),
       serviceScope: 'East Java region',
-      assignedBranches: ['BNI-SBY-TUNJUNGAN', 'BNI-MLG-DIENG'],
+      assignedBranches: JSON.stringify(['BNI-SBY-TUNJUNGAN', 'BNI-MLG-DIENG']),
       slaResponseTimeHours: 6,
       slaResolutionTimeHours: 48,
       status: 'ACTIVE',
@@ -202,8 +202,8 @@ async function main() {
 
   // 6. Create Vendor Users
   console.log('👥 Creating vendor users...');
-  const pengelolaAdminPassword = await bcrypt.hash('vendor123', 10);
-  
+  const pengelolaAdminPassword = await bcrypt.hash('vendor123', 12);
+
   const tagAdmin = await prisma.pengelolaUser.upsert({
     where: { username: 'tag_admin' },
     update: {},
@@ -220,7 +220,7 @@ async function main() {
       canCreateTickets: true,
       canCloseTickets: true,
       canManageMachines: true,
-      assignedBranches: Prisma.JsonNull, // Admin can see all branches
+      assignedBranches: null, // Admin can see all branches
       status: 'ACTIVE',
     },
   });
@@ -230,18 +230,18 @@ async function main() {
     update: {},
     create: {
       pengelolaId: pengelolaTAG.id,
-      username: 'tag_tech1',
-      email: 'tech1@tag.co.id',
+      username: 'tag_supervisor1',
+      email: 'supervisor1@tag.co.id',
       passwordHash: pengelolaAdminPassword,
-      fullName: 'Technician 1 - Jakarta',
+      fullName: 'Supervisor 1 - Jakarta',
       phone: '+62-812-1111-1111',
       whatsappNumber: '+62-812-1111-1111',
-      role: 'TECHNICIAN',
+      role: 'SUPERVISOR',
       employeeId: 'TAG-EMP-101',
       canCreateTickets: true,
       canCloseTickets: false,
       canManageMachines: false,
-      assignedBranches: ['BNI-JKT-SUDIRMAN', 'BNI-JKT-THAMRIN'],
+      assignedBranches: JSON.stringify(['BNI-JKT-SUDIRMAN', 'BNI-JKT-THAMRIN']),
       status: 'ACTIVE',
     },
   });
@@ -262,7 +262,7 @@ async function main() {
       canCreateTickets: true,
       canCloseTickets: true,
       canManageMachines: true,
-      assignedBranches: Prisma.JsonNull,
+      assignedBranches: null,
       status: 'ACTIVE',
     },
   });
@@ -314,7 +314,7 @@ async function main() {
 
   // 8. Create Cassettes (5 per machine: 4 RB + 1 AB + spare pool)
   console.log('💿 Creating cassettes...');
-  
+
   // Machine 1 - Installed cassettes
   const cassettesM1: any[] = [];
   for (let i = 1; i <= 4; i++) {
@@ -395,6 +395,19 @@ async function main() {
   });
 
   console.log('✅ Cassettes created');
+
+  // 8. Create System Config (SLA Configuration)
+  console.log('⚙️  Creating system config...');
+  await prisma.systemConfig.upsert({
+    where: { key: 'repair_sla_hours' },
+    update: {},
+    create: {
+      key: 'repair_sla_hours',
+      value: '4',
+      description: 'Repair SLA target time in hours (default: 4 hours)',
+    },
+  });
+  console.log('✅ System config created');
 
   console.log('\n🎉 Database seed completed successfully!\n');
   console.log('📝 Default credentials:');

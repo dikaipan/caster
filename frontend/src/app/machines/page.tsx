@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
@@ -59,13 +60,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import AddMachineDialog from '@/components/machines/AddMachineDialog';
-import EditMachineDialog from '@/components/machines/EditMachineDialog';
+// Lazy load dialog components to reduce initial bundle size
+const AddMachineDialog = dynamic(() => import('@/components/machines/AddMachineDialog'), {
+  ssr: false,
+  loading: () => null, // Dialog handles its own loading state
+});
+
+const EditMachineDialog = dynamic(() => import('@/components/machines/EditMachineDialog'), {
+  ssr: false,
+  loading: () => null, // Dialog handles its own loading state
+});
 
 export default function MachinesPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
   const { toast } = useToast();
+  const isBank = user?.userType === 'BANK';
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
@@ -88,7 +98,10 @@ export default function MachinesPage() {
   
   // Use React Query untuk fetch banks
   const { data: banksData } = useBanks();
-  const banks = useMemo(() => banksData || [], [banksData]);
+  const banks = useMemo(() => {
+    if (!banksData) return [];
+    return Array.isArray(banksData) ? banksData : [];
+  }, [banksData]);
   
   // Extract machines and pagination from response
   const machines = useMemo(() => {
@@ -106,14 +119,16 @@ export default function MachinesPage() {
     if (!machinesData || Array.isArray(machinesData)) {
       return Array.isArray(machinesData) ? machinesData.length : 0;
     }
-    return machinesData?.pagination?.total || 0;
+    // Handle both 'pagination' and 'meta' response formats
+    return machinesData?.pagination?.total || machinesData?.meta?.total || 0;
   }, [machinesData]);
 
   const totalPages = useMemo(() => {
     if (!machinesData || Array.isArray(machinesData)) {
       return Array.isArray(machinesData) ? Math.ceil(machinesData.length / itemsPerPage) : 0;
     }
-    return machinesData?.pagination?.totalPages || 0;
+    // Handle both 'pagination' and 'meta' response formats
+    return machinesData?.pagination?.totalPages || machinesData?.meta?.totalPages || 0;
   }, [machinesData, itemsPerPage]);
   
   // Cassettes Dialog State
@@ -385,22 +400,24 @@ export default function MachinesPage() {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
               <div className="flex flex-1 gap-2 w-full sm:max-w-2xl">
-                <Select 
-                  value={selectedBankId || 'all'} 
-                  onValueChange={(value) => setSelectedBankId(value === 'all' ? null : value)}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Filter by Bank" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Banks</SelectItem>
-                    {banks.map((bank: any) => (
-                      <SelectItem key={bank.id} value={bank.id}>
-                        {bank.bankName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {!isBank && (
+                  <Select 
+                    value={selectedBankId || 'all'} 
+                    onValueChange={(value) => setSelectedBankId(value === 'all' ? null : value)}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Filter by Bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Banks</SelectItem>
+                      {Array.isArray(banks) && banks.map((bank: any) => (
+                        <SelectItem key={bank.id} value={bank.id}>
+                          {bank.bankName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -628,14 +645,7 @@ export default function MachinesPage() {
                           <Badge variant="outline">{machine.modelName || 'N/A'}</Badge>
                         </td>
                         <td className="p-4">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-sm text-gray-900 dark:text-slate-100">{machine.customerBank?.bankName || 'N/A'}</span>
-                            {machine.customerBank?.bankCode && (
-                              <span className="text-xs text-muted-foreground">
-                                {machine.customerBank.bankCode}
-                              </span>
-                            )}
-                          </div>
+                          <span className="font-medium text-sm text-gray-900 dark:text-slate-100">{machine.customerBank?.bankCode || machine.customerBank?.bankName || 'N/A'}</span>
                         </td>
                         <td className="p-4">
                           <div className="flex flex-col">
@@ -772,7 +782,7 @@ export default function MachinesPage() {
 
       {/* Cassettes Dialog */}
       <Dialog open={cassetteDialogOpen} onOpenChange={handleCloseCassetteDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-2xl">
               <Package className="h-6 w-6 text-primary dark:text-teal-400" />

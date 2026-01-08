@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
@@ -26,9 +26,12 @@ import {
   User,
   UserPlus,
   Calendar,
+  Settings,
+  Eye,
 } from 'lucide-react';
+// Dropdown menu removed in favor of direct action buttons for better clarity
 
-export default function RepairsPage() {
+function RepairsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
@@ -119,7 +122,7 @@ export default function RepairsPage() {
       params.params.dateFilter = dateFilter || 'ALL';
 
       const repairsRes = await api.get('/repairs', params);
-      
+
       // Handle both old format (array) and new format (object with data & pagination)
       if (Array.isArray(repairsRes.data)) {
         // Old format - backward compatibility
@@ -180,7 +183,7 @@ export default function RepairsPage() {
     try {
       setTakingTicket(repairId);
       await api.post(`/repairs/${repairId}/take`);
-      
+
       // Refresh data after taking ticket
       fetchRepairs();
     } catch (error: any) {
@@ -255,11 +258,10 @@ export default function RepairsPage() {
           <button
             key={key}
             onClick={() => setSelectedStatus(selectedStatus === key ? 'ALL' : key)}
-            className={`p-4 rounded-lg border-2 transition-all text-left ${
-              selectedStatus === key
-                ? `${borderActive} ${bgActive} shadow-lg`
-                : `border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 ${bgHover}`
-            }`}
+            className={`p-4 rounded-lg border-2 transition-all text-left ${selectedStatus === key
+              ? `${borderActive} ${bgActive} shadow-lg`
+              : `border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 ${bgHover}`
+              }`}
           >
             <Icon className={`h-5 w-5 ${iconColor} mb-2`} />
             <p className="text-xs text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">{label}</p>
@@ -327,7 +329,7 @@ export default function RepairsPage() {
                       <FileText className="h-16 w-16 text-slate-400 dark:text-slate-600 mx-auto mb-3" />
                       <p className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-lg">Tidak ada repair tickets</p>
                       <p className="text-sm text-slate-600 dark:text-slate-400 mt-2 max-w-md mx-auto">
-                        {repairs.length === 0 
+                        {repairs.length === 0
                           ? 'Belum ada repair tickets yang dibuat. Repair tickets dibuat dari Service Orders melalui tombol "Mulai Repair".'
                           : `Tidak ada repair tickets yang sesuai dengan filter "${getStatusBadge(selectedStatus).label}"`}
                       </p>
@@ -340,25 +342,24 @@ export default function RepairsPage() {
                     const isAssigned = repair.repairer !== null;
                     const isAssignedToMe = repair.repairedBy === user?.id;
                     const canTakeTicket = !isAssigned; // Only show Take button if ticket is unassigned
-                    
+
                     return (
-                      <tr 
-                        key={repair.id} 
-                        className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors bg-white dark:bg-transparent ${
-                          isAssigned 
-                            ? isAssignedToMe 
-                              ? 'bg-teal-50 dark:bg-slate-800/80 border-l-4 border-l-teal-500 dark:border-l-teal-500' 
-                              : 'bg-amber-50 dark:bg-slate-800/60 border-l-4 border-l-amber-400 dark:border-l-amber-500/50'
-                            : ''
-                        }`}
+                      <tr
+                        key={repair.id}
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors bg-white dark:bg-transparent ${isAssigned
+                          ? isAssignedToMe
+                            ? 'bg-teal-50 dark:bg-slate-800/80 border-l-4 border-l-teal-500 dark:border-l-teal-500'
+                            : 'bg-amber-50 dark:bg-slate-800/60 border-l-4 border-l-amber-400 dark:border-l-amber-500/50'
+                          : ''
+                          }`}
                       >
                         <td className="p-4">
                           {(() => {
-                            // Try to get SO ticket from delivery first, then from ticketCassetteDetails
-                            const deliveryTicket = repair.cassette?.deliveries?.[0]?.ticket;
-                            const detailTicket = repair.cassette?.ticketCassetteDetails?.[0]?.ticket;
-                            const soTicket = deliveryTicket || detailTicket;
-                            
+                            // Prefer backend-derived SO ticket (repairs.service attaches `soTicket`)
+                            const soTicket = (repair as any).soTicket
+                              || repair.cassette?.deliveries?.[0]?.ticket
+                              || repair.cassette?.ticketCassetteDetails?.[0]?.ticket;
+
                             if (soTicket?.ticketNumber) {
                               return (
                                 <Link href={`/tickets/${soTicket.id}`}>
@@ -400,26 +401,18 @@ export default function RepairsPage() {
                         <td className="p-4">
                           {isAssigned ? (
                             <div className="flex items-center gap-2">
-                              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${
-                                isAssignedToMe 
-                                  ? 'bg-teal-100 dark:bg-teal-500/20 border border-teal-300 dark:border-teal-500/30' 
-                                  : 'bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/30'
-                              }`}>
-                                <User className={`h-4 w-4 ${
-                                  isAssignedToMe ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'
-                                }`} />
-                                <span className={`text-sm font-semibold ${
-                                  isAssignedToMe 
-                                    ? 'text-teal-700 dark:text-teal-300' 
-                                    : 'text-amber-700 dark:text-amber-300'
+                              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${isAssignedToMe
+                                ? 'bg-teal-100 dark:bg-teal-500/20 border border-teal-300 dark:border-teal-500/30'
+                                : 'bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/30'
                                 }`}>
+                                <User className={`h-4 w-4 ${isAssignedToMe ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'
+                                  }`} />
+                                <span className={`text-sm font-semibold ${isAssignedToMe
+                                  ? 'text-teal-700 dark:text-teal-300'
+                                  : 'text-amber-700 dark:text-amber-300'
+                                  }`}>
                                   {repair.repairer?.fullName || 'N/A'}
                                 </span>
-                                {isAssignedToMe && (
-                                  <Badge className="ml-1 bg-teal-500 dark:bg-teal-500 text-white text-xs px-1.5 py-0.5 font-bold">
-                                    You
-                                  </Badge>
-                                )}
                               </div>
                             </div>
                           ) : (
@@ -434,10 +427,10 @@ export default function RepairsPage() {
                             <Clock className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                             {repair.receivedAtRc
                               ? new Date(repair.receivedAtRc).toLocaleDateString('id-ID', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  year: '2-digit'
-                                })
+                                day: '2-digit',
+                                month: 'short',
+                                year: '2-digit'
+                              })
                               : 'N/A'}
                           </div>
                         </td>
@@ -450,52 +443,52 @@ export default function RepairsPage() {
                                 : <span className="text-red-600 dark:text-red-400">❌ Fail</span>}
                           </span>
                         </td>
-                        <td className="p-4 text-center">
+                        <td className="p-4">
                           <div className="flex items-center justify-center gap-2">
-                            {repair.status !== 'COMPLETED' && (
-                              <>
-                                {canTakeTicket ? (
-                                  // Show Take button only if ticket is unassigned
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 px-3 text-xs font-bold bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white border-0"
-                                    onClick={() => handleTakeTicket(repair.id)}
-                                    disabled={takingTicket === repair.id}
-                                  >
-                                    {takingTicket === repair.id ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                      <>
-                                        <UserPlus className="h-3.5 w-3.5 mr-1" />
-                                        Take
-                                      </>
-                                    )}
-                                  </Button>
-                                ) : isAssignedToMe ? (
-                                  // If assigned to me, show "Mine" badge (like in the image)
-                                  <Badge className="bg-blue-600 dark:bg-blue-600 hover:bg-blue-700 dark:hover:bg-blue-700 text-white text-xs px-2.5 py-1.5 font-bold flex items-center gap-1.5 cursor-default">
-                                    <User className="h-3.5 w-3.5" />
-                                    Mine
-                                  </Badge>
-                                ) : (
-                                  // If assigned to someone else, show "Assigned" badge with info
-                                  <Badge className="bg-slate-500 dark:bg-slate-600 text-white text-xs px-2.5 py-1.5 font-bold flex items-center gap-1.5 cursor-default" title={`Assigned to ${repair.repairer?.fullName || 'another user'}`}>
-                                    <User className="h-3.5 w-3.5" />
-                                    Assigned
-                                  </Badge>
-                                )}
-                              </>
-                            )}
-                            <Link href={`/repairs/${repair.id}${currentPage > 1 ? `?page=${currentPage}` : ''}`}>
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
-                                className="h-8 px-3 text-xs font-bold border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                            {/* Take Ticket button (if unassigned and user can take) */}
+                            {canTakeTicket && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleTakeTicket(repair.id)}
+                                disabled={takingTicket === repair.id}
+                                className="h-8 px-3 text-xs border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200"
                               >
-                                {repair.status === 'COMPLETED' ? 'View' : 'Manage'}
+                                {takingTicket === repair.id ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    Taking...
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserPlus className="h-3 w-3 mr-1" />
+                                    Take
+                                  </>
+                                )}
+                              </Button>
+                            )}
+
+                            {/* View / Manage button */}
+                            <Link href={`/repairs/${repair.id}${currentPage > 1 ? `?page=${currentPage}` : ''}`}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-3 text-xs border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200"
+                              >
+                                {repair.status === 'COMPLETED' ? (
+                                  <>
+                                    <Eye className="h-3 w-3 mr-1" />
+                                    Detail
+                                  </>
+                                ) : (
+                                  <>
+                                    <Settings className="h-3 w-3 mr-1" />
+                                    Manage
+                                  </>
+                                )}
                               </Button>
                             </Link>
+
                           </div>
                         </td>
                       </tr>
@@ -537,6 +530,14 @@ export default function RepairsPage() {
         </CardContent>
       </Card>
     </PageLayout>
+  );
+}
+
+export default function RepairsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-teal-600 dark:text-teal-400" /></div>}>
+      <RepairsPageContent />
+    </Suspense>
   );
 }
 

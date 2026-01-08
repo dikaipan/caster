@@ -1,5 +1,7 @@
 // Import polyfills FIRST before any other imports
 import './polyfills';
+// Initialize Sentry
+import './instrument';
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
@@ -8,54 +10,69 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import helmet from 'helmet';
 import * as express from 'express';
+import * as cookieParser from 'cookie-parser';
+import * as compression from 'compression';
+import { validateEnvironment } from './common/config/env.validation';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+
+// Validate environment variables at startup (fail fast if critical secrets missing)
+const envValidation = validateEnvironment();
+if (!envValidation.valid) {
+  console.error('\n❌ Environment validation failed!');
+  console.error('Please fix the following errors before starting the application:\n');
+  envValidation.errors.forEach(error => console.error(`  - ${error}`));
+  console.error('\n');
+  process.exit(1);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   // Enable CORS FIRST - before other middleware to handle preflight requests
   const isProduction = process.env.NODE_ENV === 'production';
   const corsOrigin = process.env.CORS_ORIGIN;
-  
+
   // Support multiple origins (comma-separated)
-  const corsOrigins = corsOrigin 
+  const corsOrigins = corsOrigin
     ? corsOrigin.split(',').map(origin => origin.trim()).filter(origin => origin)
     : [];
-  
+
   const allowedOrigins = isProduction
     ? corsOrigins
     : [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:3002',
-        'http://localhost:3003',
-        'http://localhost:3004',
-        'http://localhost:3005',
-        ...corsOrigins,
-      ];
-  
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003',
+      'http://localhost:3004',
+      'http://localhost:3005',
+      ...corsOrigins,
+    ];
+
   // Log CORS configuration for debugging
   console.log('🔒 CORS Configuration:');
   console.log(`   NODE_ENV: ${isProduction ? 'production' : 'development'}`);
   console.log(`   CORS_ORIGIN: ${corsOrigin || 'not set'}`);
   console.log(`   Allowed Origins: ${allowedOrigins.join(', ') || 'none'}`);
-  
+
   app.enableCors({
     origin: (origin, callback) => {
       // Log incoming origin for debugging
       if (isProduction) {
         console.log(`🌐 CORS Request from origin: ${origin || 'no origin'}`);
       }
-      
+
       // Allow requests with no origin (mobile apps, Postman, etc.) in development only
       if (!origin && !isProduction) {
         return callback(null, true);
       }
-      
+
       // In production, require origin
       if (isProduction && !origin) {
         return callback(new Error('Origin is required in production'));
       }
-      
+
       // Check if origin is allowed
       if (origin && allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -72,6 +89,12 @@ async function bootstrap() {
     preflightContinue: false, // Let NestJS handle preflight
     optionsSuccessStatus: 204, // Return 204 for OPTIONS requests
   });
+
+
+
+  app.use(cookieParser()); // Enable cookie parsing BEFORE Helmet/CORS
+  app.use(compression()); // Enable Gzip compression
+
 
   // Security: Helmet for security headers (after CORS)
   app.use(helmet({
@@ -95,6 +118,9 @@ async function bootstrap() {
       includeSubDomains: true,
       preload: true,
     },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' }, // User requested check
+    xssFilter: true, // User requested check
+    noSniff: true, // User requested check
   }));
 
   // Increase body size limit for large file uploads (50MB)
@@ -103,7 +129,7 @@ async function bootstrap() {
 
   // Fix BigInt serialization issue
   // Override JSON.stringify to handle BigInt values
-  (BigInt.prototype as any).toJSON = function() {
+  (BigInt.prototype as any).toJSON = function () {
     return this.toString();
   };
 
@@ -135,7 +161,7 @@ async function bootstrap() {
   });
 
   // Global prefix
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api/v1');
 
   // Swagger documentation - Security: Disable in production
   if (!isProduction) {

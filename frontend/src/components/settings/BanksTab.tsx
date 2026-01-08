@@ -345,7 +345,7 @@ export default function BanksTab() {
                   Add Bank Customer
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
                 <DialogHeader>
                   <DialogTitle>Create Bank Customer</DialogTitle>
                   <DialogDescription>
@@ -729,7 +729,7 @@ export default function BanksTab() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <DialogHeader>
             <DialogTitle>Edit Bank Customer</DialogTitle>
             <DialogDescription>
@@ -852,7 +852,7 @@ export default function BanksTab() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto py-4">
+          <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
             {loadingWarranty ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

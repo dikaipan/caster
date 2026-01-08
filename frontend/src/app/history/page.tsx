@@ -185,6 +185,29 @@ export default function HistoryPage() {
     return filtered;
   }, [allItems, searchTerm, selectedStatus, selectedMonth]);
 
+  // Summary counts for tickets: Repair vs Replacement
+  const ticketSummary = useMemo(() => {
+    const ticketsOnly = filteredItems.filter((item) => item.itemType === 'ticket');
+    let repairCount = 0;
+    let replacementCount = 0;
+
+    ticketsOnly.forEach((item: any) => {
+      const hasReplacement = item.cassetteDetails?.some((d: any) => d.requestReplacement === true);
+      if (hasReplacement) {
+        replacementCount += 1;
+      } else {
+        repairCount += 1;
+      }
+    });
+
+    return {
+      total: filteredItems.length,
+      tickets: ticketsOnly.length,
+      repair: repairCount,
+      replacement: replacementCount,
+    };
+  }, [filteredItems]);
+
   // Pagination
   const paginatedItems = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -405,7 +428,7 @@ export default function HistoryPage() {
           {/* Actions */}
           <div className="flex justify-end items-center gap-2 mt-4">
             <span className="text-sm text-gray-600 dark:text-slate-400 mr-1">
-              {filteredItems.length} items ({filteredItems.filter(i => i.itemType === 'ticket').length} RO, {filteredItems.filter(i => i.itemType === 'pm').length} PM)
+              {ticketSummary.total} items ({ticketSummary.repair} Repair, {ticketSummary.replacement} Replacement)
             </span>
             <Button
               variant="outline"
@@ -456,25 +479,25 @@ export default function HistoryPage() {
         <>
           {/* SO History Table */}
           {paginatedItems.filter((item) => item.itemType === 'ticket').length > 0 && (
-            <Card className="bg-slate-800 border-slate-700 mb-6">
+            <Card className="bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 mb-6">
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="border-b border-slate-700 bg-slate-900">
+                    <thead className="border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
                       <tr>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">SO Number</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Title</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Cassette</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Machine</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Reporter</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Status</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Created</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Closed</th>
-                        <th className="text-left p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Duration</th>
-                        <th className="text-center p-4 text-xs font-extrabold text-slate-300 uppercase tracking-wider">Action</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">SO Number</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Title</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Cassette</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Machine</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Reporter</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Status</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Created</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Closed</th>
+                        <th className="text-left p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Duration</th>
+                        <th className="text-center p-4 text-xs font-extrabold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-700">
+                    <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
                       {paginatedItems.filter((item) => item.itemType === 'ticket').length === 0 ? (
                         <tr>
                           <td colSpan={10} className="p-12 text-center text-slate-400">
@@ -520,19 +543,19 @@ export default function HistoryPage() {
                             : [];
 
               return (
-                            <tr key={item.id} className="hover:bg-slate-700/50 transition-colors">
+                            <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors bg-white dark:bg-slate-800">
                               <td className="p-4">
                             <div className="flex items-center gap-2">
                               <Link
                                   href={`/tickets/${item.id}?from=history`}
-                                    className="font-mono font-extrabold text-sm text-teal-400 hover:text-teal-300 hover:underline transition-colors"
+                                    className="font-mono font-extrabold text-sm text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 hover:underline transition-colors"
                               >
                                   {item.ticketNumber}
                               </Link>
                             </div>
                               </td>
                               <td className="p-4">
-                                <p className="text-sm text-slate-200 font-semibold truncate max-w-[200px]" title={item.title}>
+                                <p className="text-sm text-gray-900 dark:text-slate-200 font-semibold truncate max-w-[200px]" title={item.title}>
                                   {item.title || 'N/A'}
                                 </p>
                               </td>
@@ -548,7 +571,7 @@ export default function HistoryPage() {
                                         const isReplacement = replacementCassettes.some((rc: any) => rc.id === cassette.id);
                                         return (
                                           <div key={cassette.id} className="flex items-center gap-1">
-                                            <p className="font-mono text-xs text-slate-400 font-semibold truncate">
+                                            <p className="font-mono text-xs text-gray-600 dark:text-slate-400 font-semibold truncate">
                                               {cassette.serialNumber}
                                             </p>
                                             {isReplacement && cassette.status === 'SCRAPPED' && (
@@ -560,19 +583,19 @@ export default function HistoryPage() {
                                         );
                                       })}
                                       {cassetteCount > 2 && (
-                                        <p className="text-xs text-slate-500 font-medium">+{cassetteCount - 2} lagi</p>
+                                        <p className="text-xs text-gray-500 dark:text-slate-500 font-medium">+{cassetteCount - 2} lagi</p>
                                       )}
                                     </div>
                                   </div>
                                 ) : (
                                 <div>
                                   <div className="flex items-center gap-1">
-                                    <p className="font-mono font-extrabold text-sm text-slate-100">
+                                    <p className="font-mono font-extrabold text-sm text-gray-900 dark:text-slate-100">
                                       {allCassettes[0]?.serialNumber || item.cassette?.serialNumber || 'N/A'}
                                     </p>
                                   </div>
                                   {allCassettes[0]?.cassetteType && (
-                                    <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                                    <p className="text-xs text-gray-600 dark:text-slate-400 font-semibold mt-0.5">
                                       {allCassettes[0].cassetteType.typeCode}
                                     </p>
                                   )}
@@ -585,14 +608,14 @@ export default function HistoryPage() {
                                 )}
                               </td>
                               <td className="p-4">
-                                <p className="text-sm text-slate-200 font-semibold truncate max-w-[120px]">
+                                <p className="text-sm text-gray-900 dark:text-slate-200 font-semibold truncate max-w-[120px]">
                                   {item.machine?.serialNumberManufacturer || 'N/A'}
                               </p>
                               </td>
                               <td className="p-4">
                                 <div className="flex items-center gap-1.5 text-sm">
-                                  <User className="h-3.5 w-3.5 text-slate-400" />
-                                  <span className="text-slate-300 font-medium truncate max-w-[100px]">
+                                  <User className="h-3.5 w-3.5 text-gray-500 dark:text-slate-400" />
+                                  <span className="text-gray-700 dark:text-slate-300 font-medium truncate max-w-[100px]">
                                     {item.reporter?.fullName || 'N/A'}
                             </span>
                           </div>
@@ -604,29 +627,29 @@ export default function HistoryPage() {
                                 </Badge>
                               </td>
                               <td className="p-4">
-                                <div className="flex items-center gap-1.5 text-sm text-slate-300 font-medium">
-                                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                                <div className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-slate-300 font-medium">
+                                  <Calendar className="h-3.5 w-3.5 text-gray-600 dark:text-slate-400" />
                                   {formatDateTime(item.reportedAt).split(',')[0]}
                                 </div>
                               </td>
                               <td className="p-4">
                                 {closed ? (
-                                  <div className="flex items-center gap-1.5 text-sm text-slate-300 font-medium">
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+                                  <div className="flex items-center gap-1.5 text-sm text-gray-900 dark:text-slate-300 font-medium">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                                     {formatDateTime(closed.toISOString()).split(',')[0]}
                                   </div>
                                 ) : (
-                                  <span className="text-sm text-slate-500">-</span>
+                                  <span className="text-sm text-gray-500 dark:text-slate-500">-</span>
                                 )}
                               </td>
                               <td className="p-4">
                                 {duration !== null ? (
                                   <div className="flex items-center gap-1.5 text-sm">
-                                    <Clock className="h-3.5 w-3.5 text-green-400" />
-                                    <span className="text-green-400 font-bold">{duration} hari</span>
+                                    <Clock className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                                    <span className="text-green-600 dark:text-green-400 font-bold">{duration} hari</span>
                       </div>
                                 ) : (
-                                  <span className="text-sm text-slate-500">-</span>
+                                  <span className="text-sm text-gray-500 dark:text-slate-500">-</span>
                                 )}
                               </td>
                               <td className="p-4 text-center">
@@ -634,7 +657,7 @@ export default function HistoryPage() {
                                   <Button 
                                     size="sm" 
                                     variant="outline" 
-                                    className="h-8 px-3 text-xs font-bold border-slate-600 text-slate-300 hover:bg-slate-700"
+                                    className="h-8 px-3 text-xs font-bold border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                                   >
                                     View
                             </Button>

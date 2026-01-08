@@ -1,16 +1,21 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RepairTicketStatus } from '@prisma/client';
 import { CreateRepairTicketDto, UpdateRepairTicketDto, CompleteRepairDto } from './dto';
 import { WarrantyService } from '../warranty/warranty.service';
+import { StatusTransitionValidator } from '../common/validators/status-transition.validator';
+import { TicketStatusSyncService } from '../tickets/ticket-status-sync.service';
 
 @Injectable()
 export class RepairsService {
   private readonly logger = new Logger(RepairsService.name);
-  
+
   constructor(
     private prisma: PrismaService,
     private warrantyService: WarrantyService,
-  ) {}
+    @Inject(forwardRef(() => TicketStatusSyncService))
+    private ticketStatusSync: TicketStatusSyncService,
+  ) { }
 
   async findAll(
     userType: string,
@@ -90,7 +95,7 @@ export class RepairsService {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
+
     // Date filter - use createdAt as primary filter
     // Default to ALL if not specified (show all dates)
     if (dateFilter === 'ALL' || !dateFilter) {
@@ -98,7 +103,7 @@ export class RepairsService {
     } else {
       // Use specified filter
       let dateFilterToUse = dateFilter;
-      
+
       // Date filter - use createdAt as primary filter since receivedAtRc might be null
       // This is simpler and more reliable than trying to handle null receivedAtRc
       switch (dateFilterToUse) {
@@ -156,7 +161,7 @@ export class RepairsService {
           };
           break;
       }
-      
+
     }
 
     // Build AND conditions array
@@ -164,7 +169,7 @@ export class RepairsService {
     if (dateFilterCondition) {
       andConditions.push(dateFilterCondition);
     }
-    
+
     // Add search condition if exists
     if (search && search.trim()) {
       const searchTerm = search.trim();
@@ -190,7 +195,7 @@ export class RepairsService {
       };
       andConditions.push(searchCondition);
     }
-    
+
     // Combine all conditions using AND
     // Only add AND if we have conditions to combine
     if (andConditions.length > 0) {
@@ -198,13 +203,13 @@ export class RepairsService {
       const baseConditions: any = {
         deletedAt: null, // Always filter out soft-deleted repair tickets
       };
-      
+
       // Preserve existing OR condition for filtering deleted tickets
       if (whereClause.OR && Array.isArray(whereClause.OR)) {
         baseConditions.OR = whereClause.OR;
         delete whereClause.OR;
       }
-      
+
       if (whereClause.status) {
         baseConditions.status = whereClause.status;
         delete whereClause.status;
@@ -213,7 +218,7 @@ export class RepairsService {
         baseConditions.qcPassed = whereClause.qcPassed;
         delete whereClause.qcPassed;
       }
-      
+
       // Combine base conditions with AND conditions
       whereClause.AND = [baseConditions, ...andConditions];
     } else {
@@ -236,6 +241,7 @@ export class RepairsService {
     const orderBy = this.getOrderBy(sortBy || 'receivedAtRc', sortOrder);
 
     // Fetch repairs with pagination
+    // ✅ OPTIMIZED: Direct include soTicket via relation (no post-processing needed)
     const repairs = await this.prisma.repairTicket.findMany({
       where: whereClause,
       include: {
@@ -248,48 +254,17 @@ export class RepairsService {
                 bankName: true,
               },
             },
-            deliveries: {
-              where: {
-                ticket: {
-                  deletedAt: null, // Only include deliveries from non-deleted tickets
-                },
-              },
-              include: {
-                ticket: {
-                  select: {
-                    id: true,
-                    ticketNumber: true,
-                    status: true,
-                    createdAt: true,
-                  },
-                },
-              },
-              orderBy: {
-                createdAt: 'desc',
-              },
-              take: 1, // Get the most recent delivery
-            },
-            ticketCassetteDetails: {
-              where: {
-                ticket: {
-                  deletedAt: null, // Only include details from non-deleted tickets
-                },
-              },
-              include: {
-                ticket: {
-                  select: {
-                    id: true,
-                    ticketNumber: true,
-                    status: true,
-                    createdAt: true,
-                  },
-                },
-              },
-              orderBy: {
-                createdAt: 'desc',
-              },
-              take: 1, // Get the most recent ticket detail
-            },
+            // ✅ REMOVED: deliveries & ticketCassetteDetails - tidak perlu lagi dengan denormalisasi
+          },
+        },
+        soTicket: {
+          // ✅ NEW: Include SO ticket langsung via relation
+          select: {
+            id: true,
+            ticketNumber: true,
+            status: true,
+            createdAt: true,
+            closedAt: true,
           },
         },
         repairer: {
@@ -298,14 +273,36 @@ export class RepairsService {
             role: true,
           },
         },
-      },
+      } as any, // Type assertion until Prisma client is regenerated
       orderBy,
       skip,
       take,
     });
 
+    // Parse partsReplaced from JSON string to array for each repair
+    // ✅ REMOVED: getSoTicketForRepair() call - soTicket sudah ada dari include!
+    const repairsWithParsedParts = repairs.map((repair) => {
+      let parsedRepair: any = repair;
+
+      if (repair.partsReplaced) {
+        try {
+          const parsed = JSON.parse(repair.partsReplaced);
+          parsedRepair = {
+            ...repair,
+            partsReplaced: Array.isArray(parsed) ? parsed : parsed,
+          };
+        } catch (error) {
+          // If parsing fails, keep original value (might be a plain string)
+          parsedRepair = repair;
+        }
+      }
+
+      // ✅ soTicket already included - no need for post-processing
+      return parsedRepair;
+    });
+
     return {
-      data: repairs,
+      data: repairsWithParsedParts,
       pagination: {
         page,
         limit,
@@ -313,6 +310,116 @@ export class RepairsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Determine SO ticket ID for a cassette at a given reference time
+   * Used for denormalized soTicketId field
+   */
+  private async determineSoTicketIdForCassette(
+    cassetteId: string,
+    referenceTime: Date,
+    tx?: any
+  ): Promise<string | null> {
+    const prisma = tx || this.prisma;
+
+    const cassette = await prisma.cassette.findUnique({
+      where: { id: cassetteId },
+      include: {
+        deliveries: {
+          where: {
+            ticket: {
+              deletedAt: null,
+            },
+          },
+          include: {
+            ticket: {
+              select: {
+                id: true,
+                ticketNumber: true,
+                status: true,
+                createdAt: true,
+                closedAt: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+        ticketCassetteDetails: {
+          where: {
+            ticket: {
+              deletedAt: null,
+            },
+          },
+          include: {
+            ticket: {
+              select: {
+                id: true,
+                ticketNumber: true,
+                status: true,
+                createdAt: true,
+                closedAt: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!cassette) return null;
+
+    type TicketLite = { id: string; ticketNumber: string; status: string; createdAt: Date; closedAt: Date | null };
+
+    const candidates: TicketLite[] = [];
+
+    cassette.deliveries?.forEach((delivery: any) => {
+      if (delivery.ticket) {
+        candidates.push({
+          id: delivery.ticket.id,
+          ticketNumber: delivery.ticket.ticketNumber,
+          status: delivery.ticket.status,
+          createdAt: delivery.ticket.createdAt,
+          closedAt: delivery.ticket.closedAt,
+        });
+      }
+    });
+
+    cassette.ticketCassetteDetails?.forEach((detail: any) => {
+      if (detail.ticket) {
+        candidates.push({
+          id: detail.ticket.id,
+          ticketNumber: detail.ticket.ticketNumber,
+          status: detail.ticket.status,
+          createdAt: detail.ticket.createdAt,
+          closedAt: detail.ticket.closedAt,
+        });
+      }
+    });
+
+    if (candidates.length === 0) return null;
+
+    // First, try to find tickets whose lifetime covers the repair time
+    const lifetimeMatches = candidates.filter((t) => {
+      if (t.createdAt > referenceTime) return false;
+      if (t.closedAt && referenceTime > t.closedAt) return false;
+      return true;
+    });
+
+    if (lifetimeMatches.length > 0) {
+      lifetimeMatches.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      return lifetimeMatches[lifetimeMatches.length - 1].id;
+    }
+
+    // Fallback: choose the latest ticket created before the repair
+    const createdBefore = candidates.filter((t) => t.createdAt <= referenceTime);
+    const list = createdBefore.length > 0 ? createdBefore : candidates;
+    list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return list[list.length - 1].id;
   }
 
   private getOrderBy(sortBy: string, sortOrder: 'asc' | 'desc'): any {
@@ -423,6 +530,15 @@ export class RepairsService {
             customerBank: true,
           },
         },
+        soTicket: {
+          select: {
+            id: true,
+            ticketNumber: true,
+            status: true,
+            createdAt: true,
+            closedAt: true,
+          },
+        },
         repairer: {
           select: {
             fullName: true,
@@ -430,11 +546,25 @@ export class RepairsService {
             email: true,
           },
         },
-      },
+      } as any, // Type assertion until Prisma client is regenerated
     });
 
     if (!ticket) {
       throw new NotFoundException(`Repair ticket with ID ${id} not found`);
+    }
+
+    // Parse partsReplaced from JSON string to array if it exists
+    if (ticket.partsReplaced) {
+      try {
+        const parsed = JSON.parse(ticket.partsReplaced);
+        return {
+          ...ticket,
+          partsReplaced: Array.isArray(parsed) ? parsed : parsed,
+        };
+      } catch (error) {
+        // If parsing fails, return as is (might be a plain string)
+        return ticket;
+      }
     }
 
     return ticket;
@@ -462,18 +592,28 @@ export class RepairsService {
 
     // Create repair ticket and update cassette status
     return this.prisma.$transaction(async (tx) => {
+      const referenceTime = new Date();
+
+      // Determine SO ticket ID saat create
+      const soTicketId = await this.determineSoTicketIdForCassette(
+        createDto.cassetteId,
+        referenceTime,
+        tx
+      );
+
       // Update cassette to IN_REPAIR
       await tx.cassette.update({
         where: { id: createDto.cassetteId },
         data: { status: 'IN_REPAIR' },
       });
 
-      // Create repair ticket
+      // Create repair ticket with soTicketId
       return tx.repairTicket.create({
         data: {
           cassetteId: createDto.cassetteId,
+          soTicketId: soTicketId,
           reportedIssue: createDto.reportedIssue,
-          receivedAtRc: new Date(),
+          receivedAtRc: referenceTime,
           status: 'RECEIVED',
           type: createDto.type || 'ROUTINE',
           notes: createDto.notes,
@@ -485,7 +625,14 @@ export class RepairsService {
               customerBank: true,
             },
           },
-        },
+          soTicket: {
+            select: {
+              id: true,
+              ticketNumber: true,
+              status: true,
+            },
+          },
+        } as any, // Type assertion until Prisma client is regenerated
       });
     });
   }
@@ -524,7 +671,7 @@ export class RepairsService {
         },
       });
       ticketType = 'PM';
-      
+
       // Map PM type to RepairTicketType
       if (ticket) {
         const pmType = ticket.type;
@@ -546,8 +693,17 @@ export class RepairsService {
 
     // Validate status based on ticket type
     if (ticketType === 'SO') {
-      if (ticket.status !== 'RECEIVED') {
-        throw new BadRequestException('Service Order must be in RECEIVED status to start repair');
+      // For on-site repair, status should be APPROVED_ON_SITE or IN_PROGRESS
+      // For normal repair, status should be RECEIVED
+      const isOnSiteRepair = ticket.repairLocation === 'ON_SITE';
+      if (isOnSiteRepair) {
+        if (ticket.status !== 'APPROVED_ON_SITE' && ticket.status !== 'IN_PROGRESS') {
+          throw new BadRequestException(`On-site repair Service Order must be in APPROVED_ON_SITE or IN_PROGRESS status to start repair. Current status: ${ticket.status}`);
+        }
+      } else {
+        if (ticket.status !== 'RECEIVED') {
+          throw new BadRequestException('Service Order must be in RECEIVED status to start repair');
+        }
       }
     } else if (ticketType === 'PM') {
       // PM tickets might need different status validation
@@ -561,9 +717,9 @@ export class RepairsService {
     let cassetteList = ticket.cassetteDetails && ticket.cassetteDetails.length > 0
       ? ticket.cassetteDetails.map((detail: any) => detail.cassette).filter((c: any): c is NonNullable<typeof c> => c !== null)
       : (ticket.cassette ? [ticket.cassette] : []);
-    
+
     this.logger.debug(`Initial cassette list from cassetteDetails: ${cassetteList.length} cassettes`);
-    
+
     // Also check cassetteDelivery for additional cassettes (for single-cassette tickets)
     if (ticketType === 'SO' && cassetteList.length === 0) {
       const ticketWithDelivery = await this.prisma.problemTicket.findUnique({
@@ -576,7 +732,7 @@ export class RepairsService {
           },
         },
       });
-      
+
       if (ticketWithDelivery?.cassetteDelivery?.cassette) {
         const deliveryCassette = ticketWithDelivery.cassetteDelivery.cassette;
         // Add delivery cassette if not already in list
@@ -614,7 +770,7 @@ export class RepairsService {
     }
 
     this.logger.debug(`Processing ${cassetteList.length} unique cassettes for ${ticketType} ${ticket.ticketNumber || ticket.pmNumber}`);
-    
+
     // Log all cassette statuses for debugging
     for (const cassette of cassetteList) {
       this.logger.debug(`Cassette ${cassette.serialNumber} (ID: ${cassette.id}) has status: ${cassette.status}`);
@@ -622,9 +778,13 @@ export class RepairsService {
 
     // Verify all cassettes are in correct status
     // For multi-cassette tickets, cassettes should be in IN_REPAIR status if already received at RC
+    // For on-site repair, cassettes should be in BAD status (they haven't been sent to RC)
     // Allow multiple valid statuses for flexibility
-    const validStatuses = ['IN_TRANSIT_TO_RC', 'BAD', 'RECEIVED', 'IN_REPAIR'];
-    
+    const isOnSiteRepair = ticketType === 'SO' && ticket.repairLocation === 'ON_SITE';
+    const validStatuses = isOnSiteRepair 
+      ? ['BAD'] // On-site repair: cassettes should still be BAD (at pengelola location)
+      : ['IN_TRANSIT_TO_RC', 'BAD', 'RECEIVED', 'IN_REPAIR']; // Normal repair: various valid statuses
+
     for (const cassette of cassetteList) {
       if (!validStatuses.includes(cassette.status)) {
         this.logger.warn(`Cassette ${cassette.serialNumber} has status ${cassette.status}, expected one of: ${validStatuses.join(', ')}`);
@@ -694,14 +854,14 @@ export class RepairsService {
 
         if (existingRepair) {
           // Check if the existing repair is associated with the current ticket (non-deleted)
-          const isAssociatedWithCurrentTicket = 
-            existingRepair.cassette.deliveries.some((delivery: any) => 
+          const isAssociatedWithCurrentTicket =
+            existingRepair.cassette.deliveries.some((delivery: any) =>
               delivery.ticket.id === ticketId && delivery.ticket.deletedAt === null
             ) ||
-            existingRepair.cassette.ticketCassetteDetails.some((detail: any) => 
+            existingRepair.cassette.ticketCassetteDetails.some((detail: any) =>
               detail.ticket.id === ticketId && detail.ticket.deletedAt === null
             );
-          
+
           if (isAssociatedWithCurrentTicket) {
             // Repair ticket is already associated with this ticket, skip
             this.logger.debug(`Skipping cassette ${cassette.serialNumber} - already has active repair ticket ${existingRepair.id} for this ticket`);
@@ -727,18 +887,23 @@ export class RepairsService {
           }
         }
 
-        // Update cassette to IN_REPAIR
+        // Update cassette to IN_REPAIR (for both on-site and normal repair)
         await tx.cassette.update({
           where: { id: cassette.id },
           data: { status: 'IN_REPAIR' },
         });
 
+        // For on-site repair, receivedAtRc can be null or set to current time (repair at pengelola location)
+        // For normal repair, receivedAtRc is set to current time (received at RC)
+        const receivedAtRc = isOnSiteRepair ? new Date() : new Date(); // Both use current time, but on-site means "received at pengelola location"
+
         // Create repair ticket
         const repair = await tx.repairTicket.create({
           data: {
             cassetteId: cassette.id,
+            soTicketId: ticketType === 'SO' ? ticketId : null, // Set SO ID langsung jika dari SO
             reportedIssue: ticket.title || 'Repair needed',
-            receivedAtRc: new Date(),
+            receivedAtRc: receivedAtRc,
             status: 'RECEIVED',
             type: repairTicketType,
             notes: ticket.description || undefined,
@@ -750,7 +915,14 @@ export class RepairsService {
                 customerBank: true,
               },
             },
-          },
+            soTicket: {
+              select: {
+                id: true,
+                ticketNumber: true,
+                status: true,
+              },
+            },
+          } as any, // Type assertion until Prisma client is regenerated
         });
 
         createdRepairs.push(repair);
@@ -759,12 +931,46 @@ export class RepairsService {
       // Update ticket status based on ticket type (only if we created at least one repair)
       if (createdRepairs.length > 0) {
         if (ticketType === 'SO') {
-          // Update SO status to IN_PROGRESS
-          await tx.problemTicket.update({
-            where: { id: ticketId },
-            data: { status: 'IN_PROGRESS' as any },
-          });
-          this.logger.log(`Created ${createdRepairs.length} repair tickets for SO ${ticket.ticketNumber}`);
+          // Use syncTicketStatus to properly update status based on repair state
+          // This ensures consistency and handles edge cases
+          try {
+            const syncResult = await this.ticketStatusSync.syncTicketStatus(ticketId, tx);
+            if (syncResult.updated) {
+              this.logger.log(
+                `Created ${createdRepairs.length} repair tickets for SO ${ticket.ticketNumber}. ` +
+                `Status synced: ${syncResult.oldStatus} → ${syncResult.newStatus}. Reason: ${syncResult.reason}`
+              );
+            } else {
+              // Fallback: Direct update if sync didn't change status but repairs exist
+              if (ticket.status === 'RECEIVED') {
+                await tx.problemTicket.update({
+                  where: { id: ticketId },
+                  data: { status: 'IN_PROGRESS' as any },
+                });
+                this.logger.log(
+                  `Created ${createdRepairs.length} repair tickets for SO ${ticket.ticketNumber}. ` +
+                  `Fallback: Updated status from RECEIVED to IN_PROGRESS`
+                );
+              } else {
+                this.logger.log(
+                  `Created ${createdRepairs.length} repair tickets for SO ${ticket.ticketNumber}. ` +
+                  `Status remains ${ticket.status} (sync result: ${syncResult.reason})`
+                );
+              }
+            }
+          } catch (syncError) {
+            // Fallback: Direct update if sync fails
+            this.logger.warn(
+              `Status sync failed for SO ${ticket.ticketNumber}, using fallback update. Error: ${syncError.message}`
+            );
+            if (ticket.status === 'RECEIVED') {
+              await tx.problemTicket.update({
+                where: { id: ticketId },
+                data: { status: 'IN_PROGRESS' as any },
+              });
+              this.logger.log(`Fallback: Updated SO ${ticket.ticketNumber} from RECEIVED to IN_PROGRESS`);
+            }
+          }
         } else if (ticketType === 'PM') {
           // For PM, we might want to update status or leave it as is
           // PM status update logic can be added here if needed
@@ -789,12 +995,26 @@ export class RepairsService {
   }
 
   async update(id: string, updateDto: UpdateRepairTicketDto, userId: string) {
-    await this.findOne(id, 'HITACHI');
+    const currentRepair = await this.findOne(id, 'HITACHI');
+
+    // Auto-set timestamps based on status change
+    const additionalData: any = {};
+
+    if (updateDto.status === 'DIAGNOSING' && currentRepair.status !== 'DIAGNOSING') {
+      // Set diagnosingStartAt when transitioning to DIAGNOSING
+      additionalData.diagnosingStartAt = new Date();
+    }
+
+    if (updateDto.status === 'ON_PROGRESS' && currentRepair.status !== 'ON_PROGRESS') {
+      // Set repairStartAt when transitioning to ON_PROGRESS
+      additionalData.repairStartAt = new Date();
+    }
 
     return this.prisma.repairTicket.update({
       where: { id },
       data: {
         ...updateDto,
+        ...additionalData,
         repairedBy: updateDto.repairedBy || userId,
       },
     });
@@ -806,7 +1026,7 @@ export class RepairsService {
     // Check if ticket is already assigned to someone else
     if (ticket.repairedBy && ticket.repairedBy !== userId) {
       throw new BadRequestException(
-        `This ticket is already assigned to ${ticket.repairer?.fullName || 'another engineer'}. You cannot take it.`
+        `This ticket is already assigned to ${(ticket as any).repairer?.fullName || 'another engineer'}. You cannot take it.`
       );
     }
 
@@ -815,6 +1035,7 @@ export class RepairsService {
       where: { id },
       data: {
         repairedBy: userId,
+        status: RepairTicketStatus.ON_PROGRESS,
       },
       include: {
         cassette: {
@@ -828,13 +1049,20 @@ export class RepairsService {
             },
           },
         },
+        soTicket: {
+          select: {
+            id: true,
+            ticketNumber: true,
+            status: true,
+          },
+        },
         repairer: {
           select: {
             fullName: true,
             role: true,
           },
         },
-      },
+      } as any, // Type assertion until Prisma client is regenerated
     });
   }
 
@@ -898,13 +1126,29 @@ export class RepairsService {
         }
       }
 
+      // Validate status transition
+      StatusTransitionValidator.validateRepairTicketTransition(
+        ticket.status,
+        'COMPLETED',
+        {
+          hasRepairAction: !!completeDto.repairActionTaken,
+          qcPassed: completeDto.qcPassed,
+        }
+      );
+
       // Update repair ticket
       const updatedTicket = await tx.repairTicket.update({
         where: { id },
         data: {
           status: 'COMPLETED',
           repairActionTaken: completeDto.repairActionTaken,
-          partsReplaced: completeDto.partsReplaced,
+          partsReplaced: completeDto.partsReplaced
+            ? (Array.isArray(completeDto.partsReplaced)
+              ? JSON.stringify(completeDto.partsReplaced)
+              : typeof completeDto.partsReplaced === 'string'
+                ? completeDto.partsReplaced
+                : JSON.stringify(completeDto.partsReplaced))
+            : null,
           qcPassed: completeDto.qcPassed,
           completedAt: new Date(),
           repairedBy: userId,
@@ -916,14 +1160,14 @@ export class RepairsService {
       // 1. CassetteDelivery (primary method for tickets with delivery)
       // 2. TicketCassetteDetail (for multi-cassette tickets)
       // 3. Direct cassetteId in ProblemTicket (for single-cassette tickets)
-      
+
       let problemTicket: any = null;
       let delivery: any = null;
-      
+
       // Method 1: Try via CassetteDelivery
       delivery = await tx.cassetteDelivery.findFirst({
         where: { cassetteId: ticket.cassetteId },
-        include: { 
+        include: {
           ticket: {
             include: {
               cassetteDetails: {
@@ -940,7 +1184,7 @@ export class RepairsService {
           },
         },
       });
-      
+
       if (delivery?.ticket) {
         problemTicket = delivery.ticket;
       } else {
@@ -964,7 +1208,7 @@ export class RepairsService {
             },
           },
         });
-        
+
         if (ticketDetail?.ticket) {
           problemTicket = ticketDetail.ticket;
         } else {
@@ -984,7 +1228,7 @@ export class RepairsService {
               },
             },
           });
-          
+
           if (directTicket) {
             problemTicket = directTicket;
           }
@@ -994,22 +1238,22 @@ export class RepairsService {
       // Check if this cassette has replacement request (before checking problem ticket)
       let hasReplacementRequest = false;
       let replacementReason = 'N/A';
-      
+
       // Update SO status if all repair tickets are completed (regardless of QC or replacement request)
       if (problemTicket) {
         // Check if this cassette has replacement request
         const ticketDetail = await tx.ticketCassetteDetail.findFirst({
-          where: { 
+          where: {
             ticketId: problemTicket.id,
             cassetteId: ticket.cassetteId,
           },
         });
-        
+
         hasReplacementRequest = (ticketDetail as any)?.requestReplacement === true;
         replacementReason = (ticketDetail as any)?.replacementReason || 'N/A';
-        
+
         const ticketCreatedAt = problemTicket.createdAt;
-        
+
         // Get all cassette IDs from this SO
         const cassetteIds: string[] = [];
         if (problemTicket.cassetteDetails && problemTicket.cassetteDetails.length > 0) {
@@ -1057,100 +1301,203 @@ export class RepairsService {
 
         const latestRepairs = Array.from(latestRepairsMap.values());
 
-        // Ensure we have repair tickets for all cassettes in the SO
-        // Number of **latest** repair tickets should match number of cassettes in SO
-        const expectedRepairCount = cassetteIds.length;
-        const actualRepairCount = latestRepairs.length;
-        
-        // Check if we have repair tickets for all cassettes
-        if (actualRepairCount < expectedRepairCount) {
-          this.logger.warn(`SO ${problemTicket.ticketNumber}: Only ${actualRepairCount}/${expectedRepairCount} repair tickets found. Some cassettes may not have repair tickets yet. Status will not be updated to RESOLVED.`);
-          // If SO is already RESOLVED but shouldn't be, fix it
-          if (problemTicket.status === 'RESOLVED') {
+        // FIX: Always call sync service after repair completion, regardless of repair count
+        // Sync service will handle all logic for status updates (IN_PROGRESS, RESOLVED, etc.)
+        // This ensures status is always updated correctly, even if not all repairs are created yet
+        try {
+          const syncResult = await this.ticketStatusSync.syncTicketStatus(problemTicket.id, tx);
+          if (syncResult.updated) {
+            this.logger.log(
+              `Repair completion triggered status sync: ${problemTicket.ticketNumber} ` +
+              `${syncResult.oldStatus} → ${syncResult.newStatus}. Reason: ${syncResult.reason}`
+            );
+          } else {
+            this.logger.debug(
+              `Repair completion: ${problemTicket.ticketNumber} status unchanged (${syncResult.oldStatus}). ` +
+              `Reason: ${syncResult.reason}`
+            );
+          }
+        } catch (syncError) {
+          this.logger.error(`Error syncing ticket status for ${problemTicket.ticketNumber}:`, syncError);
+
+          // Fallback: Manual update if sync fails
+          const expectedRepairCount = cassetteIds.length;
+          const actualRepairCount = latestRepairs.length;
+          const completedRepairs = latestRepairs.filter(rt => rt.status === 'COMPLETED');
+          const completedCount = completedRepairs.length;
+          const allCompleted = actualRepairCount === expectedRepairCount &&
+            completedCount === expectedRepairCount &&
+            latestRepairs.every(rt => rt.status === 'COMPLETED');
+
+          if (allCompleted && problemTicket.status !== 'RESOLVED') {
+            await tx.problemTicket.update({
+              where: { id: problemTicket.id },
+              data: {
+                status: 'RESOLVED' as any,
+                resolvedAt: new Date(),
+              },
+            });
+            this.logger.log(`Fallback: All ${completedCount}/${expectedRepairCount} repair tickets completed. Updated SO ${problemTicket.ticketNumber} to RESOLVED`);
+          } else if (actualRepairCount > 0 && problemTicket.status === 'RECEIVED') {
+            // If repairs have started, update to IN_PROGRESS
             await tx.problemTicket.update({
               where: { id: problemTicket.id },
               data: {
                 status: 'IN_PROGRESS' as any,
-                resolvedAt: null,
               },
             });
-            this.logger.warn(`Auto-fixed: SO ${problemTicket.ticketNumber} was RESOLVED but only ${actualRepairCount}/${expectedRepairCount} repair tickets exist. Reverted to IN_PROGRESS.`);
-          }
-        } else {
-          // Check if all latest repair tickets per cassette are COMPLETED
-          const completedRepairs = latestRepairs.filter(rt => rt.status === 'COMPLETED');
-          const completedCount = completedRepairs.length;
-          const allCompleted = completedCount === expectedRepairCount && 
-            latestRepairs.every(rt => rt.status === 'COMPLETED');
-
-          // Only update problem ticket to RESOLVED if ALL repair tickets are completed
-          if (allCompleted) {
-            // Only update if not already RESOLVED
-            if (problemTicket.status !== 'RESOLVED') {
-              await tx.problemTicket.update({
-                where: { id: problemTicket.id },
-                data: {
-                  status: 'RESOLVED' as any,
-                  resolvedAt: new Date(),
-                },
-              });
-              this.logger.log(`All ${completedCount}/${expectedRepairCount} repair tickets completed. Updated SO ${problemTicket.ticketNumber} to RESOLVED`);
-            }
-          } else {
-            // If SO is already RESOLVED but shouldn't be, fix it
-            if (problemTicket.status === 'RESOLVED') {
-              await tx.problemTicket.update({
-                where: { id: problemTicket.id },
-                data: {
-                  status: 'IN_PROGRESS' as any,
-                  resolvedAt: null,
-                },
-              });
-              const statusCounts = latestRepairs.reduce((acc, rt) => {
-                acc[rt.status] = (acc[rt.status] || 0) + 1;
-                return acc;
-              }, {} as Record<string, number>);
-              this.logger.warn(`Auto-fixed: SO ${problemTicket.ticketNumber} was RESOLVED but only ${completedCount}/${expectedRepairCount} repair tickets are completed. Reverted to IN_PROGRESS. Status breakdown: ${JSON.stringify(statusCounts)}`);
-            } else {
-              const statusCounts = latestRepairs.reduce((acc, rt) => {
-                acc[rt.status] = (acc[rt.status] || 0) + 1;
-                return acc;
-              }, {} as Record<string, number>);
-              this.logger.debug(`SO ${problemTicket.ticketNumber}: ${completedCount}/${expectedRepairCount} repair tickets completed. Waiting for all ${expectedRepairCount} repair tickets to be COMPLETED before marking SO as RESOLVED`);
-            }
+            this.logger.log(`Fallback: ${actualRepairCount} repair ticket(s) found. Updated SO ${problemTicket.ticketNumber} from RECEIVED to IN_PROGRESS`);
           }
         }
       }
 
+      // Check if this is an on-site repair
+      // Reload problemTicket to get latest data including repairLocation
+      let isOnSiteRepair = false;
+      if (problemTicket) {
+        const reloadedTicket = await tx.problemTicket.findUnique({
+          where: { id: problemTicket.id },
+          select: { repairLocation: true },
+        });
+        isOnSiteRepair = reloadedTicket?.repairLocation === 'ON_SITE';
+      }
+
       // Update cassette status based on QC and replacement request
-      // If replacement requested, always mark as SCRAPPED (regardless of QC)
+      // Use StatusTransitionValidator to ensure valid transitions
+      const currentCassetteStatus = cassette.status;
+      let newCassetteStatus: string;
+
       if (hasReplacementRequest) {
+        // If replacement requested, always mark as SCRAPPED (regardless of QC)
+        newCassetteStatus = 'SCRAPPED';
+        StatusTransitionValidator.validateCassetteTransition(currentCassetteStatus, newCassetteStatus, {
+          hasActiveTicket: true,
+          isReplacement: false,
+          qcPassed: false, // Replacement means QC failed or not applicable
+        });
+
         await tx.$executeRaw`
           UPDATE cassettes 
-          SET status = ${'SCRAPPED'}, 
+          SET status = ${newCassetteStatus}, 
               notes = CONCAT(COALESCE(notes, ''), '\n', 'Replacement requested: ', ${replacementReason}),
               updated_at = NOW()
           WHERE id = ${ticket.cassetteId}
         `;
         this.logger.log(`Complete Repair (Replacement Requested): Updated cassette status to SCRAPPED. Reason: ${replacementReason}`);
       } else if (completeDto.qcPassed) {
-        // If QC passed, update status to READY_FOR_PICKUP (kaset sudah selesai diperbaiki, siap di-pickup)
-        // Flow baru (pickup-based):
-        // - Kaset status menjadi READY_FOR_PICKUP setelah repair selesai dan QC passed
-        // - Setelah Pengelola konfirmasi pickup di RC, status kaset akan menjadi OK dan ticket menjadi CLOSED
-        await tx.$executeRaw`
-          UPDATE cassettes 
-          SET status = ${'READY_FOR_PICKUP'}, 
-              notes = CONCAT(COALESCE(notes, ''), '\n', 'Repaired and passed QC - ready for pickup at RC by Pengelola'),
-              updated_at = NOW()
-          WHERE id = ${ticket.cassetteId}
-        `;
-        this.logger.log(`Complete Repair (QC Passed): Updated cassette ${cassette.serialNumber} status to READY_FOR_PICKUP (ready for pickup at RC)`);
+        // If QC passed, update status based on repair location
+        if (isOnSiteRepair) {
+          // On-site repair: cassette becomes OK immediately (repair done at pengelola location)
+          newCassetteStatus = 'OK';
+          StatusTransitionValidator.validateCassetteTransition(currentCassetteStatus, newCassetteStatus, {
+            hasActiveTicket: true,
+            isReplacement: false,
+            qcPassed: true,
+          });
+
+          await tx.$executeRaw`
+            UPDATE cassettes 
+            SET status = ${newCassetteStatus}, 
+                notes = CONCAT(COALESCE(notes, ''), '\n', 'Repaired on-site and passed QC - ready for use'),
+                updated_at = NOW()
+            WHERE id = ${ticket.cassetteId}
+          `;
+          this.logger.log(`Complete Repair (On-Site, QC Passed): Updated cassette ${cassette.serialNumber} status to OK (repair completed at pengelola location)`);
+          
+          // For on-site repair, after QC passed and cassette is OK, close ticket immediately
+          // No pickup confirmation needed since repair was done at pengelola location
+          if (problemTicket && problemTicket.status !== 'CLOSED') {
+            // Check if all repair tickets for this ticket are completed
+            const allCassetteIds: string[] = [];
+            if (problemTicket.cassetteDetails && problemTicket.cassetteDetails.length > 0) {
+              problemTicket.cassetteDetails.forEach((detail: any) => {
+                if (detail.cassette?.id) {
+                  allCassetteIds.push(detail.cassette.id);
+                }
+              });
+            } else if (problemTicket.cassette?.id) {
+              allCassetteIds.push(problemTicket.cassette.id);
+            }
+            
+            if (allCassetteIds.length > 0) {
+              const ticketCreatedAt = problemTicket.createdAt;
+              const allRepairTicketsForTicket = await tx.repairTicket.findMany({
+                where: {
+                  cassetteId: { in: allCassetteIds },
+                  createdAt: { gte: ticketCreatedAt },
+                  deletedAt: null,
+                },
+                select: {
+                  id: true,
+                  status: true,
+                  cassetteId: true,
+                  createdAt: true,
+                },
+                orderBy: { createdAt: 'desc' },
+              });
+              
+              // Get latest repair ticket per cassette
+              const latestRepairsMap = new Map<string, { id: string; status: string; cassetteId: string }>();
+              for (const rt of allRepairTicketsForTicket) {
+                if (!latestRepairsMap.has(rt.cassetteId)) {
+                  latestRepairsMap.set(rt.cassetteId, rt);
+                }
+              }
+              
+              const latestRepairs = Array.from(latestRepairsMap.values());
+              const allCompleted = latestRepairs.length === allCassetteIds.length &&
+                latestRepairs.every(rt => rt.status === 'COMPLETED');
+              
+              // Also check if all cassettes are OK (for on-site repair, cassettes should be OK after repair)
+              const allCassettes = await tx.cassette.findMany({
+                where: { id: { in: allCassetteIds } },
+                select: { id: true, status: true },
+              });
+              
+              const allCassettesOk = allCassettes.every(c => c.status === 'OK' || c.status === 'SCRAPPED');
+              
+              if (allCompleted && allCassettesOk && problemTicket.status !== 'CLOSED') {
+                await tx.problemTicket.update({
+                  where: { id: problemTicket.id },
+                  data: {
+                    status: 'CLOSED' as any,
+                    closedAt: new Date(),
+                  },
+                });
+                this.logger.log(`Complete Repair (On-Site): All repairs completed and cassettes OK. Ticket ${problemTicket.ticketNumber} closed automatically.`);
+              }
+            }
+          }
+        } else {
+          // Normal repair: update status to READY_FOR_PICKUP (repair done at RC)
+          newCassetteStatus = 'READY_FOR_PICKUP';
+          StatusTransitionValidator.validateCassetteTransition(currentCassetteStatus, newCassetteStatus, {
+            hasActiveTicket: true,
+            isReplacement: false,
+            qcPassed: true,
+          });
+
+          await tx.$executeRaw`
+            UPDATE cassettes 
+            SET status = ${newCassetteStatus}, 
+                notes = CONCAT(COALESCE(notes, ''), '\n', 'Repaired and passed QC - ready for pickup at RC by Pengelola'),
+                updated_at = NOW()
+            WHERE id = ${ticket.cassetteId}
+          `;
+          this.logger.log(`Complete Repair (QC Passed): Updated cassette ${cassette.serialNumber} status to READY_FOR_PICKUP (ready for pickup at RC)`);
+        }
       } else {
-        // If QC failed and no replacement request, mark as scrapped using raw SQL
+        // If QC failed and no replacement request, mark as scrapped
+        newCassetteStatus = 'SCRAPPED';
+        StatusTransitionValidator.validateCassetteTransition(currentCassetteStatus, newCassetteStatus, {
+          hasActiveTicket: true,
+          isReplacement: false,
+          qcPassed: false,
+        });
+
         await tx.$executeRaw`
           UPDATE cassettes 
-          SET status = ${'SCRAPPED'}, 
+          SET status = ${newCassetteStatus}, 
               notes = 'Failed QC after repair',
               updated_at = NOW()
           WHERE id = ${ticket.cassetteId}
@@ -1221,7 +1568,7 @@ export class RepairsService {
       results.checked++;
       try {
         const ticketCreatedAt = ticket.createdAt;
-        
+
         // Get all cassette IDs from this SO
         const cassetteIds: string[] = [];
         if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
@@ -1280,7 +1627,7 @@ export class RepairsService {
           // Check if all latest repair tickets per cassette are COMPLETED
           const completedRepairs = latestRepairs.filter(rt => rt.status === 'COMPLETED');
           const completedCount = completedRepairs.length;
-          const allCompleted = completedCount === expectedRepairCount && 
+          const allCompleted = completedCount === expectedRepairCount &&
             latestRepairs.every(rt => rt.status === 'COMPLETED');
 
           // If all repair tickets are completed but SO is not RESOLVED, update it
@@ -1351,7 +1698,7 @@ export class RepairsService {
       data: {
         deletedAt: new Date(),
         deletedBy: userId,
-        notes: repairTicket.notes 
+        notes: repairTicket.notes
           ? `${repairTicket.notes}\n[DELETED on ${new Date().toLocaleDateString('id-ID')} by ${userRole === 'SUPER_ADMIN' ? 'Super Admin' : 'RC Manager'}]`
           : `[DELETED on ${new Date().toLocaleDateString('id-ID')} by ${userRole === 'SUPER_ADMIN' ? 'Super Admin' : 'RC Manager'}]`,
       },

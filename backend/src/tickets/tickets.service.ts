@@ -2,12 +2,17 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTicketDto, UpdateTicketDto, CreateDeliveryDto, ReceiveDeliveryDto, CreateReturnDto, ReceiveReturnDto } from './dto';
 import { CreateMultiTicketDto } from './dto/create-multi-ticket.dto';
+import { AuditLogService } from '../audit/audit-log.service';
+
 
 @Injectable()
 export class TicketsService {
   private readonly logger = new Logger(TicketsService.name);
-  
-  constructor(private prisma: PrismaService) {}
+
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) { }
 
   async findAll(
     userType: string,
@@ -225,130 +230,130 @@ export class TicketsService {
       const ticket = await this.prisma.problemTicket.findUnique({
         where: { id },
         include: {
-        cassette: {
-          include: {
-            cassetteType: true,
-            customerBank: {
-              select: {
-                bankCode: true,
-                bankName: true,
+          cassette: {
+            include: {
+              cassetteType: true,
+              customerBank: {
+                select: {
+                  bankCode: true,
+                  bankName: true,
+                },
+              },
+              repairTickets: {
+                orderBy: { createdAt: 'desc' },
+                take: 1, // Get latest repair ticket
+                include: {
+                  repairer: {
+                    select: {
+                      fullName: true,
+                      role: true,
+                    },
+                  },
+                },
+              },
+              replacementFor: {
+                // Include replacement cassettes (new cassettes that replace this one)
+                select: {
+                  id: true,
+                  serialNumber: true,
+                  status: true,
+                },
               },
             },
-            repairTickets: {
-              orderBy: { createdAt: 'desc' },
-              take: 1, // Get latest repair ticket
-              include: {
-                repairer: {
-                  select: {
-                    fullName: true,
-                    role: true,
+          } as any,
+          machine: {
+            include: {
+              customerBank: true,
+              pengelola: true,
+            },
+          },
+          reporter: {
+            select: {
+              fullName: true,
+              email: true,
+              phone: true,
+              pengelolaId: true,
+              pengelola: {
+                select: {
+                  companyName: true,
+                },
+              },
+            },
+          },
+          cassetteDetails: {
+            include: {
+              cassette: {
+                include: {
+                  cassetteType: true,
+                  customerBank: {
+                    select: {
+                      bankCode: true,
+                      bankName: true,
+                    },
+                  },
+                  replacementFor: {
+                    // Include replacement cassettes (new cassettes that replace this one)
+                    include: {
+                      cassetteType: true,
+                    },
                   },
                 },
               },
             },
-            replacementFor: {
-              // Include replacement cassettes (new cassettes that replace this one)
-              select: {
-                id: true,
-                serialNumber: true,
-                status: true,
+            // Include requestReplacement and replacementReason fields
+          },
+          cassetteDelivery: {
+            include: {
+              cassette: {
+                include: {
+                  cassetteType: true,
+                },
+              },
+              sender: {
+                select: {
+                  fullName: true,
+                  pengelola: {
+                    select: {
+                      companyName: true,
+                    },
+                  },
+                },
+              },
+              receiver: {
+                select: {
+                  fullName: true,
+                  role: true,
+                },
               },
             },
           },
+          cassetteReturn: {
+            include: {
+              cassette: {
+                include: {
+                  cassetteType: true,
+                },
+              },
+              sender: {
+                select: {
+                  fullName: true,
+                  role: true,
+                },
+              },
+              receiver: {
+                select: {
+                  fullName: true,
+                  pengelola: {
+                    select: {
+                      companyName: true,
+                    },
+                  },
+                },
+              },
+            },
+          } as any,
         } as any,
-        machine: {
-          include: {
-            customerBank: true,
-            pengelola: true,
-          },
-        },
-        reporter: {
-          select: {
-            fullName: true,
-            email: true,
-            phone: true,
-            pengelolaId: true,
-            pengelola: {
-              select: {
-                companyName: true,
-              },
-            },
-          },
-        },
-        cassetteDetails: {
-          include: {
-            cassette: {
-              include: {
-                cassetteType: true,
-                customerBank: {
-                  select: {
-                    bankCode: true,
-                    bankName: true,
-                  },
-                },
-                replacementFor: {
-                  // Include replacement cassettes (new cassettes that replace this one)
-                  include: {
-                    cassetteType: true,
-                  },
-                },
-              },
-            },
-          },
-          // Include requestReplacement and replacementReason fields
-        },
-        cassetteDelivery: {
-          include: {
-            cassette: {
-              include: {
-                cassetteType: true,
-              },
-            },
-            sender: {
-              select: {
-                fullName: true,
-                pengelola: {
-                  select: {
-                    companyName: true,
-                  },
-                },
-              },
-            },
-            receiver: {
-              select: {
-                fullName: true,
-                role: true,
-              },
-            },
-          },
-        },
-        cassetteReturn: {
-          include: {
-            cassette: {
-              include: {
-                cassetteType: true,
-              },
-            },
-            sender: {
-              select: {
-                fullName: true,
-                role: true,
-              },
-            },
-            receiver: {
-              select: {
-                fullName: true,
-                pengelola: {
-                  select: {
-                    companyName: true,
-                  },
-                },
-              },
-            },
-          },
-        } as any,
-      } as any,
-    });
+      });
 
       if (!ticket) {
         throw new NotFoundException(`Ticket with ID ${id} not found`);
@@ -360,7 +365,7 @@ export class TicketsService {
       if (userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
         const hasMachineAccess = ticketWithMachine.machine?.pengelolaId === pengelolaId;
         const isReporter = ticketWithMachine.reporter?.pengelolaId === pengelolaId;
-        
+
         if (!hasMachineAccess && !isReporter) {
           throw new ForbiddenException('You do not have access to this ticket');
         }
@@ -374,12 +379,12 @@ export class TicketsService {
         error: error.message,
         stack: error.stack,
       });
-      
+
       // Re-throw known exceptions
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
         throw error;
       }
-      
+
       // Wrap unknown errors
       throw new NotFoundException(`Failed to fetch ticket: ${error.message || 'Unknown error'}`);
     }
@@ -388,13 +393,9 @@ export class TicketsService {
   async create(createDto: CreateTicketDto, userId: string, userType: string) {
     try {
       this.logger.debug(`Creating ticket for cassette: ${createDto.cassetteSerialNumber}, userId: ${userId}, userType: ${userType}`);
-      
-      // Only Pengelola users can create tickets
-      // Tickets are reported by pengelola, then processed by RC (HITACHI) staff
+
+      // Pengelola and Hitachi users can create tickets
       let pengelolaUser: { id: string; pengelolaId: string; canCreateTickets: boolean; role: string; assignedBranches: any } | null = null;
-      if (userType?.toUpperCase() !== 'PENGELOLA') {
-        throw new ForbiddenException('Only Pengelola users can create problem tickets. RC staff receive and process tickets.');
-      }
       
       if (userType?.toUpperCase() === 'PENGELOLA') {
         // Verify that the userId exists in pengelolaUser table and has permission
@@ -416,6 +417,8 @@ export class TicketsService {
         if (!pengelolaUser.canCreateTickets) {
           throw new ForbiddenException('You do not have permission to create tickets');
         }
+      } else if (userType?.toUpperCase() !== 'HITACHI') {
+        throw new ForbiddenException('Only Pengelola and Hitachi users can create problem tickets.');
       }
 
       // Find cassette by serial number
@@ -485,7 +488,7 @@ export class TicketsService {
       });
 
       const repairCompleted = latestRepairTicket && ['COMPLETED', 'SCRAPPED'].includes(latestRepairTicket.status);
-      
+
       // Only block if there's an active ticket AND repair is not completed
       // If repair is completed, problem ticket should be RESOLVED, but if it's still IN_PROGRESS,
       // we allow it because repair is done and cassette is ready for new tickets
@@ -510,7 +513,7 @@ export class TicketsService {
           'RETURN_SHIPPED': 'Dikirim Kembali',
           'CLOSED': 'Ditutup',
         };
-        
+
         const statusLabel = statusLabels[activeTicket.status] || activeTicket.status;
         const ticketDate = new Date(activeTicket.createdAt).toLocaleDateString('id-ID', {
           day: '2-digit',
@@ -579,8 +582,8 @@ export class TicketsService {
             throw new ForbiddenException('You do not have access to this machine');
           }
 
-          // For TECHNICIAN role, check if machine is in assigned branches
-          if (pengelolaUser.role === 'TECHNICIAN' && pengelolaUser.assignedBranches) {
+          // Check if machine is in assigned branches (if user has assigned branches)
+          if (pengelolaUser.assignedBranches) {
             const assignedBranches = pengelolaUser.assignedBranches as string[];
             if (machine.branchCode && !assignedBranches.includes(machine.branchCode)) {
               throw new ForbiddenException(
@@ -595,8 +598,23 @@ export class TicketsService {
         machine = bankMachines[0] || null;
       }
 
-      // Use Pengelola user as reporter
-      const reporterUserId = pengelolaUser!.id;
+      // Use Pengelola user as reporter, or for Hitachi users, find/create a system pengelola user
+      let reporterUserId: string;
+      if (userType?.toUpperCase() === 'PENGELOLA' && pengelolaUser) {
+        reporterUserId = pengelolaUser.id;
+      } else if (userType?.toUpperCase() === 'HITACHI') {
+        // For Hitachi users, find the first pengelola user to use as reporter
+        // This is a workaround since reportedBy must reference PengelolaUser
+        const firstPengelolaUser = await this.prisma.pengelolaUser.findFirst({
+          select: { id: true },
+        });
+        if (!firstPengelolaUser) {
+          throw new BadRequestException('No Pengelola user found. Cannot create ticket without a reporter.');
+        }
+        reporterUserId = firstPengelolaUser.id;
+      } else {
+        throw new ForbiddenException('Invalid user type for creating tickets');
+      }
 
       // Generate ticket number
       // Format: SO-DDMMYY[urutan]
@@ -605,7 +623,7 @@ export class TicketsService {
       const year = String(now.getFullYear()).slice(-2); // Last 2 digits of year
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
-      
+
       // Count tickets created today to get sequence number
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
@@ -617,7 +635,7 @@ export class TicketsService {
           },
         },
       });
-      
+
       // Auto increment tanpa padding
       const sequenceNumber = todayTicketCount + 1;
       const ticketNumber = `SO-${day}${month}${year}${sequenceNumber}`;
@@ -629,7 +647,7 @@ export class TicketsService {
       const hasDeliveryInfo = (createDto.courierService && createDto.trackingNumber) || createDto.deliveryMethod === 'SELF_DELIVERY';
       const initialTicketStatus = hasDeliveryInfo ? 'IN_DELIVERY' : 'OPEN';
       const initialCassetteStatus = hasDeliveryInfo ? 'IN_TRANSIT_TO_RC' : 'BAD';
-      
+
       this.logger.debug(`Ticket will be created with status: ${initialTicketStatus}, Cassette status: ${initialCassetteStatus}, Has delivery info: ${hasDeliveryInfo}, Delivery method: ${createDto.deliveryMethod}`);
 
       // Prepare delivery data if needed (before transaction)
@@ -637,7 +655,7 @@ export class TicketsService {
       if (hasDeliveryInfo) {
         const shippedDate = createDto.shippedDate ? new Date(createDto.shippedDate) : new Date();
         const estimatedArrival = createDto.estimatedArrival ? new Date(createDto.estimatedArrival) : null;
-        
+
         // Get sender address
         let senderAddressData: any = { useOfficeAddress: false };
         if (createDto.useOfficeAddress && pengelolaUser) {
@@ -682,7 +700,7 @@ export class TicketsService {
             senderContactPhone: createDto.senderContactPhone || null,
           };
         }
-        
+
         deliveryData = {
           sentBy: reporterUserId,
           shippedDate,
@@ -708,65 +726,70 @@ export class TicketsService {
         // 2. Create ticket with appropriate status
         this.logger.debug('Inside transaction - Creating problem ticket');
         const ticket = await tx.problemTicket.create({
-        data: {
-          ticketNumber,
-          cassetteId: cassette.id,
-          machineId: machine?.id || null,
-          reportedBy: reporterUserId,
-          title: createDto.title,
-          description: createDto.description,
-          priority: createDto.priority || 'MEDIUM',
-          affectedComponents: createDto.affectedComponents || null,
-          wsid: createDto.wsid || null,
-          errorCode: createDto.errorCode || null,
-          deliveryMethod: createDto.deliveryMethod || null,
-          courierService: createDto.courierService || null,
-          trackingNumber: createDto.trackingNumber || null,
-          status: initialTicketStatus as any, // Set status based on delivery info
-        } as any,
-        include: {
-          cassette: {
-            include: {
-              cassetteType: true,
-              customerBank: {
-                select: {
-                  id: true,
-                  bankCode: true,
-                  bankName: true,
+          data: {
+            ticketNumber,
+            cassetteId: cassette.id,
+            machineId: machine?.id || null,
+            reportedBy: reporterUserId,
+            title: createDto.title,
+            description: createDto.description,
+            priority: createDto.priority || 'MEDIUM',
+            affectedComponents: createDto.affectedComponents 
+              ? (Array.isArray(createDto.affectedComponents) 
+                  ? JSON.stringify(createDto.affectedComponents) 
+                  : createDto.affectedComponents)
+              : null,
+            wsid: createDto.wsid || null,
+            errorCode: createDto.errorCode || null,
+            deliveryMethod: createDto.deliveryMethod || null,
+            courierService: createDto.courierService || null,
+            trackingNumber: createDto.trackingNumber || null,
+            repairLocation: createDto.repairLocation || null,
+            status: initialTicketStatus as any, // Set status based on delivery info or on-site repair
+          } as any,
+          include: {
+            cassette: {
+              include: {
+                cassetteType: true,
+                customerBank: {
+                  select: {
+                    id: true,
+                    bankCode: true,
+                    bankName: true,
+                  },
                 },
               },
             },
-          },
-          machine: {
-            include: {
-              customerBank: {
-                select: {
-                  id: true,
-                  bankCode: true,
-                  bankName: true,
+            machine: {
+              include: {
+                customerBank: {
+                  select: {
+                    id: true,
+                    bankCode: true,
+                    bankName: true,
+                  },
                 },
-              },
-              pengelola: {
-                select: {
-                  id: true,
-                  companyName: true,
-                },
-              },
-            },
-          },
-          reporter: {
-            select: {
-              fullName: true,
-              pengelola: {
-                select: {
-                  companyName: true,
+                pengelola: {
+                  select: {
+                    id: true,
+                    companyName: true,
+                  },
                 },
               },
             },
-          },
-        } as any,
+            reporter: {
+              select: {
+                fullName: true,
+                pengelola: {
+                  select: {
+                    companyName: true,
+                  },
+                },
+              },
+            },
+          } as any,
         });
-        
+
         this.logger.debug(`Inside transaction - Ticket created: ${ticket.ticketNumber}, Status: ${ticket.status}`);
 
         // 3. Create delivery if delivery info provided
@@ -780,14 +803,38 @@ export class TicketsService {
             },
           } as any);
           this.logger.debug('Delivery created in same transaction');
-            }
-        
+        }
+
         return ticket;
       });
-      
+
       this.logger.log(`Transaction completed. Ticket created: ${createdTicket.ticketNumber}, Status: ${createdTicket.status}`);
       if (hasDeliveryInfo) {
         this.logger.debug('Delivery created in same transaction. Ticket status: IN_DELIVERY, Cassette status: IN_TRANSIT_TO_RC');
+      }
+
+      // Audit log: Log ticket creation
+      try {
+        await this.auditLogService.logCreate(
+          'TICKET',
+          createdTicket.id,
+          {
+            ticketNumber: createdTicket.ticketNumber,
+            status: createdTicket.status,
+            cassetteId: createdTicket.cassetteId,
+            machineId: createdTicket.machineId,
+            title: createdTicket.title,
+            priority: createdTicket.priority,
+          },
+          userId,
+          userType as 'HITACHI' | 'PENGELOLA',
+          {
+            hasDelivery: hasDeliveryInfo,
+            deliveryMethod: createDto.deliveryMethod,
+          }
+        );
+      } catch (auditError) {
+        this.logger.warn(`Failed to log audit for ticket creation: ${auditError.message}`);
       }
 
       // Fetch ticket again with delivery info if created
@@ -855,7 +902,7 @@ export class TicketsService {
 
       // Verify cassette status is BAD (or IN_TRANSIT_TO_RC if delivery was auto-created)
       // Always re-fetch cassette directly from database using raw query to ensure fresh data
-      
+
       // Use raw query to force fresh read from database (bypass any connection pooling/caching)
       const verifyCassetteRaw = await this.prisma.$queryRaw`
         SELECT 
@@ -870,15 +917,15 @@ export class TicketsService {
         FROM cassettes c
         WHERE c.id = ${cassette.id}
       ` as any[];
-      
+
       if (verifyCassetteRaw && verifyCassetteRaw.length > 0) {
         const rawCassette = verifyCassetteRaw[0];
         this.logger.debug(`Raw Query Verification - Database cassette status: ${rawCassette.serialNumber} = ${rawCassette.status}`);
-        
+
         if (rawCassette.status !== 'BAD' && rawCassette.status !== 'IN_TRANSIT_TO_RC') {
           this.logger.error(`CRITICAL: Cassette status NOT updated! Expected BAD or IN_TRANSIT_TO_RC, got: ${rawCassette.status}. Transaction may not have committed properly.`);
         }
-        
+
         // Now fetch with relations using the confirmed status
         const verifyCassette = await this.prisma.cassette.findUnique({
           where: { id: cassette.id },
@@ -893,15 +940,15 @@ export class TicketsService {
             },
           },
         });
-        
+
         if (verifyCassette) {
           this.logger.debug(`Full Query Verification - Database cassette status: ${verifyCassette.serialNumber} = ${verifyCassette.status}`);
-          
+
           if (verifyCassette.status !== rawCassette.status) {
             this.logger.warn('WARNING: Status mismatch between raw query and Prisma query! Using raw query result.');
             verifyCassette.status = rawCassette.status as any;
           }
-          
+
           // Update finalTicket cassette with verified data
           if ((finalTicket as any).cassette) {
             (finalTicket as any).cassette = verifyCassette;
@@ -911,10 +958,10 @@ export class TicketsService {
       } else {
         this.logger.error('ERROR: Could not verify cassette status using raw query');
       }
-      
+
       const cassetteStatus = (finalTicket as any).cassette?.status;
       this.logger.debug(`Final ticket response includes cassette with status: ${cassetteStatus}`);
-      
+
       if (cassetteStatus !== 'BAD' && cassetteStatus !== 'IN_TRANSIT_TO_RC') {
         this.logger.error(`CRITICAL ERROR: Response cassette status is incorrect! Expected BAD or IN_TRANSIT_TO_RC, got: ${cassetteStatus}`);
       }
@@ -931,11 +978,11 @@ export class TicketsService {
         FROM problem_tickets pt
         WHERE pt.id = ${createdTicket.id}
       ` as any[];
-      
+
       if (verifyTicketRaw && verifyTicketRaw.length > 0) {
         const rawTicket = verifyTicketRaw[0];
         this.logger.debug(`Raw Query Verification - Database ticket status: ${rawTicket.ticketNumber} = ${rawTicket.status}`);
-        
+
         // Check if delivery exists
         const deliveryExists = await this.prisma.$queryRaw`
           SELECT id, ticket_id, tracking_number
@@ -943,12 +990,12 @@ export class TicketsService {
           WHERE ticket_id = ${createdTicket.id}
           LIMIT 1
         ` as any[];
-        
+
         this.logger.debug('Delivery check:', {
           hasDelivery: deliveryExists.length > 0,
           trackingNumber: deliveryExists[0]?.tracking_number || 'none',
         });
-        
+
         // If delivery was created, ticket should be IN_DELIVERY
         if (deliveryExists.length > 0 && rawTicket.status !== 'IN_DELIVERY') {
           this.logger.error('CRITICAL ERROR: Delivery exists but ticket status is not IN_DELIVERY!', {
@@ -962,7 +1009,7 @@ export class TicketsService {
             WHERE id = ${createdTicket.id}
           `;
           this.logger.warn('Auto-fixed: Updated ticket status to IN_DELIVERY');
-          
+
           // Re-fetch ticket with updated status
           const fixedTicket = await this.prisma.problemTicket.findUnique({
             where: { id: createdTicket.id },
@@ -1017,7 +1064,7 @@ export class TicketsService {
               } as any,
             } as any,
           });
-          
+
           if (fixedTicket) {
             this.logger.debug(`Returned fixed ticket with status: ${fixedTicket.status}`);
             return fixedTicket;
@@ -1025,20 +1072,20 @@ export class TicketsService {
         } else if (deliveryExists.length > 0 && rawTicket.status === 'IN_DELIVERY') {
           this.logger.debug('Ticket status is correct: IN_DELIVERY with delivery');
         }
-        
+
         // Update finalTicket status if different from raw query
         if ((finalTicket as any).status !== rawTicket.status) {
           this.logger.warn('WARNING: Ticket status mismatch! Using database status.');
           (finalTicket as any).status = rawTicket.status as any;
         }
       }
-      
+
       return finalTicket;
-      } catch (error) {
+    } catch (error) {
       this.logger.error('Error in create ticket', error instanceof Error ? error.stack : error);
-        throw error;
-      }
+      throw error;
     }
+  }
 
   /**
    * CREATE MULTI-CASSETTE TICKET
@@ -1048,34 +1095,43 @@ export class TicketsService {
     try {
       this.logger.debug(`createMultiCassetteTicket called: userId=${userId}, userType=${userType}, cassettes=${createDto.cassettes.length}`);
 
-      // Only Pengelola users can create tickets
-      if (userType?.toUpperCase() !== 'PENGELOLA') {
-        throw new ForbiddenException('Only Pengelola users can create problem tickets');
-      }
+      // Pengelola and Hitachi users can create tickets
+      let pengelolaUser: any = null;
+      let accessibleBankIds: string[] = [];
 
-      // Verify Pengelola user permissions
-      const pengelolaUser = await this.prisma.pengelolaUser.findUnique({
-        where: { id: userId },
-        include: {
-          pengelola: {
-            include: {
-              bankAssignments: {
-                select: { customerBankId: true },
+      if (userType?.toUpperCase() === 'PENGELOLA') {
+        // Verify Pengelola user permissions
+        pengelolaUser = await this.prisma.pengelolaUser.findUnique({
+          where: { id: userId },
+          include: {
+            pengelola: {
+              include: {
+                bankAssignments: {
+                  select: { customerBankId: true },
+                },
               },
             },
           },
-        },
-      });
+        });
 
-      if (!pengelolaUser) {
-        throw new NotFoundException('Pengelola user not found');
+        if (!pengelolaUser) {
+          throw new NotFoundException('Pengelola user not found');
+        }
+
+        if (!pengelolaUser.canCreateTickets) {
+          throw new ForbiddenException('You do not have permission to create tickets');
+        }
+
+        accessibleBankIds = pengelolaUser.pengelola.bankAssignments.map(a => a.customerBankId);
+      } else if (userType?.toUpperCase() !== 'HITACHI') {
+        throw new ForbiddenException('Only Pengelola and Hitachi users can create problem tickets');
+      } else {
+        // For Hitachi users, they can access all banks
+        const allBanks = await this.prisma.customerBank.findMany({
+          select: { id: true },
+        });
+        accessibleBankIds = allBanks.map(b => b.id);
       }
-
-      if (!pengelolaUser.canCreateTickets) {
-        throw new ForbiddenException('You do not have permission to create tickets');
-      }
-
-      const accessibleBankIds = pengelolaUser.pengelola.bankAssignments.map(a => a.customerBankId);
 
       // Validate all cassettes
       const cassettePromises = createDto.cassettes.map(async (cassetteDetail) => {
@@ -1146,7 +1202,7 @@ export class TicketsService {
         });
 
         const repairCompleted = latestRepairTicket && ['COMPLETED', 'SCRAPPED'].includes(latestRepairTicket.status);
-        
+
         // Only block if there's an active ticket AND repair is not completed
         // If repair is completed, problem ticket should be RESOLVED, but if it's still IN_PROGRESS,
         // we allow it because repair is done and cassette is ready for new tickets
@@ -1160,14 +1216,14 @@ export class TicketsService {
             'RETURN_SHIPPED': 'Dikirim Kembali',
             'CLOSED': 'Ditutup',
           };
-          
+
           const statusLabel = statusLabels[activeTicket.status] || activeTicket.status;
           const ticketDate = new Date(activeTicket.createdAt).toLocaleDateString('id-ID', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',
           });
-          
+
           throw new BadRequestException(
             `Kaset ${cassette.serialNumber} sudah memiliki tiket aktif:\n` +
             `- Tiket: ${activeTicket.ticketNumber}\n` +
@@ -1240,7 +1296,7 @@ export class TicketsService {
       const year = String(now.getFullYear()).slice(-2); // Last 2 digits of year
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const day = String(now.getDate()).padStart(2, '0');
-      
+
       // Count tickets created today to get sequence number
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
@@ -1252,7 +1308,7 @@ export class TicketsService {
           },
         },
       });
-      
+
       // Auto increment tanpa padding
       const sequenceNumber = todayTicketCount + 1;
       const ticketNumber = `SO-${day}${month}${year}${sequenceNumber}`;
@@ -1260,13 +1316,17 @@ export class TicketsService {
       // Use first cassette's info as primary for the ticket
       const primaryCassette = cassettes[0];
 
-        // Determine if we have delivery info
-        // For SELF_DELIVERY, also set status to IN_DELIVERY so RC can confirm receipt
-        const hasDeliveryInfo = (createDto.courierService && createDto.trackingNumber) || createDto.deliveryMethod === 'SELF_DELIVERY';
-        const initialTicketStatus = hasDeliveryInfo ? 'IN_DELIVERY' : 'OPEN';
-        const initialCassetteStatus = hasDeliveryInfo ? 'IN_TRANSIT_TO_RC' : 'BAD';
+      // Check if this is an on-site repair request
+      const isOnSiteRepair = createDto.repairLocation === 'ON_SITE';
       
-      this.logger.debug(`Multi-cassette ticket will be created with status: ${initialTicketStatus}, Cassettes status: ${initialCassetteStatus}`);
+      // Determine if we have delivery info
+      // For SELF_DELIVERY, also set status to IN_DELIVERY so RC can confirm receipt
+      // For ON_SITE repair, delivery info is not needed
+      const hasDeliveryInfo = !isOnSiteRepair && ((createDto.courierService && createDto.trackingNumber) || createDto.deliveryMethod === 'SELF_DELIVERY');
+      const initialTicketStatus = isOnSiteRepair ? 'PENDING_APPROVAL' : (hasDeliveryInfo ? 'IN_DELIVERY' : 'OPEN');
+      const initialCassetteStatus = isOnSiteRepair ? 'BAD' : (hasDeliveryInfo ? 'IN_TRANSIT_TO_RC' : 'BAD');
+
+      this.logger.debug(`Multi-cassette ticket will be created with status: ${initialTicketStatus}, Cassettes status: ${initialCassetteStatus}, On-site repair: ${isOnSiteRepair}`);
 
       // CREATE TICKET with TRANSACTION
       const createdTicket = await this.prisma.$transaction(async (tx) => {
@@ -1284,22 +1344,47 @@ export class TicketsService {
 
         // 2. Create problem ticket with appropriate status
         const firstDetail = createDto.cassettes[0];
+        
+        // Determine reporter user ID
+        let reporterUserId: string;
+        if (userType?.toUpperCase() === 'PENGELOLA' && pengelolaUser) {
+          reporterUserId = pengelolaUser.id;
+        } else if (userType?.toUpperCase() === 'HITACHI') {
+          // For Hitachi users, find the first pengelola user to use as reporter
+          // This is a workaround since reportedBy must reference PengelolaUser
+          const firstPengelolaUser = await tx.pengelolaUser.findFirst({
+            select: { id: true },
+          });
+          if (!firstPengelolaUser) {
+            throw new BadRequestException('No Pengelola user found. Cannot create ticket without a reporter.');
+          }
+          reporterUserId = firstPengelolaUser.id;
+        } else {
+          throw new ForbiddenException('Invalid user type for creating tickets');
+        }
+        
         const ticket = await tx.problemTicket.create({
           data: {
             ticketNumber,
             cassetteId: primaryCassette.id, // Primary cassette for backward compatibility
             machineId: createDto.machineId || null,
-            reportedBy: userId,
+            reportedBy: reporterUserId,
             title: firstDetail.title,
             description: firstDetail.description,
             priority: firstDetail.priority || 'MEDIUM',
-            affectedComponents: firstDetail.affectedComponents || null,
+            // Convert array to JSON string for database storage
+            affectedComponents: firstDetail.affectedComponents 
+              ? (Array.isArray(firstDetail.affectedComponents) 
+                  ? JSON.stringify(firstDetail.affectedComponents) 
+                  : firstDetail.affectedComponents)
+              : null,
             wsid: firstDetail.wsid || null,
             errorCode: firstDetail.errorCode || null,
-            deliveryMethod: createDto.deliveryMethod,
+            deliveryMethod: createDto.deliveryMethod || null,
             courierService: createDto.courierService || null,
             trackingNumber: createDto.trackingNumber || null,
-            status: initialTicketStatus as any, // Set status based on delivery info
+            repairLocation: createDto.repairLocation || null,
+            status: initialTicketStatus as any, // Set status based on delivery info or on-site repair
           } as any,
         });
         this.logger.debug(`Created ticket with status: ${initialTicketStatus}`);
@@ -1316,7 +1401,11 @@ export class TicketsService {
                 title: detail.title,
                 description: detail.description,
                 priority: detail.priority || 'MEDIUM',
-                affectedComponents: detail.affectedComponents || undefined,
+                affectedComponents: detail.affectedComponents 
+                  ? (Array.isArray(detail.affectedComponents) 
+                      ? JSON.stringify(detail.affectedComponents) 
+                      : detail.affectedComponents)
+                  : undefined,
                 wsid: detail.wsid || undefined,
                 errorCode: detail.errorCode || undefined,
                 // Always use root-level requestReplacement and replacementReason (not from detail object)
@@ -1331,21 +1420,21 @@ export class TicketsService {
         if (createDto.deliveryMethod === 'COURIER' || createDto.deliveryMethod === 'SELF_DELIVERY') {
           const senderAddressData = createDto.useOfficeAddress
             ? {
-                senderAddress: pengelolaUser.pengelola.address,
-                senderCity: pengelolaUser.pengelola.city,
-                senderProvince: pengelolaUser.pengelola.province,
-                senderPostalCode: null,
-                senderContactName: pengelolaUser.pengelola.primaryContactName,
-                senderContactPhone: pengelolaUser.pengelola.primaryContactPhone,
-              }
+              senderAddress: pengelolaUser.pengelola.address,
+              senderCity: pengelolaUser.pengelola.city,
+              senderProvince: pengelolaUser.pengelola.province,
+              senderPostalCode: null,
+              senderContactName: pengelolaUser.pengelola.primaryContactName,
+              senderContactPhone: pengelolaUser.pengelola.primaryContactPhone,
+            }
             : {
-                senderAddress: createDto.senderAddress,
-                senderCity: createDto.senderCity,
-                senderProvince: createDto.senderProvince,
-                senderPostalCode: createDto.senderPostalCode,
-                senderContactName: createDto.senderContactName,
-                senderContactPhone: createDto.senderContactPhone,
-              };
+              senderAddress: createDto.senderAddress,
+              senderCity: createDto.senderCity,
+              senderProvince: createDto.senderProvince,
+              senderPostalCode: createDto.senderPostalCode,
+              senderContactName: createDto.senderContactName,
+              senderContactPhone: createDto.senderContactPhone,
+            };
 
           await tx.cassetteDelivery.create({
             data: {
@@ -1450,7 +1539,7 @@ export class TicketsService {
 
         const expectedRepairCount = cassetteIds.length;
         const completedCount = allRepairTickets.filter(rt => rt.status === 'COMPLETED').length;
-        const allCompleted = allRepairTickets.length === expectedRepairCount && 
+        const allCompleted = allRepairTickets.length === expectedRepairCount &&
           allRepairTickets.every(rt => rt.status === 'COMPLETED');
 
         if (!allCompleted) {
@@ -1462,878 +1551,44 @@ export class TicketsService {
       }
     }
 
-    return this.prisma.problemTicket.update({
+    // Get old ticket data for audit log
+    const oldTicket = {
+      status: ticket.status,
+      priority: ticket.priority,
+      resolutionNotes: ticket.resolutionNotes,
+    };
+
+    const updatedTicket = await this.prisma.problemTicket.update({
       where: { id },
       data: updateDto as any,
     });
-  }
 
-  async createDelivery(createDto: CreateDeliveryDto, userId: string, userType: string) {
-    // SUPER ADMIN (HITACHI) can create delivery for testing
-    // Pengelola USERS can create delivery normally
-    if (userType !== 'pengelola' && userType !== 'HITACHI') {
-      throw new ForbiddenException('Only Pengelola users or admin can create delivery forms');
-    }
-
-    // Verify ticket exists and is in OPEN status
-    const ticket = await this.prisma.problemTicket.findUnique({
-      where: { id: createDto.ticketId },
-      include: {
-        cassette: {
-          include: {
-            customerBank: true,
-          },
-        },
-        machine: {
-          include: {
-            pengelola: {
-              include: {
-                users: {
-                  take: 1,
-                },
-              },
-            },
-            customerBank: true,
-          },
-        },
-      } as any,
-    });
-
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
-    if (ticket.status !== 'OPEN') {
-      throw new BadRequestException(`Cannot create delivery for ticket with status ${ticket.status}. Ticket must be OPEN first.`);
-    }
-
-    // Check if delivery already exists
-    const existingDelivery = await this.prisma.cassetteDelivery.findUnique({
-      where: { ticketId: createDto.ticketId },
-    });
-
-    if (existingDelivery) {
-      throw new BadRequestException('Delivery form already exists for this ticket');
-    }
-
-    // Verify cassette exists and belongs to same bank as machine
-    const cassette = await this.prisma.cassette.findUnique({
-      where: { id: createDto.cassetteId },
-      include: { customerBank: true },
-    });
-
-    if (!cassette) {
-      throw new NotFoundException('Cassette not found');
-    }
-
-    // Find machine if machineId is provided
-    let machine: any = null;
-    if (ticket.machineId) {
-      const foundMachine = await this.prisma.machine.findUnique({
-        where: { id: ticket.machineId },
-        include: { 
-          customerBank: true,
-          pengelola: {
-            include: {
-              users: {
-                take: 1,
-              },
-            },
-          },
-        },
-      });
-
-      if (!foundMachine) {
-        throw new NotFoundException('Machine not found');
-      }
-
-      machine = foundMachine;
-
-      if (cassette.customerBankId !== machine.customerBankId) {
-        throw new BadRequestException('Cassette must belong to same bank as machine');
-      }
-    } else {
-      // If no machineId, validate cassette belongs to same bank as ticket's cassette
-      const ticketWithCassette = ticket as any;
-      if (ticketWithCassette.cassette && ticketWithCassette.cassette.customerBankId !== cassette.customerBankId) {
-        throw new BadRequestException('Cassette must belong to same bank as ticket\'s cassette');
-      }
-    }
-
-    // Check cassette status
-    if ((cassette.status as string) !== 'OK' && (cassette.status as string) !== 'BAD') {
-      throw new BadRequestException(
-        `Cannot send cassette with status ${cassette.status}. Only OK or BAD cassettes can be sent.`,
-      );
-    }
-
-    // For admin users, use the machine's Pengelola user as sender
-    let senderUserId = userId;
-    if (userType === 'HITACHI') {
-      const ticketMachine = (ticket as any).machine;
-      if (ticketMachine && ticketMachine.pengelola && ticketMachine.pengelola.users && ticketMachine.pengelola.users.length > 0) {
-        senderUserId = ticketMachine.pengelola.users[0].id;
-        this.logger.debug(`Admin creating delivery - using Pengelola user as sender: ${senderUserId}`);
-      } else if (machine && (machine as any).pengelola) {
-        // Use Pengelola users from machine query result
-        const machineVendor = (machine as any).pengelola;
-        if (machineVendor && machineVendor.users && machineVendor.users.length > 0) {
-          senderUserId = machineVendor.users[0].id;
-          this.logger.debug(`Admin creating delivery - using Pengelola user as sender: ${senderUserId}`);
-        } else {
-          throw new BadRequestException('Machine has no assigned Pengelola users. Cannot create delivery.');
-        }
-      } else {
-        throw new BadRequestException('Machine not found or has no assigned Pengelola users. Cannot create delivery.');
-      }
-    }
-
-    // Create delivery and update cassette status
-    return this.prisma.$transaction(async (tx) => {
-      // Update cassette status
-      await tx.cassette.update({
-        where: { id: createDto.cassetteId },
-        data: {
-          status: 'IN_TRANSIT_TO_RC',
-        },
-      });
-
-      // Create delivery record
-      const delivery = await tx.cassetteDelivery.create({
-        data: {
-          ticketId: createDto.ticketId,
-          cassetteId: createDto.cassetteId,
-          sentBy: senderUserId,
-          shippedDate: new Date(createDto.shippedDate),
-          courierService: createDto.courierService,
-          trackingNumber: createDto.trackingNumber,
-          estimatedArrival: createDto.estimatedArrival ? new Date(createDto.estimatedArrival) : null,
-          notes: createDto.notes,
-        },
-        include: {
-          cassette: {
-            include: {
-              cassetteType: true,
-              customerBank: true,
-            },
-          },
-          ticket: true,
-        },
-      });
-
-      // Update ticket status
-      await tx.problemTicket.update({
-        where: { id: createDto.ticketId },
-        data: {
-          status: 'IN_DELIVERY' as any,
-        },
-      });
-
-      return delivery;
-    });
-  }
-
-  async receiveDelivery(ticketId: string, receiveDto: ReceiveDeliveryDto, userId: string, userType: string) {
-    if (userType !== 'HITACHI') {
-      throw new ForbiddenException('Only Hitachi RC staff can receive cassettes');
-    }
-
-    // Find ticket first to check deliveryMethod
-    const ticket = await this.prisma.problemTicket.findUnique({
-      where: { id: ticketId },
-      include: {
-        cassetteDetails: {
-          include: {
-            cassette: true,
-          },
-        },
-        cassette: true,
-      },
-    });
-
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
-    // Find delivery
-    let delivery = await this.prisma.cassetteDelivery.findUnique({
-      where: { ticketId },
-      include: {
-        cassette: true,
-      },
-    });
-
-    // If no delivery record but ticket has SELF_DELIVERY, create one
-    if (!delivery && ticket.deliveryMethod === 'SELF_DELIVERY') {
-      // Get primary cassette
-      const primaryCassette = ticket.cassetteDetails && ticket.cassetteDetails.length > 0
-        ? ticket.cassetteDetails[0].cassette
-        : ticket.cassette;
-
-      if (!primaryCassette) {
-        throw new BadRequestException('No cassette found for this ticket');
-      }
-
-      // Create delivery record for SELF_DELIVERY
-      delivery = await this.prisma.cassetteDelivery.create({
-        data: {
-          ticketId: ticket.id,
-          cassetteId: primaryCassette.id,
-          sentBy: ticket.reportedBy,
-          courierService: 'SELF_DELIVERY',
-          trackingNumber: null,
-          shippedDate: new Date(),
-          estimatedArrival: null,
-          useOfficeAddress: false,
-        } as any,
-        include: {
-          cassette: true,
-        },
-      });
-    }
-
-    if (!delivery) {
-      throw new NotFoundException('Delivery not found. Please ensure ticket has delivery information.');
-    }
-
-    if (delivery.receivedAtRc) {
-      throw new BadRequestException('Cassette already received at RC');
-    }
-
-    // For SELF_DELIVERY, ticket status can be OPEN or IN_DELIVERY
-    // For COURIER, ticket status should be IN_DELIVERY
-    if (delivery.courierService !== 'SELF_DELIVERY' && ticket.status !== 'IN_DELIVERY') {
-      throw new BadRequestException(`Ticket status must be IN_DELIVERY to receive delivery. Current status: ${ticket.status}`);
-    }
-
-    // Update delivery and cassette status
-    return this.prisma.$transaction(async (tx) => {
-      // Update delivery record
-      const updatedDelivery = await tx.cassetteDelivery.update({
-        where: { id: delivery.id },
-        data: {
-          receivedAtRc: new Date(),
-          receivedBy: userId,
-          notes: receiveDto.notes,
-        },
-      });
-
-      // Update cassette status to IN_TRANSIT_TO_RC if not already
-      // Get all cassettes from ticket details and delivery
-      const cassetteIds: string[] = [];
-      
-      // From ticket details
-      if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
-        ticket.cassetteDetails.forEach((detail: any) => {
-          if (detail.cassette?.id && !cassetteIds.includes(detail.cassette.id)) {
-            cassetteIds.push(detail.cassette.id);
-          }
-        });
-      }
-      
-      // From delivery
-      if (delivery.cassetteId && !cassetteIds.includes(delivery.cassetteId)) {
-        cassetteIds.push(delivery.cassetteId);
-      }
-      
-      // Check if this is a replacement ticket
-      const isReplacementTicket = (ticket.cassetteDetails as any)?.some((detail: any) => detail.requestReplacement === true) || (ticket as any).requestReplacement === true;
-      
-      // Update cassette status
-      // For replacement tickets: SCRAPPED cassettes should remain SCRAPPED (not changed to IN_REPAIR)
-      // For repair tickets: cassettes should be updated to IN_REPAIR
-      if (cassetteIds.length > 0) {
-        if (isReplacementTicket) {
-          // For replacement tickets, only update cassettes that are NOT SCRAPPED
-          // SCRAPPED cassettes remain SCRAPPED (they will be replaced, not repaired)
-          await tx.cassette.updateMany({
-            where: {
-              id: { in: cassetteIds },
-              status: { not: 'SCRAPPED' },
-            },
-            data: {
-              status: 'IN_REPAIR',
-              updatedAt: new Date(),
-            },
-          });
-          this.logger.debug(`RC Receive (Replacement): Updated non-SCRAPPED cassettes to IN_REPAIR. SCRAPPED cassettes remain SCRAPPED.`);
-        } else {
-          // For repair tickets, update all cassettes to IN_REPAIR
-          await tx.cassette.updateMany({
-            where: {
-              id: { in: cassetteIds },
-            },
-            data: {
-              status: 'IN_REPAIR',
-              updatedAt: new Date(),
-            },
-          });
-          this.logger.debug(`RC Receive: Updated ${cassetteIds.length} cassettes to IN_REPAIR (arrived at RC, ready for repair)`);
-        }
-      }
-
-      // Update ticket status ke RECEIVED (barang sudah diterima, belum mulai repair)
-      await tx.problemTicket.update({
-        where: { id: ticketId },
-        data: {
-          status: 'RECEIVED' as any,
-        },
-      });
-      this.logger.debug('RC Receive: Updated ticket status to RECEIVED');
-
-      // Note: Repair ticket akan dibuat manual saat teknisi klik "Mulai Repair"
-      // Tidak auto-create repair ticket di sini
-
-      return updatedDelivery;
-    });
-  }
-
-  async createReturn(createDto: CreateReturnDto, userId: string, userType: string) {
+    // Audit log: Log ticket update
     try {
-      this.logger.debug(`Confirming pickup: ticketId=${createDto.ticketId}, userId=${userId}, userType=${userType}`);
-
-      // Only RC staff can confirm pickup (they handle the pickup confirmation on behalf of Pengelola)
-      if (userType !== 'HITACHI') {
-        throw new ForbiddenException('Only RC staff can confirm pickup');
-      }
-
-    // Verify ticket exists and is RESOLVED
-    // Include cassetteDetails to check for replacement requests
-    const ticket = await this.prisma.problemTicket.findUnique({
-      where: { id: createDto.ticketId },
-      include: {
-        cassetteDelivery: {
-          include: {
-            cassette: true,
-          },
-        },
-        cassetteDetails: {
-          include: {
-            cassette: {
-              select: {
-                id: true,
-                serialNumber: true,
-                status: true,
-              },
-            },
-          },
-          // Include requestReplacement and replacementReason fields
-        },
-      },
-    });
-
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
-    // Get full ticket with machine info
-    const fullTicket = await this.prisma.problemTicket.findUnique({
-      where: { id: createDto.ticketId },
-      include: {
-        machine: true,
-      },
-    });
-
-    if (!fullTicket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
-    // Check if ticket is RESOLVED OR if all repair tickets are completed (for multi-cassette tickets)
-    // This handles cases where backend status hasn't synced yet but all repairs are done
-    let canConfirmPickup = ticket.status === 'RESOLVED';
-    
-    if (!canConfirmPickup) {
-      // Check if all repair tickets are completed (even if ticket.status is still IN_PROGRESS)
-      const ticketCreatedAt = ticket.createdAt;
-      
-      // Get all cassette IDs from this ticket
-      const cassetteIds: string[] = [];
-      if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
-        ticket.cassetteDetails.forEach((detail: any) => {
-          if (detail.cassette?.id) {
-            cassetteIds.push(detail.cassette.id);
-          }
-        });
-      } else if (ticket.cassetteDelivery?.cassette?.id) {
-        cassetteIds.push(ticket.cassetteDelivery.cassette.id);
-      }
-      
-      if (cassetteIds.length > 0) {
-        // Find all repair tickets for these cassettes created after ticket creation
-        const allRepairTicketsRaw = await this.prisma.repairTicket.findMany({
-          where: {
-            cassetteId: { in: cassetteIds },
-            createdAt: { gte: ticketCreatedAt },
-            deletedAt: null,
-          },
-          select: {
-            id: true,
-            status: true,
-            cassetteId: true,
-            createdAt: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
-        
-        // Get latest repair ticket per cassette
-        const latestRepairsMap = new Map<string, { id: string; status: string; cassetteId: string; createdAt: Date }>();
-        for (const rt of allRepairTicketsRaw) {
-          if (!latestRepairsMap.has(rt.cassetteId)) {
-            latestRepairsMap.set(rt.cassetteId, rt);
-          }
+      const newTicket = {
+        status: updatedTicket.status,
+        priority: updatedTicket.priority,
+        resolutionNotes: updatedTicket.resolutionNotes,
+      };
+      await this.auditLogService.logUpdate(
+        'TICKET',
+        id,
+        oldTicket,
+        newTicket,
+        userId,
+        userType as 'HITACHI' | 'PENGELOLA',
+        {
+          ticketNumber: ticket.ticketNumber,
         }
-        const latestRepairs = Array.from(latestRepairsMap.values());
-        
-        // Check if we have repair tickets for all cassettes and all are COMPLETED
-        const expectedRepairCount = cassetteIds.length;
-        const actualRepairCount = latestRepairs.length;
-        const allCompleted = actualRepairCount === expectedRepairCount && 
-          latestRepairs.every(rt => rt.status === 'COMPLETED');
-        
-        if (allCompleted) {
-          canConfirmPickup = true;
-          this.logger.debug(`Pickup allowed: All ${actualRepairCount}/${expectedRepairCount} repair tickets are COMPLETED, even though ticket.status is ${ticket.status}`);
-        }
-      }
-    }
-    
-    if (!canConfirmPickup) {
-      throw new BadRequestException(
-        `Cannot confirm pickup for ticket with status ${ticket.status}. Ticket must be RESOLVED or all repair tickets must be COMPLETED first.`,
       );
+    } catch (auditError) {
+      this.logger.warn(`Failed to log audit for ticket update: ${auditError.message}`);
     }
 
-    if (!ticket.cassetteDelivery) {
-      throw new BadRequestException('No delivery found for this ticket. Cannot create return.');
-    }
-
-    // Check if return already exists
-    const existingReturn = await (this.prisma as any).cassetteReturn.findUnique({
-      where: { ticketId: createDto.ticketId },
-    });
-
-    // If return already exists, pickup has already been confirmed
-    if (existingReturn) {
-      throw new BadRequestException('Pickup confirmation already exists for this ticket');
-    }
-
-    // Check if this is a replacement ticket
-    // requestReplacement is stored in cassetteDetails (not at ticket level)
-    const isReplacementTicket = ticket.cassetteDetails && 
-      ticket.cassetteDetails.some((detail: any) => detail.requestReplacement === true);
-
-    this.logger.debug(`Checking replacement ticket: ticketId=${createDto.ticketId}, detailsCount=${ticket.cassetteDetails?.length || 0}, isReplacement=${isReplacementTicket}`);
-
-    let cassette: any;
-
-    if (isReplacementTicket) {
-      // For replacement tickets: find the NEW cassette (with replacementTicketId = this ticket.id)
-      const newCassette = await this.prisma.cassette.findFirst({
-        where: {
-          replacementTicketId: createDto.ticketId,
-        },
-        include: {
-          cassetteType: true,
-          customerBank: true,
-        },
-      });
-
-      if (!newCassette) {
-        throw new BadRequestException(
-          'Kaset baru untuk replacement belum ditemukan. Pastikan proses replacement sudah selesai dilakukan.',
-        );
-      }
-
-      // Verify new cassette is in OK status (replacement completed)
-      if ((newCassette.status as string) !== 'OK') {
-        throw new BadRequestException(
-          `Kaset baru harus dalam status OK untuk bisa di-pickup. Status saat ini: ${newCassette.status}`,
-        );
-      }
-
-      cassette = newCassette;
-      this.logger.debug(`Replacement ticket: Using NEW cassette ${newCassette.serialNumber} for return`);
-    } else {
-      // For repair tickets: use the cassette from delivery (the one that was repaired)
-      cassette = ticket.cassetteDelivery.cassette;
-
-      this.logger.debug(`Repair ticket - cassette status: id=${cassette.id}, serialNumber=${cassette.serialNumber}, status=${cassette.status}`);
-
-      // Verify cassette is in READY_FOR_PICKUP status (repair completed, QC passed, ready for pickup)
-      // Status READY_FOR_PICKUP berarti kaset sudah selesai diperbaiki dan siap untuk di-pickup
-      // OR SCRAPPED status (for disposal confirmation - kaset tidak bisa diperbaiki, tetap di RC)
-      if ((cassette.status as string) !== 'READY_FOR_PICKUP' && (cassette.status as string) !== 'SCRAPPED') {
-        throw new BadRequestException(
-          `Cannot confirm pickup for cassette with status ${cassette.status}. Cassette must be in READY_FOR_PICKUP status (repair completed and QC passed) or SCRAPPED status (for disposal confirmation).`,
-        );
-      }
-
-      // Handle SCRAPPED cassette (disposal confirmation - kaset tidak bisa diperbaiki, tetap di RC)
-      if ((cassette.status as string) === 'SCRAPPED') {
-        // Check if there's a new cassette for this ticket (replacement ticket)
-        const newCassette = await this.prisma.cassette.findFirst({
-          where: {
-            replacementTicketId: createDto.ticketId,
-          },
-          include: {
-            cassetteType: true,
-            customerBank: true,
-          },
-        });
-
-        if (newCassette) {
-          // This is a replacement ticket - use the new cassette for pickup
-          this.logger.warn(`Replacement ticket detected: Old cassette is SCRAPPED, found new cassette: ${newCassette.serialNumber}.`);
-          
-          // Verify new cassette is in OK status
-          if ((newCassette.status as string) !== 'OK') {
-            throw new BadRequestException(
-              `Kaset baru harus dalam status OK untuk bisa di-pickup. Status saat ini: ${newCassette.status}`,
-            );
-          }
-
-          // Use the new cassette instead
-          cassette = newCassette;
-          this.logger.debug(`Using NEW cassette ${newCassette.serialNumber} for return (replacement ticket)`);
-        } else {
-          // No replacement - this is a disposal confirmation for SCRAPPED cassette
-          // Kaset SCRAPPED tetap di RC, tidak di-pickup, hanya konfirmasi disposal
-          this.logger.debug(`Disposal confirmation: Cassette ${cassette.serialNumber} is SCRAPPED, will remain at RC. Creating disposal record.`);
-        }
-      } else {
-        this.logger.debug(`Repair ticket: Using repaired cassette ${cassette.serialNumber} (READY_FOR_PICKUP) for pickup`);
-      }
-    }
-
-    // Check if this is a disposal confirmation for SCRAPPED cassette (no replacement)
-    const isDisposalConfirmation = (cassette.status as string) === 'SCRAPPED' && !isReplacementTicket;
-    
-    // Confirm pickup/disposal and update cassette status accordingly
-    return this.prisma.$transaction(async (tx) => {
-      // For disposal confirmation: SCRAPPED cassettes remain SCRAPPED (stay at RC) - NO STATUS UPDATE
-      // For normal pickup: READY_FOR_PICKUP cassettes become OK (picked up)
-      
-      if (isDisposalConfirmation) {
-        // Disposal confirmation: SCRAPPED cassettes remain at RC, status stays SCRAPPED
-        // DO NOT update SCRAPPED cassettes - they must remain SCRAPPED at RC
-        if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
-          const cassettesInTicket = ticket.cassetteDetails.map((detail: any) => detail.cassette);
-          const scrappedCassettes = cassettesInTicket.filter((c: any) => c && c.status === 'SCRAPPED');
-          this.logger.debug(`Disposal confirmation: Found ${scrappedCassettes.length} SCRAPPED cassette(s) - will remain SCRAPPED at RC (no status update)`);
-        } else {
-          // Single cassette ticket
-          this.logger.debug(`Disposal confirmation: Single SCRAPPED cassette ${cassette.serialNumber} - will remain SCRAPPED at RC (no status update)`);
-        }
-        // IMPORTANT: SCRAPPED cassettes are NOT updated - they stay SCRAPPED at RC
-      } else {
-        // Normal pickup: READY_FOR_PICKUP cassettes become OK
-        let cassettesToUpdate: string[] = [cassette.id];
-        
-        // Check if this is a multi-cassette ticket
-        if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0) {
-          // Get all cassettes in this ticket that are in READY_FOR_PICKUP status (completed repair, ready for pickup)
-          const cassettesInTicket = ticket.cassetteDetails.map((detail: any) => detail.cassette);
-          const readyCassettes = cassettesInTicket.filter((c: any) => c && c.status === 'READY_FOR_PICKUP');
-          cassettesToUpdate = readyCassettes.map((c: any) => c.id);
-          
-          this.logger.debug(`Multi-cassette ticket: Found ${readyCassettes.length} cassettes in READY_FOR_PICKUP status to update for pickup`);
-        }
-        
-        // Update all cassettes to OK status immediately (picked up by Pengelola at RC)
-        if (cassettesToUpdate.length > 0) {
-          // Update each cassette individually to ensure all are updated
-          await Promise.all(
-            cassettesToUpdate.map((cassetteId) =>
-              tx.$executeRaw`
-                UPDATE cassettes 
-                SET status = ${'OK'}, updated_at = NOW()
-                WHERE id = ${cassetteId}
-              `
-            )
-          );
-          this.logger.debug(`Confirm Pickup: Updated ${cassettesToUpdate.length} cassette(s) status to OK (${isReplacementTicket ? 'Replacement' : 'Repair'})`);
-        }
-      }
-
-      // Create return record with pickup/disposal confirmation
-      // Since pickup/disposal is done at RC, we set receivedAtPengelola immediately
-      let notes = createDto.notes?.trim() || null;
-      
-      // For disposal confirmation, add disposal information to notes
-      if (isDisposalConfirmation) {
-        const disposalInfo = `\n\n=== DISPOSAL CONFIRMATION ===\n` +
-          `Kaset dengan status SCRAPPED (tidak bisa diperbaiki, tidak lolos QC)\n` +
-          `Kaset tetap di RC untuk disposal\n` +
-          `Tanggal konfirmasi: ${new Date().toLocaleString('id-ID')}\n` +
-          `Dikonfirmasi oleh: RC Staff\n` +
-          `Alasan: Kaset tidak dapat diperbaiki atau tidak lolos Quality Control setelah perbaikan`;
-        notes = notes ? `${notes}${disposalInfo}` : disposalInfo;
-      }
-      
-      // Store signature (RC staff confirms pickup on behalf of Pengelola)
-      const signatureData = createDto.rcSignature || createDto.signature || null;
-      
-      if (signatureData) {
-        this.logger.debug(`RC ${isDisposalConfirmation ? 'Disposal' : 'Pickup'} signature received for ticket ${createDto.ticketId} (length: ${signatureData.length} chars)`);
-      }
-      
-      const pickupDate = new Date(); // Pickup/disposal date is now
-
-      // For multi-cassette tickets, use the primary cassette (first one from cassetteDetails or from delivery)
-      // Since ticketId is unique in CassetteReturn, we can only create one return record per ticket
-      let primaryCassetteId = cassette.id;
-      
-      // For multi-cassette tickets, prefer using the first READY_FOR_PICKUP cassette
-      if (ticket.cassetteDetails && ticket.cassetteDetails.length > 0 && !isDisposalConfirmation) {
-        const readyCassettes = ticket.cassetteDetails
-          .map((detail: any) => detail.cassette)
-          .filter((c: any) => c && c.status === 'READY_FOR_PICKUP');
-        
-        if (readyCassettes.length > 0) {
-          primaryCassetteId = readyCassettes[0].id;
-          this.logger.debug(`Multi-cassette ticket: Using primary cassette ${readyCassettes[0].serialNumber} for return record`);
-        }
-      }
-
-      // Create new return record (RC confirmation only)
-      const returnRecord = await tx.cassetteReturn.create({
-        data: {
-          ticketId: createDto.ticketId,
-          cassetteId: primaryCassetteId, // Use primary cassette ID
-          sentBy: userId,
-          shippedDate: pickupDate, // Use pickup/disposal date as shippedDate for backward compatibility
-          courierService: null, // No courier service for pickup/disposal
-          trackingNumber: null, // No tracking number for pickup/disposal
-          estimatedArrival: null, // No estimated arrival for pickup/disposal
-          receivedAtPengelola: pickupDate, // Set immediately since RC confirms on behalf of Pengelola
-          receivedBy: null, // RC confirms on behalf of Pengelola, no specific Pengelola user ID available
-          notes: notes,
-          signature: signatureData, // Store signature base64 data
-          // RC confirmation (RC staff confirms pickup)
-          confirmedByRc: userId,
-          rcSignature: signatureData,
-          rcConfirmedAt: pickupDate,
-        },
-        include: {
-          cassette: {
-            include: {
-              cassetteType: true,
-              customerBank: true,
-            },
-          },
-          ticket: true,
-          sender: {
-            select: {
-              fullName: true,
-              role: true,
-            },
-          },
-          rcConfirmer: {
-            select: {
-              fullName: true,
-              role: true,
-            },
-          },
-        },
-      });
-
-      // Update ticket status to CLOSED immediately after RC confirmation
-      const shouldCloseTicket = true;
-      
-      // Update ticket status to CLOSED immediately after RC confirmation
-      // RC staff confirms pickup on behalf of Pengelola
-      await tx.problemTicket.update({
-        where: { id: createDto.ticketId },
-        data: {
-          status: 'CLOSED' as any,
-          closedAt: pickupDate,
-        },
-      });
-      this.logger.debug(`Pickup confirmed by RC: Ticket ${createDto.ticketId} status updated to CLOSED`);
-
-      return returnRecord;
-    });
-    } catch (error: any) {
-      this.logger.error(`Error in createReturn: ticketId=${createDto.ticketId}`, error instanceof Error ? error.stack : error);
-
-      // Re-throw known exceptions with their messages
-      if (error instanceof NotFoundException || 
-          error instanceof ForbiddenException || 
-          error instanceof BadRequestException) {
-        throw error;
-      }
-
-      // Wrap unknown errors
-      throw new BadRequestException(`Failed to confirm pickup: ${error.message || 'Unknown error'}`);
-    }
+    return updatedTicket;
   }
 
-  async receiveReturn(ticketId: string, receiveDto: ReceiveReturnDto, userId: string, userType: string) {
-    // Only Pengelola users can receive returns
-    if (userType?.toUpperCase() !== 'PENGELOLA') {
-      throw new ForbiddenException('Only Pengelola users can receive cassette returns');
-    }
 
-    // Find return record
-    const returnRecord = await (this.prisma as any).cassetteReturn.findUnique({
-      where: { ticketId },
-      include: {
-        ticket: true,
-        cassette: true,
-      },
-    });
-
-    if (!returnRecord) {
-      throw new NotFoundException('Return delivery not found');
-    }
-
-    if (returnRecord.receivedAtPengelola) {
-      throw new BadRequestException('Cassette already received at Pengelola');
-    }
-
-    // Verify Pengelola user has access to this ticket's machine or is the reporter
-    const ticket = await this.prisma.problemTicket.findUnique({
-      where: { id: ticketId },
-      include: {
-        machine: {
-          include: {
-            pengelola: {
-              include: {
-                users: {
-                  where: { id: userId },
-                },
-              },
-            },
-          },
-        },
-        reporter: {
-          select: {
-            pengelolaId: true,
-          },
-        },
-      },
-    });
-
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
-    const pengelolaUser = await this.prisma.pengelolaUser.findUnique({
-      where: { id: userId },
-    });
-
-    if (!pengelolaUser) {
-      throw new NotFoundException('Pengelola user not found');
-    }
-
-    // Check if Pengelola has access: machine.pengelolaId OR reporter.pengelolaId matches
-    const hasMachineAccess = ticket.machine && pengelolaUser.pengelolaId === ticket.machine.pengelolaId;
-    const isReporter = (ticket.reporter as any)?.pengelolaId === pengelolaUser.pengelolaId;
-    
-    if (!hasMachineAccess && !isReporter) {
-      throw new ForbiddenException('You do not have access to receive this cassette return');
-    }
-
-    // Verify ticket status is RETURN_SHIPPED (barang sudah dikirim dari RC)
-    if (returnRecord.ticket.status !== 'RETURN_SHIPPED') {
-      throw new BadRequestException(
-        `Cannot receive return for ticket with status ${returnRecord.ticket.status}. Ticket must be in RETURN_SHIPPED status first.`,
-      );
-    }
-
-    // Update return and cassette status
-    return this.prisma.$transaction(async (tx) => {
-      // Update return record
-      const updatedReturn = await tx.cassetteReturn.update({
-        where: { id: returnRecord.id },
-        data: {
-          receivedAtPengelola: new Date(),
-          receivedBy: userId,
-          notes: receiveDto.notes,
-        },
-      });
-
-      // For multi-cassette tickets: update ALL cassettes in the ticket that are in IN_TRANSIT_TO_PENGELOLA status
-      // For single-cassette tickets: update only the cassette being returned
-      let cassettesToUpdate: string[] = [returnRecord.cassetteId];
-      
-      // Check if this is a multi-cassette ticket
-      const ticketWithDetails = await tx.problemTicket.findUnique({
-        where: { id: ticketId },
-        include: {
-          cassetteDetails: {
-            include: {
-              cassette: {
-                select: {
-                  id: true,
-                  status: true,
-                  serialNumber: true,
-                },
-              },
-            },
-          },
-        },
-      });
-      
-      if (ticketWithDetails && ticketWithDetails.cassetteDetails && ticketWithDetails.cassetteDetails.length > 0) {
-        // Get all cassettes in this ticket that are in IN_TRANSIT_TO_PENGELOLA status (being returned)
-        const cassettesInTicket = ticketWithDetails.cassetteDetails.map((detail: any) => detail.cassette);
-        const cassettesInTransit = cassettesInTicket.filter((c: any) => c && c.status === 'IN_TRANSIT_TO_PENGELOLA');
-        cassettesToUpdate = cassettesInTransit.map((c: any) => c.id);
-        
-        this.logger.debug(`Multi-cassette ticket: Found ${cassettesInTransit.length} cassettes in IN_TRANSIT_TO_PENGELOLA status to update to OK`);
-      }
-      
-      // Update all cassettes that need to be updated to OK
-      if (cassettesToUpdate.length > 0) {
-        // Update each cassette individually to ensure all are updated
-        await Promise.all(
-          cassettesToUpdate.map((cassetteId) =>
-            tx.$executeRaw`
-              UPDATE cassettes 
-              SET status = ${'OK'}, updated_at = NOW()
-              WHERE id = ${cassetteId}
-            `
-          )
-        );
-        this.logger.debug(`Receive Return: Updated ${cassettesToUpdate.length} cassette(s) status to OK`);
-        
-        // Verify the updates were successful
-        const updatedCassettes = await tx.cassette.findMany({
-          where: { id: { in: cassettesToUpdate } },
-          select: { id: true, status: true, serialNumber: true },
-        });
-        
-        const failedUpdates = updatedCassettes.filter(c => c.status !== 'OK');
-        if (failedUpdates.length > 0) {
-          this.logger.error(`Receive Return: Failed to update ${failedUpdates.length} cassette(s) status to OK:`, failedUpdates.map(c => `${c.serialNumber} (${c.status})`));
-          // Try again with Prisma update as fallback
-          await Promise.all(
-            failedUpdates.map((c) =>
-              tx.cassette.update({
-                where: { id: c.id },
-                data: { status: 'OK' as any },
-              })
-            )
-          );
-          this.logger.debug(`Receive Return: Fallback update successful for ${failedUpdates.length} cassette(s)`);
-        }
-      }
-
-      // Update ticket status to CLOSED
-      await tx.problemTicket.update({
-        where: { id: ticketId },
-        data: {
-          status: 'CLOSED' as any,
-          closedAt: new Date(),
-        },
-      });
-
-      return updatedReturn;
-    });
-  }
 
   /**
    * Get cassettes that need confirmation (pending confirmation)
@@ -2539,11 +1794,11 @@ export class TicketsService {
         this.prisma.problemTicket.count({ where: { status: 'OPEN' } }),
         this.prisma.problemTicket.count({ where: { status: 'IN_PROGRESS' } }),
         this.prisma.problemTicket.count({ where: { status: 'RESOLVED' } }),
-        this.prisma.problemTicket.count({ 
-          where: { 
+        this.prisma.problemTicket.count({
+          where: {
             priority: 'CRITICAL',
             status: { not: 'CLOSED' }
-          } 
+          }
         }),
       ]);
 
@@ -2747,21 +2002,21 @@ export class TicketsService {
 
       // 2. Get all cassettes from ticket details and delivery
       const cassetteIds: string[] = [];
-      
+
       // From ticket details
       ticket.cassetteDetails.forEach((detail) => {
         if (!cassetteIds.includes(detail.cassetteId)) {
           cassetteIds.push(detail.cassetteId);
         }
       });
-      
+
       // From delivery (if exists)
       if (ticket.cassetteDelivery?.cassetteId) {
         if (!cassetteIds.includes(ticket.cassetteDelivery.cassetteId)) {
           cassetteIds.push(ticket.cassetteDelivery.cassetteId);
         }
       }
-      
+
       // 3. Soft delete repair tickets associated with this ticket
       // Find repair tickets for these cassettes that were created after this ticket
       const ticketCreatedAt = ticket.createdAt;
@@ -2785,7 +2040,7 @@ export class TicketsService {
         });
         this.logger.debug(`Soft deleted ${repairTickets.length} repair tickets for ticket ${ticket.ticketNumber}`);
       }
-      
+
       // 4. Restore each cassette to OK status
       await Promise.all(
         cassetteIds.map((cassetteId) =>
@@ -2806,6 +2061,188 @@ export class TicketsService {
         repairTicketsDeleted: repairTickets.length,
       };
     });
+  }
+
+  /**
+   * Approve on-site repair request
+   * Only Hitachi users can approve
+   */
+  async approveOnSiteRepair(ticketId: string, userId: string, userType: string) {
+    if (userType?.toUpperCase() !== 'HITACHI') {
+      throw new ForbiddenException('Only Hitachi users can approve on-site repair requests');
+    }
+
+    const ticket = await this.prisma.problemTicket.findUnique({
+      where: { id: ticketId },
+      include: {
+        cassette: true,
+        cassetteDetails: {
+          include: {
+            cassette: true,
+          },
+        },
+      },
+    }) as any;
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    if (ticket.repairLocation !== 'ON_SITE') {
+      throw new BadRequestException('This ticket is not an on-site repair request');
+    }
+
+    if ((ticket.status as string) !== 'PENDING_APPROVAL') {
+      throw new BadRequestException(`Cannot approve ticket with status ${ticket.status}. Ticket must be in PENDING_APPROVAL status.`);
+    }
+
+    // Update status to APPROVED_ON_SITE
+    const updatedTicket = await this.prisma.problemTicket.update({
+      where: { id: ticketId },
+      data: {
+        status: 'APPROVED_ON_SITE' as any,
+      },
+      include: {
+        cassette: {
+          include: {
+            cassetteType: true,
+            customerBank: true,
+          },
+        },
+        machine: true,
+        reporter: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            pengelola: {
+              select: {
+                companyName: true,
+              },
+            },
+          },
+        },
+        cassetteDetails: {
+          include: {
+            cassette: {
+              include: {
+                cassetteType: true,
+                customerBank: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Log approval action
+    await this.auditLogService.log({
+      action: 'APPROVE_ON_SITE_REPAIR',
+      entityType: 'PROBLEM_TICKET',
+      entityId: ticketId,
+      userId,
+      userType: userType as 'HITACHI' | 'PENGELOLA',
+      metadata: {
+        ticketNumber: ticket.ticketNumber,
+        previousStatus: 'PENDING_APPROVAL',
+        newStatus: 'APPROVED_ON_SITE',
+      },
+    });
+
+    this.logger.log(`On-site repair request ${ticket.ticketNumber} approved by ${userId}`);
+
+    return updatedTicket;
+  }
+
+  /**
+   * Reject on-site repair request
+   * Only Hitachi users can reject
+   */
+  async rejectOnSiteRepair(ticketId: string, userId: string, userType: string, reason?: string) {
+    if (userType?.toUpperCase() !== 'HITACHI') {
+      throw new ForbiddenException('Only Hitachi users can reject on-site repair requests');
+    }
+
+    const ticket = await this.prisma.problemTicket.findUnique({
+      where: { id: ticketId },
+    }) as any;
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    if (ticket.repairLocation !== 'ON_SITE') {
+      throw new BadRequestException('This ticket is not an on-site repair request');
+    }
+
+    if ((ticket.status as string) !== 'PENDING_APPROVAL') {
+      throw new BadRequestException(`Cannot reject ticket with status ${ticket.status}. Ticket must be in PENDING_APPROVAL status.`);
+    }
+
+    // Update status to OPEN and change repairLocation to AT_RC (default flow)
+    // Use raw SQL to update repairLocation since Prisma client might not have it yet
+    await this.prisma.$executeRaw`
+      UPDATE problem_tickets 
+      SET status = ${'OPEN'}, 
+          repair_location = ${'AT_RC'},
+          updated_at = NOW()
+      WHERE id = ${ticketId}
+    `;
+    
+    // Fetch updated ticket
+    const updatedTicket = await this.prisma.problemTicket.findUnique({
+      where: { id: ticketId },
+      include: {
+        cassette: {
+          include: {
+            cassetteType: true,
+            customerBank: true,
+          },
+        },
+        machine: true,
+        reporter: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            pengelola: {
+              select: {
+                companyName: true,
+              },
+            },
+          },
+        },
+        cassetteDetails: {
+          include: {
+            cassette: {
+              include: {
+                cassetteType: true,
+                customerBank: true,
+              },
+            },
+          },
+        },
+      },
+    }) as any;
+
+    // Log rejection action
+    await this.auditLogService.log({
+      action: 'REJECT_ON_SITE_REPAIR',
+      entityType: 'PROBLEM_TICKET',
+      entityId: ticketId,
+      userId,
+      userType: userType as 'HITACHI' | 'PENGELOLA',
+      metadata: {
+        ticketNumber: ticket.ticketNumber,
+        previousStatus: 'PENDING_APPROVAL',
+        newStatus: 'OPEN',
+        reason: reason || 'No reason provided',
+      },
+    });
+
+    this.logger.log(`On-site repair request ${ticket.ticketNumber} rejected by ${userId}. Reason: ${reason || 'No reason provided'}`);
+
+    return updatedTicket;
   }
 }
 

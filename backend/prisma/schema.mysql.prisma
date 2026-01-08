@@ -80,7 +80,7 @@ model PengelolaUser {
   fullName           String                  @map("full_name") @db.VarChar(255)
   phone              String?                 @db.VarChar(50)
   whatsappNumber     String?                 @map("whatsapp_number") @db.VarChar(50)
-  role               PengelolaUserRole       @default(TECHNICIAN)
+  role               PengelolaUserRole       @default(SUPERVISOR)
   employeeId         String?                 @map("employee_id") @db.VarChar(100)
   canCreateTickets   Boolean                 @default(true) @map("can_create_tickets")
   canCloseTickets    Boolean                 @default(false) @map("can_close_tickets")
@@ -196,6 +196,7 @@ model Cassette {
   notes                 String?
   replacedCassetteId    String?                @map("replaced_cassette_id") @db.Char(36) // NEW: Track replacement - kaset baru menggantikan kaset ini
   replacementTicketId   String?                @map("replacement_ticket_id") @db.Char(36) // NEW: Link to replacement ticket
+  markedBrokenBy        String?                @map("marked_broken_by") @db.Char(36) // NEW: Track who marked this cassette as broken
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
   deliveries            CassetteDelivery[]
@@ -291,6 +292,7 @@ model ProblemTicket {
   deliveryMethod       String?                @map("delivery_method") @db.VarChar(50)
   courierService       String?                @map("courier_service") @db.VarChar(255)
   trackingNumber       String?                @map("tracking_number") @db.VarChar(100)
+  repairLocation       String?                @map("repair_location") @db.VarChar(50)
   reportedAt           DateTime               @default(now()) @map("reported_at")
   resolvedAt           DateTime?              @map("resolved_at")
   closedAt             DateTime?              @map("closed_at")
@@ -488,7 +490,6 @@ enum MachineStatus {
 }
 
 enum PengelolaUserRole {
-  TECHNICIAN
   SUPERVISOR
   ADMIN
 }
@@ -535,6 +536,8 @@ enum RepairTicketStatus {
 
 enum ProblemTicketStatus {
   OPEN
+  PENDING_APPROVAL
+  APPROVED_ON_SITE
   IN_DELIVERY
   RECEIVED
   IN_PROGRESS

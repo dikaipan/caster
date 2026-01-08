@@ -297,8 +297,9 @@ export default function ReturnDeliveryPage() {
 
   return (
     <PageLayout>
-      <style dangerouslySetInnerHTML={{
-        __html: `
+      {/* Static CSS for date input styling - safe from XSS as content is hardcoded */}
+      <style>
+        {`
           /* Calendar icon styling for dark mode */
           input[type="date"]::-webkit-calendar-picker-indicator {
             cursor: pointer;
@@ -320,8 +321,8 @@ export default function ReturnDeliveryPage() {
             filter: invert(1);
             opacity: 0.9;
           }
-        `
-      }} />
+        `}
+      </style>
       <div className="max-w-7xl mx-auto">
         {/* Back Button */}
         <div className="mb-6">
@@ -420,7 +421,7 @@ export default function ReturnDeliveryPage() {
                 </div>
               )}
               {isMultiCassette ? (
-                <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                <div className="space-y-2 max-h-[250px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
                   {allCassettes.map((cassette: any, index: number) => (
                     <div key={cassette.id} className="flex items-center gap-3 bg-teal-50 dark:bg-teal-900/30 p-3 rounded-lg border border-teal-200 dark:border-teal-500/30">
                       <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-white flex items-center justify-center text-xs font-extrabold flex-shrink-0 shadow-md">

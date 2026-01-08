@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CassettesService } from './cassettes.service';
-import { CreateCassetteDto, MarkBrokenDto, ReplaceCassetteDto } from './dto';
+import { CreateCassetteDto, MarkBrokenDto, UnmarkBrokenDto, BulkMarkBrokenDto, ReplaceCassetteDto } from './dto';
 import { UpdateCassetteDto } from './dto/update-cassette.dto';
 import { CheckAvailabilityBatchDto } from './dto/check-availability-batch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,7 +24,7 @@ import { Roles, AllowUserTypes, UserType } from '../common/decorators/roles.deco
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class CassettesController {
-  constructor(private readonly cassettesService: CassettesService) {}
+  constructor(private readonly cassettesService: CassettesService) { }
 
   @Get()
   @ApiOperation({ summary: 'Get all cassettes (filtered by user permissions)' })
@@ -53,13 +53,18 @@ export class CassettesController {
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? Math.min(parseInt(limit, 10), 1000) : 50; // Default 50, max 1000 to prevent memory issues
-    
+
     // serial_number is an alias for keyword (backward compatibility)
     const searchKeyword = keyword || serialNumber;
-    
+
     // Validate sortOrder
     const validSortOrder = sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
-    
+
+    // For BANK users, use their customerBankId; for others, use the query param if provided
+    const effectiveBankId = req.user.userType === 'BANK' 
+      ? req.user.customerBankId 
+      : customerBankId;
+
     return this.cassettesService.findAll(
       req.user.userType,
       req.user.pengelolaId,
@@ -71,7 +76,7 @@ export class CassettesController {
       status && status !== 'all' ? status : undefined,
       sortBy,
       validSortOrder,
-      customerBankId,
+      effectiveBankId,
     );
   }
 
@@ -97,11 +102,14 @@ export class CassettesController {
     @Query('customerBankId') customerBankId?: string,
     @Query('status') status?: string,
   ) {
-    return this.cassettesService.findBySerialNumber(serialNumber, req.user.userType, req.user.pengelolaId, customerBankId, status);
+    const effectiveBankId = req.user.userType === 'BANK' 
+      ? req.user.customerBankId 
+      : customerBankId;
+    return this.cassettesService.findBySerialNumber(serialNumber, req.user.userType, req.user.pengelolaId, effectiveBankId, status);
   }
 
   @Get('search-by-machine-sn')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Search cassettes by machine serial number',
     description: 'Search cassettes by machine serial number (last 6 digits). Returns all cassettes from the same bank as the machine.'
   })
@@ -114,25 +122,44 @@ export class CassettesController {
     @Query('customerBankId') customerBankId?: string,
     @Query('status') status?: string,
   ) {
-    return this.cassettesService.findByMachineSN(machineSN, req.user.userType, req.user.pengelolaId, customerBankId, status);
+    const effectiveBankId = req.user.userType === 'BANK' 
+      ? req.user.customerBankId 
+      : customerBankId;
+    return this.cassettesService.findByMachineSN(machineSN, req.user.userType, req.user.pengelolaId, effectiveBankId, status);
   }
 
   @Get('by-machine/:machineId')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get cassettes for a specific machine',
     description: 'Returns only the cassettes that are assigned to this specific machine (typically 10 cassettes: 5 MAIN + 5 BACKUP)'
   })
   findByMachine(@Param('machineId') machineId: string, @Request() req) {
-    return this.cassettesService.findByMachine(machineId, req.user.userType, req.user.pengelolaId);
+    const customerBankId = req.user.userType === 'BANK' ? req.user.customerBankId : undefined;
+    return this.cassettesService.findByMachine(machineId, req.user.userType, req.user.pengelolaId, customerBankId);
   }
 
   @Post('check-availability-batch')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Check availability for multiple cassettes at once',
     description: 'Batch endpoint to check availability for multiple cassettes. Reduces number of requests and prevents rate limiting.'
   })
   checkAvailabilityBatch(@Body() dto: CheckAvailabilityBatchDto) {
     return this.cassettesService.checkCassetteAvailabilityBatch(dto.cassetteIds);
+  }
+
+  @Get('serial/:serialNumber')
+  @ApiOperation({ summary: 'Get cassette by serial number' })
+  getBySerialNumber(
+    @Param('serialNumber') serialNumber: string,
+    @Request() req
+  ) {
+    return this.cassettesService.findBySerialNumber(serialNumber, req.user.userType, req.user.pengelolaId);
+  }
+
+  @Get(':id/qr')
+  @ApiOperation({ summary: 'Generate QR code for cassette' })
+  generateQrCode(@Param('id') id: string) {
+    return this.cassettesService.generateQrCode(id);
   }
 
   @Get(':id/check-availability')
@@ -141,10 +168,21 @@ export class CassettesController {
     return this.cassettesService.checkCassetteAvailability(id);
   }
 
+  @Get('broken-available')
+  @ApiOperation({ summary: 'Get all BAD cassettes that are available for ticket creation' })
+  getBrokenAvailable(
+    @Query('customerBankId') customerBankId?: string,
+    @Request() req?,
+  ) {
+    const pengelolaId = req?.user?.userType === 'PENGELOLA' ? req.user.pengelolaId : undefined;
+    return this.cassettesService.findBrokenAvailable(customerBankId, pengelolaId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get cassette by ID' })
-  findOne(@Param('id') id: string) {
-    return this.cassettesService.findOne(id);
+  findOne(@Param('id') id: string, @Request() req) {
+    const customerBankId = req.user.userType === 'BANK' ? req.user.customerBankId : undefined;
+    return this.cassettesService.findOne(id, req.user.userType, req.user.pengelolaId, customerBankId);
   }
 
   @Post()
@@ -166,10 +204,35 @@ export class CassettesController {
     return this.cassettesService.markAsBroken(id, markBrokenDto.reason, req.user.id);
   }
 
+  @Patch(':id/unmark-broken')
+  @AllowUserTypes(UserType.PENGELOLA)
+  @ApiOperation({ summary: 'Undo mark as broken (only user who marked can undo)' })
+  unmarkAsBroken(
+    @Param('id') id: string,
+    @Body() unmarkBrokenDto: UnmarkBrokenDto,
+    @Request() req,
+  ) {
+    return this.cassettesService.unmarkAsBroken(id, unmarkBrokenDto.reason || '', req.user.id);
+  }
+
+  @Patch('mark-broken-bulk')
+  @AllowUserTypes(UserType.PENGELOLA)
+  @ApiOperation({ summary: 'Mark multiple cassettes as broken' })
+  markMultipleAsBroken(
+    @Body() bulkMarkBrokenDto: BulkMarkBrokenDto,
+    @Request() req,
+  ) {
+    return this.cassettesService.markMultipleAsBroken(
+      bulkMarkBrokenDto.cassetteIds,
+      bulkMarkBrokenDto.reason,
+      req.user.id,
+    );
+  }
+
   @Post('replace')
   @AllowUserTypes(UserType.HITACHI)
   @Roles('RC_STAFF', 'RC_MANAGER', 'SUPER_ADMIN')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Replace cassette with new serial number',
     description: 'Mark old cassette as SCRAPPED and create new cassette with new serial number. Auto-fills type, bank, machine, and usageType from old cassette.'
   })

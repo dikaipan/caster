@@ -2,12 +2,16 @@ import { Injectable, NotFoundException, ConflictException, ForbiddenException, B
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateCassetteDto, ReplaceCassetteDto } from './dto';
+import { AuditLogService } from '../audit/audit-log.service';
 
 @Injectable()
 export class CassettesService {
   private readonly logger = new Logger(CassettesService.name);
-  
-  constructor(private prisma: PrismaService) {}
+
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) { }
 
   async findAll(
     userType: string,
@@ -22,18 +26,25 @@ export class CassettesService {
     sortOrder: 'asc' | 'desc' = 'desc',
     customerBankId?: string,
   ) {
-    const whereClause: any = {};
+    let whereClause: any = {};
 
     // SUPER ADMIN (HITACHI) can see ALL cassettes
     // Pengelola users can only see cassettes of their assigned bank customers
+    // BANK users can only see cassettes from their own bank
     if (userType === 'HITACHI') {
       // Admin can see everything - no filter
+    } else if (userType?.toUpperCase() === 'BANK' && customerBankId) {
+      // BANK users can only see cassettes from their own bank
+      whereClause.customerBankId = customerBankId;
     } else if (userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
       const Pengelola = await this.prisma.pengelola.findUnique({
         where: { id: pengelolaId },
         include: {
           bankAssignments: {
-            select: { 
+            where: {
+              status: 'ACTIVE', // Only active assignments
+            },
+            select: {
               customerBankId: true,
               assignedBranches: true,
             },
@@ -41,32 +52,114 @@ export class CassettesService {
         },
       });
 
-      if (Pengelola && Pengelola.bankAssignments.length > 0) {
-        const bankIds = Pengelola.bankAssignments.map(a => a.customerBankId);
-        
-        // Check if any assignment has specific branches
-        const assignmentsWithBranches = Pengelola.bankAssignments.filter(
-          a => a.assignedBranches && Array.isArray(a.assignedBranches) && (a.assignedBranches as string[]).length > 0
-        );
-        
-        if (assignmentsWithBranches.length > 0) {
-          // If Pengelola has branch-specific assignments, we need to filter by bank
-          // Note: Cassettes don't have branchCode directly, so we show all cassettes from assigned banks
-          // Branch filtering for cassettes would require additional logic based on machine assignments
-          whereClause.customerBankId = { in: bankIds };
-        } else {
-          // No branch restrictions - show all cassettes from assigned banks
-          whereClause.customerBankId = { in: bankIds };
-        }
+      // SECURITY: If pengelola has no bank assignments, they should see NO cassettes
+      if (!Pengelola || !Pengelola.bankAssignments || Pengelola.bankAssignments.length === 0) {
+        // Return empty result - pengelola with no assignments cannot see any cassettes
+        return {
+          cassettes: [],
+          count: 0,
+          data: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+          },
+          statistics: {
+            statusCounts: {},
+          },
+        };
+      }
+
+      // Pengelola has active assignments - filter by assigned banks
+      const bankIds = Pengelola.bankAssignments.map(a => a.customerBankId);
+      whereClause.customerBankId = { in: bankIds };
+
+      // SECURITY: Also filter cassettes by machines assigned to this pengelola
+      // Pengelola should see:
+      // 1. Cassettes from machines assigned to them (machineId in assignedMachineIds)
+      // 2. Cassettes without machines (machineId is null) from assigned banks (for standalone cassettes)
+      // Get all machine IDs assigned to this pengelola
+      const assignedMachines = await this.prisma.machine.findMany({
+        where: {
+          pengelolaId,
+          customerBankId: { in: bankIds }, // Only machines from assigned banks
+        },
+        select: { id: true },
+      });
+
+      const assignedMachineIds = assignedMachines.map(m => m.id);
+
+      // Build machineId filter: cassettes from assigned machines OR cassettes without machines
+      if (assignedMachineIds.length > 0) {
+        // Pengelola has assigned machines: show cassettes from those machines OR cassettes without machines
+        // Use OR condition at whereClause level to combine machineId filters
+        whereClause.OR = [
+          { machineId: { in: assignedMachineIds } }, // Cassettes from assigned machines
+          { machineId: null }, // Cassettes without machines (standalone cassettes)
+        ];
+        // Remove customerBankId from top level since we're using OR
+        // We need to ensure bank filter is still applied, so we'll combine it properly
+        const bankFilter = { customerBankId: { in: bankIds } };
+        // Combine bank filter with machineId OR condition
+        whereClause = {
+          AND: [
+            bankFilter,
+            {
+              OR: [
+                { machineId: { in: assignedMachineIds } },
+                { machineId: null },
+              ],
+            },
+          ],
+        };
+      } else {
+        // No machines assigned: only show cassettes without machines (standalone cassettes) from assigned banks
+        whereClause = {
+          AND: [
+            { customerBankId: { in: bankIds } },
+            { machineId: null },
+          ],
+        };
       }
     }
 
     // Apply explicit customer bank filter (for admin or pengelola-specified requests)
     if (customerBankId) {
-      if (whereClause.customerBankId?.in) {
+      // Handle customerBankId filter based on whereClause structure
+      if (whereClause.AND) {
+        // whereClause already has AND structure (from pengelola filtering)
+        // Find and update customerBankId filter in AND array
+        const bankFilterIndex = whereClause.AND.findIndex((condition: any) => condition.customerBankId);
+        if (bankFilterIndex >= 0) {
+          const existingBankFilter = whereClause.AND[bankFilterIndex];
+          if (existingBankFilter.customerBankId?.in) {
+            const allowedBanks = (existingBankFilter.customerBankId.in as string[]).filter(id => id === customerBankId);
+            if (allowedBanks.length === 0) {
+              // Pengelola is not assigned to this bank
+              return {
+                cassettes: [],
+                count: 0,
+                data: [],
+                pagination: {
+                  page,
+                  limit,
+                  total: 0,
+                  totalPages: 0,
+                },
+                statistics: {
+                  statusCounts: {},
+                },
+              };
+            }
+            whereClause.AND[bankFilterIndex] = { customerBankId: { in: allowedBanks } };
+          } else {
+            whereClause.AND[bankFilterIndex] = { customerBankId };
+          }
+        }
+      } else if (whereClause.customerBankId?.in) {
+        // whereClause has simple customerBankId filter
         const allowedBanks = (whereClause.customerBankId.in as string[]).filter(id => id === customerBankId);
-
-        // If pengelola is not assigned to this bank, return empty result immediately
         if (allowedBanks.length === 0) {
           return {
             cassettes: [],
@@ -83,9 +176,9 @@ export class CassettesService {
             },
           };
         }
-
         whereClause.customerBankId = { in: allowedBanks };
       } else {
+        // Simple whereClause, just add customerBankId
         whereClause.customerBankId = customerBankId;
       }
     }
@@ -105,7 +198,7 @@ export class CassettesService {
     // Frontend sends machine SN, we find the machine and return cassettes from its bank
     if (snMesin && snMesin.trim()) {
       const snMesinTrimmed = snMesin.trim().toLowerCase();
-      
+
       // Find machines that match the SN pattern (MySQL case-insensitive via collation)
       const matchingMachines = await this.prisma.machine.findMany({
         where: {
@@ -118,7 +211,7 @@ export class CassettesService {
         },
         take: 20, // Limit to reasonable number
       });
-      
+
       if (matchingMachines.length > 0) {
         // Get unique bank IDs from matching machines
         machineBasedBankIds = [...new Set(matchingMachines.map(m => m.customerBankId))];
@@ -128,7 +221,7 @@ export class CassettesService {
     // sn_mesin_suffix: search by machine serialNumberManufacturer (suffix match)
     if (snMesinSuffix && snMesinSuffix.trim()) {
       const suffix = snMesinSuffix.trim().toLowerCase();
-      
+
       // Find machines that match the SN suffix (MySQL case-insensitive via collation)
       const matchingMachines = await this.prisma.machine.findMany({
         where: {
@@ -141,11 +234,11 @@ export class CassettesService {
         },
         take: 20, // Limit to reasonable number
       });
-      
+
       if (matchingMachines.length > 0) {
         // Get unique bank IDs from matching machines
         const suffixBankIds = [...new Set(matchingMachines.map(m => m.customerBankId))];
-        
+
         // Merge with existing machineBasedBankIds if any
         if (machineBasedBankIds) {
           machineBasedBankIds = [...new Set([...machineBasedBankIds, ...suffixBankIds])];
@@ -157,7 +250,7 @@ export class CassettesService {
 
     // Combine search conditions with existing whereClause
     let finalWhereClause: any = {};
-    
+
     // First, handle machine-based bank filtering
     if (machineBasedBankIds && machineBasedBankIds.length > 0) {
       // If there are existing Pengelola/bank filters, combine them with AND
@@ -180,13 +273,13 @@ export class CassettesService {
         finalWhereClause = { ...whereClause };
       }
     }
-    
+
     // Then add keyword search conditions (if any)
     if (searchConditions.length > 0) {
-      const searchClause = searchConditions.length === 1 
-        ? searchConditions[0] 
+      const searchClause = searchConditions.length === 1
+        ? searchConditions[0]
         : { OR: searchConditions };
-      
+
       if (Object.keys(finalWhereClause).length > 0) {
         // Combine existing filters with search using AND
         finalWhereClause = {
@@ -200,7 +293,7 @@ export class CassettesService {
         finalWhereClause = searchClause;
       }
     }
-    
+
     // Add status filter (server-side)
     if (status && status !== 'all') {
       if (Object.keys(finalWhereClause).length > 0) {
@@ -248,7 +341,7 @@ export class CassettesService {
 
     // Build orderBy clause (server-side sorting)
     let orderBy: any = { createdAt: sortOrder }; // Default
-    
+
     if (sortBy) {
       // Map frontend sort fields to Prisma orderBy format
       switch (sortBy) {
@@ -276,7 +369,7 @@ export class CassettesService {
         default:
           orderBy = { createdAt: sortOrder };
       }
-      
+
     }
 
     // Fetch data with pagination
@@ -284,10 +377,35 @@ export class CassettesService {
       where: finalWhereClause,
       include: {
         cassetteType: true,
+        machine: {
+          include: {
+            pengelola: {
+              select: {
+                id: true,
+                companyName: true,
+                companyAbbreviation: true,
+                pengelolaCode: true,
+              },
+            },
+          },
+        },
         customerBank: {
-          select: {
-            bankCode: true,
-            bankName: true,
+          include: {
+            pengelolaAssignments: {
+              where: {
+                status: 'ACTIVE',
+              },
+              include: {
+                pengelola: {
+                  select: {
+                    id: true,
+                    companyName: true,
+                    companyAbbreviation: true,
+                    pengelolaCode: true,
+                  },
+                },
+              },
+            },
           },
         },
         replacedCassette: {
@@ -304,11 +422,33 @@ export class CassettesService {
             status: true,
           },
         },
+        problemTickets: {
+          where: {
+            deletedAt: null, // Only count non-deleted tickets
+          },
+          select: {
+            id: true,
+          },
+        },
+        ticketCassetteDetails: {
+          where: {
+            ticket: {
+              deletedAt: null, // Only count details from non-deleted tickets
+            },
+          },
+          select: {
+            id: true,
+            ticketId: true,
+          },
+        },
+        repairTickets: {
+          select: {
+            id: true,
+          },
+        },
         _count: {
           select: {
-            problemTickets: true,          // Single cassette SOs
             repairTickets: true,            // Repair records
-            ticketCassetteDetails: true,   // Multi-cassette SOs
           },
         },
       },
@@ -319,8 +459,19 @@ export class CassettesService {
 
     // Enrich with computed cycle/repair counts to ensure frontend always has numbers
     const enrichedData = data.map((cassette) => {
-      const singleProblems = cassette._count?.problemTickets ?? 0;
-      const multiProblems = cassette._count?.ticketCassetteDetails ?? 0;
+      // Count single-cassette tickets (where cassette is primary)
+      const singleProblems = cassette.problemTickets?.length ?? 0;
+
+      // Count multi-cassette tickets (where cassette is in details)
+      // IMPORTANT: Exclude tickets where cassette is already counted as primary
+      // to avoid double counting
+      const primaryTicketIds = new Set(
+        (cassette.problemTickets || []).map((t: any) => t.id)
+      );
+      const multiProblems = (cassette.ticketCassetteDetails || []).filter(
+        (detail: any) => !primaryTicketIds.has(detail.ticketId)
+      ).length;
+
       const problemCount = singleProblems + multiProblems;
       const repairCount = cassette._count?.repairTickets ?? 0;
 
@@ -338,6 +489,12 @@ export class CassettesService {
       cassettes: enrichedData,
       count: total,
       data: enrichedData, // New format
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
       pagination: {
         page,
         limit,
@@ -350,7 +507,7 @@ export class CassettesService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, userType?: string, pengelolaId?: string, customerBankId?: string) {
     const cassette = await this.prisma.cassette.findUnique({
       where: { id },
       include: {
@@ -374,10 +531,33 @@ export class CassettesService {
       throw new NotFoundException(`Cassette with ID ${id} not found`);
     }
 
+    // SECURITY: For BANK users, verify they have access to this cassette's bank
+    if (userType && userType?.toUpperCase() === 'BANK' && customerBankId) {
+      if (cassette.customerBankId !== customerBankId) {
+        throw new NotFoundException(`Cassette with ID ${id} not found`);
+      }
+    }
+
+    // SECURITY: For pengelola users, verify they have access to this cassette's bank
+    if (userType && userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
+      const bankAssignment = await this.prisma.bankPengelolaAssignment.findFirst({
+        where: {
+          pengelolaId,
+          customerBankId: cassette.customerBankId,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (!bankAssignment) {
+        // Pengelola doesn't have access to this bank, throw not found
+        throw new NotFoundException(`Cassette with ID ${id} not found`);
+      }
+    }
+
     return cassette;
   }
 
-  async findByMachine(machineId: string, userType: string, pengelolaId?: string) {
+  async findByMachine(machineId: string, userType: string, pengelolaId?: string, customerBankId?: string) {
     // First, get the machine to verify it exists
     const machine = await this.prisma.machine.findUnique({
       where: { id: machineId },
@@ -391,6 +571,37 @@ export class CassettesService {
 
     if (!machine) {
       throw new NotFoundException(`Machine with ID ${machineId} not found`);
+    }
+
+    // SECURITY: For BANK users, verify they have access to this machine's bank
+    if (userType?.toUpperCase() === 'BANK' && customerBankId) {
+      if (machine.customerBankId !== customerBankId) {
+        throw new NotFoundException(`Machine with ID ${machineId} not found`);
+      }
+    }
+
+    // SECURITY: For pengelola users, verify they have access to this machine's bank
+    if (userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
+      const bankAssignment = await this.prisma.bankPengelolaAssignment.findFirst({
+        where: {
+          pengelolaId,
+          customerBankId: machine.customerBankId,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (!bankAssignment) {
+        // Pengelola doesn't have access to this bank, return empty result
+        return {
+          cassettes: [],
+          count: 0,
+          machine: {
+            id: machine.id,
+            serialNumber: machine.serialNumberManufacturer,
+            branchCode: machine.branchCode,
+          },
+        };
+      }
     }
 
     // Get cassettes that are specifically assigned to this machine
@@ -423,7 +634,7 @@ export class CassettesService {
 
   async findByMachineSN(machineSN: string, userType: string, pengelolaId?: string, customerBankId?: string, status?: string) {
     const machineSnTrimmed = machineSN.trim();
-    
+
     // Find machines matching the serial number (suffix or full match)
     const machineSnLower = machineSnTrimmed.toLowerCase();
     const machineWhere: any = {
@@ -432,12 +643,12 @@ export class CassettesService {
         { serialNumberManufacturer: { contains: machineSnLower } },
       ],
     };
-    
+
     // Filter by bank if provided
     if (customerBankId) {
       machineWhere.customerBankId = customerBankId;
     }
-    
+
     const machines = await this.prisma.machine.findMany({
       where: machineWhere,
       select: {
@@ -445,6 +656,7 @@ export class CassettesService {
         serialNumberManufacturer: true,
         machineCode: true,
         customerBankId: true,
+        pengelolaId: true, // Add pengelolaId for filtering
         branchCode: true,
         physicalLocation: true,
         status: true,
@@ -470,38 +682,71 @@ export class CassettesService {
 
     // Get machine IDs for cassette filtering
     const machineIds = machines.map(m => m.id);
-    
-    // Apply Pengelola filtering on machines
+
+    // Apply role-based filtering on machines
     let allowedMachineIds = machineIds;
+    
+    // BANK users can only see machines from their own bank
+    if (userType?.toUpperCase() === 'BANK' && customerBankId) {
+      allowedMachineIds = machines
+        .filter(m => m.customerBankId === customerBankId)
+        .map(m => m.id);
+      
+      if (allowedMachineIds.length === 0) {
+        return {
+          machines: [],
+          cassettes: [],
+          count: 0,
+          message: `No machines found with serial number containing "${machineSnTrimmed}"`,
+        };
+      }
+    }
     if (userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
       const Pengelola = await this.prisma.pengelola.findUnique({
         where: { id: pengelolaId },
         include: {
           bankAssignments: {
+            where: {
+              status: 'ACTIVE', // Only active assignments
+            },
             select: { customerBankId: true },
           },
         },
       });
 
-      if (Pengelola) {
-        const vendorBankIds = Pengelola.bankAssignments.map(a => a.customerBankId);
-        // Filter machines by Pengelola's assigned banks
-        allowedMachineIds = machines
-          .filter(m => vendorBankIds.includes(m.customerBankId))
-          .map(m => m.id);
+      // SECURITY: If pengelola has no active bank assignments, they cannot access any machines/cassettes
+      if (!Pengelola || !Pengelola.bankAssignments || Pengelola.bankAssignments.length === 0) {
+        return {
+          machines: [],
+          cassettes: [],
+          count: 0,
+          message: `No machines found with serial number containing "${machineSnTrimmed}"`,
+        };
       }
+
+      const vendorBankIds = Pengelola.bankAssignments.map(a => a.customerBankId);
+      // SECURITY: Filter machines by Pengelola's assigned banks AND machines assigned to this pengelola
+      // Pengelola can only see machines that are:
+      // 1. From banks they are assigned to
+      // 2. Assigned to them (pengelolaId matches)
+      allowedMachineIds = machines
+        .filter(m =>
+          vendorBankIds.includes(m.customerBankId) &&
+          m.pengelolaId === pengelolaId // Only machines assigned to this pengelola
+        )
+        .map(m => m.id);
     }
 
     // Get cassettes that are ASSIGNED TO these specific machines
     const cassetteWhere: any = {
       machineId: { in: allowedMachineIds },
     };
-    
+
     // Filter by status if provided
     if (status) {
       cassetteWhere.status = status;
     }
-    
+
     const cassettes = await this.prisma.cassette.findMany({
       where: cassetteWhere,
       include: {
@@ -550,13 +795,77 @@ export class CassettesService {
 
   async findBySerialNumber(serialNumber: string, userType: string, pengelolaId?: string, customerBankId?: string, status?: string) {
     const serialNumberTrimmed = serialNumber.trim();
-    
+
     const whereClause: any = {
       serialNumber: serialNumberTrimmed,
     };
 
-    // Filter by bank if provided
-    if (customerBankId) {
+    // Declare variables for raw query scope
+    let assignedMachineIds: string[] = [];
+    let bankIds: string[] = [];
+    let Pengelola: any = null;
+
+    // Apply role-based filtering similar to findAll
+    if (userType?.toUpperCase() === 'BANK' && customerBankId) {
+      // BANK users can only see cassettes from their own bank
+      whereClause.customerBankId = customerBankId;
+    } else if (userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
+      Pengelola = await this.prisma.pengelola.findUnique({
+        where: { id: pengelolaId },
+        include: {
+          bankAssignments: {
+            where: {
+              status: 'ACTIVE', // Only active assignments
+            },
+            select: { customerBankId: true },
+          },
+        },
+      });
+
+      // SECURITY: If pengelola has no active bank assignments, they cannot access any cassettes
+      if (!Pengelola || !Pengelola.bankAssignments || Pengelola.bankAssignments.length === 0) {
+        throw new NotFoundException(`Cassette with serial number ${serialNumber} not found`);
+      }
+
+      bankIds = Pengelola.bankAssignments.map(a => a.customerBankId);
+
+      // SECURITY: Also filter cassettes by machines assigned to this pengelola
+      // Pengelola should see:
+      // 1. Cassettes from machines assigned to them (machineId in assignedMachineIds)
+      // 2. Cassettes without machines (machineId is null) from assigned banks (for standalone cassettes)
+      const assignedMachines = await this.prisma.machine.findMany({
+        where: {
+          pengelolaId,
+          customerBankId: { in: bankIds }, // Only machines from assigned banks
+        },
+        select: { id: true },
+      });
+
+      assignedMachineIds = assignedMachines.map(m => m.id);
+
+      // If customerBankId is provided, validate that it's in the assigned banks
+      if (customerBankId) {
+        if (!bankIds.includes(customerBankId)) {
+          throw new NotFoundException(`Cassette with serial number ${serialNumber} not found`);
+        }
+        whereClause.customerBankId = customerBankId;
+      } else {
+        whereClause.customerBankId = { in: bankIds };
+      }
+
+      // Combine bank filter with machineId OR condition
+      whereClause.AND = [
+        { customerBankId: whereClause.customerBankId }, // Ensure cassettes are from assigned banks
+        {
+          OR: [
+            { machineId: { in: assignedMachineIds } }, // Cassettes from assigned machines
+            { machineId: null }, // Cassettes without machines (standalone cassettes)
+          ],
+        },
+      ];
+      delete whereClause.customerBankId; // Remove from top level, now in AND clause
+    } else if (customerBankId) {
+      // For Hitachi users, filter by bank if provided
       whereClause.customerBankId = customerBankId;
     }
 
@@ -565,44 +874,40 @@ export class CassettesService {
       whereClause.status = status;
     }
 
-    // Apply role-based filtering similar to findAll
-    if (userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
-      const Pengelola = await this.prisma.pengelola.findUnique({
-        where: { id: pengelolaId },
-        include: {
-          bankAssignments: {
-            select: { customerBankId: true },
-          },
-        },
-      });
-
-      if (Pengelola) {
-        const bankIds = Pengelola.bankAssignments.map(a => a.customerBankId);
-        whereClause.customerBankId = { in: bankIds };
-      }
-    }
-
     // Use raw query first to get fresh status directly from database (bypass any caching)
     const serialNumberParam = serialNumberTrimmed;
-    
+
     // Build Pengelola filter for raw query if needed
     let vendorFilter = Prisma.empty;
     if (userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
-      vendorFilter = Prisma.sql`AND c.customer_bank_id IN (SELECT customer_bank_id FROM bank_pengelola_assignments WHERE pengelola_id = ${pengelolaId})`;
+      // Use assignedMachineIds that was already calculated above
+      if (assignedMachineIds && assignedMachineIds.length > 0) {
+        // Filter by bank AND (machineId in assigned machines OR machineId is null)
+        vendorFilter = Prisma.sql`
+          AND c.customer_bank_id IN (SELECT customer_bank_id FROM bank_pengelola_assignments WHERE pengelola_id = ${pengelolaId} AND status = 'ACTIVE')
+          AND (c.machine_id IN (${Prisma.join(assignedMachineIds)}) OR c.machine_id IS NULL)
+        `;
+      } else {
+        // No assigned machines, only show standalone cassettes (machineId is null)
+        vendorFilter = Prisma.sql`
+          AND c.customer_bank_id IN (SELECT customer_bank_id FROM bank_pengelola_assignments WHERE pengelola_id = ${pengelolaId} AND status = 'ACTIVE')
+          AND c.machine_id IS NULL
+        `;
+      }
     }
-    
+
     // Add bank filter if provided
     let bankFilter = Prisma.empty;
     if (customerBankId) {
       bankFilter = Prisma.sql`AND c.customer_bank_id = ${customerBankId}`;
     }
-    
+
     // Add status filter if provided
     let statusFilter = Prisma.empty;
     if (status) {
       statusFilter = Prisma.sql`AND c.status = ${status}`;
     }
-    
+
     const rawResult = await this.prisma.$queryRaw`
       SELECT 
         c.id,
@@ -617,14 +922,16 @@ export class CassettesService {
       ${statusFilter}
       LIMIT 1
     ` as any[];
-    
+
     if (!rawResult || rawResult.length === 0) {
       throw new NotFoundException(`Cassette with serial number ${serialNumber} not found`);
     }
-    
+
     const rawCassette = rawResult[0];
-    
+
     // Now fetch with relations using the verified ID (should match raw query result)
+    // Note: Raw query already filtered by pengelola, so this should be safe
+    // But we add an additional check for extra security
     const cassette = await this.prisma.cassette.findUnique({
       where: { id: rawCassette.id },
       include: {
@@ -633,6 +940,7 @@ export class CassettesService {
           select: {
             id: true,
             serialNumberManufacturer: true,
+            pengelolaId: true, // Include pengelolaId for verification
           },
         },
         customerBank: {
@@ -645,6 +953,28 @@ export class CassettesService {
       },
     });
 
+    // Additional security check for pengelola users
+    if (userType !== 'HITACHI' && userType?.toUpperCase() === 'PENGELOLA' && pengelolaId && cassette) {
+      // Verify cassette is from assigned bank (already checked in raw query, but double-check)
+      const bankIds = Pengelola?.bankAssignments?.map(a => a.customerBankId) || [];
+      if (!bankIds.includes(cassette.customerBankId)) {
+        throw new NotFoundException(`Cassette with serial number ${serialNumber} not found`);
+      }
+
+      // Verify cassette is from assigned machine OR standalone
+      if (cassette.machineId) {
+        // Cassette has a machine - verify machine is assigned to this pengelola
+        if (!assignedMachineIds.includes(cassette.machineId)) {
+          throw new NotFoundException(`Cassette with serial number ${serialNumber} not found`);
+        }
+        // Also verify machine's pengelolaId matches
+        if (cassette.machine?.pengelolaId !== pengelolaId) {
+          throw new NotFoundException(`Cassette with serial number ${serialNumber} not found`);
+        }
+      }
+      // If machineId is null, it's a standalone cassette from assigned bank (already verified above)
+    }
+
     if (!cassette) {
       throw new NotFoundException(`Cassette with serial number ${serialNumber} not found`);
     }
@@ -655,6 +985,23 @@ export class CassettesService {
     }
 
     return cassette;
+  }
+
+  async generateQrCode(id: string) {
+    const cassette = await this.findOne(id);
+    const qrData = JSON.stringify({
+      id: cassette.id,
+      serialNumber: cassette.serialNumber,
+      type: cassette.cassetteType.typeCode
+    });
+
+    const QRCode = require('qrcode');
+    try {
+      const qrCode = await QRCode.toDataURL(qrData);
+      return { qrCode };
+    } catch (err) {
+      throw new BadRequestException('Failed to generate QR code');
+    }
   }
 
   async getCassetteTypes() {
@@ -675,6 +1022,22 @@ export class CassettesService {
       );
     }
 
+    // Resolve cassetteTypeCode to cassetteTypeId if code is provided
+    let cassetteTypeId = createCassetteDto.cassetteTypeId;
+    if (!cassetteTypeId && createCassetteDto.cassetteTypeCode) {
+      const cassetteType = await this.prisma.cassetteType.findUnique({
+        where: { typeCode: createCassetteDto.cassetteTypeCode as any },
+      });
+      if (!cassetteType) {
+        throw new BadRequestException(`Invalid cassette type code: ${createCassetteDto.cassetteTypeCode}`);
+      }
+      cassetteTypeId = cassetteType.id;
+    }
+
+    if (!cassetteTypeId) {
+      throw new BadRequestException('Either cassetteTypeId or cassetteTypeCode must be provided');
+    }
+
     // If this is a replacement, validate that replaced cassette exists and is SCRAPPED
     if (createCassetteDto.replacedCassetteId) {
       const replacedCassette = await this.prisma.cassette.findUnique({
@@ -693,7 +1056,7 @@ export class CassettesService {
       // Auto-fill machine, type, bank, usageType from replaced cassette if not provided
       const data: any = {
         serialNumber: createCassetteDto.serialNumber,
-        cassetteTypeId: createCassetteDto.cassetteTypeId || replacedCassette.cassetteTypeId,
+        cassetteTypeId: cassetteTypeId || replacedCassette.cassetteTypeId,
         customerBankId: createCassetteDto.customerBankId || replacedCassette.customerBankId,
         machineId: createCassetteDto.machineId || replacedCassette.machineId,
         usageType: createCassetteDto.usageType || replacedCassette.usageType,
@@ -719,8 +1082,19 @@ export class CassettesService {
       });
     }
 
+    // Create cassette data object with resolved type ID
+    const createData: any = {
+      serialNumber: createCassetteDto.serialNumber,
+      cassetteTypeId,
+      customerBankId: createCassetteDto.customerBankId,
+      machineId: createCassetteDto.machineId,
+      usageType: createCassetteDto.usageType,
+      status: createCassetteDto.status || 'OK',
+      notes: createCassetteDto.notes,
+    };
+
     return this.prisma.cassette.create({
-      data: createCassetteDto,
+      data: createData,
       include: {
         cassetteType: true,
         customerBank: true,
@@ -741,13 +1115,30 @@ export class CassettesService {
       throw new BadRequestException('Only OK cassettes can be marked as broken');
     }
 
-    return this.prisma.cassette.update({
+    const updated = await this.prisma.cassette.update({
       where: { id },
       data: {
         status: 'BAD',
         notes: reason,
+        markedBrokenBy: userId,
       },
     });
+
+    // Log to audit
+    try {
+      await this.auditLogService.logCassetteStatusChange(
+        id,
+        'OK',
+        'BAD',
+        userId,
+        'PENGELOLA',
+        { action: 'MARK_BROKEN', reason },
+      );
+    } catch (auditError) {
+      this.logger.warn('Failed to log audit for mark as broken', auditError);
+    }
+
+    return updated;
   }
 
   async replaceCassette(replaceDto: ReplaceCassetteDto, userId: string) {
@@ -883,8 +1274,8 @@ export class CassettesService {
             OR: [
               {
                 cassetteId,
-                status: { 
-                  notIn: ['RESOLVED', 'CLOSED'] 
+                status: {
+                  notIn: ['RESOLVED', 'CLOSED']
                 },
               },
               {
@@ -893,8 +1284,8 @@ export class CassettesService {
                     cassetteId,
                   },
                 },
-                status: { 
-                  notIn: ['RESOLVED', 'CLOSED'] 
+                status: {
+                  notIn: ['RESOLVED', 'CLOSED']
                 },
               },
             ],
@@ -1040,7 +1431,7 @@ export class CassettesService {
     // - If repair is COMPLETED, cassette can be selected regardless of problem ticket status
     //   because the repair process is finished and cassette is ready for new tickets
     const problemTicketResolved = activeTicket ? ['RESOLVED', 'CLOSED'].includes(activeTicket.status) : false;
-    
+
     let available: boolean;
     if (returnReceived) {
       // Return is received, cassette is back at pengelola and available
@@ -1226,6 +1617,144 @@ export class CassettesService {
     return this.prisma.cassette.delete({
       where: { id },
     });
+  }
+
+  async unmarkAsBroken(id: string, reason: string, userId: string) {
+    const cassette = await this.prisma.cassette.findUnique({
+      where: { id },
+      include: {
+        problemTickets: {
+          where: {
+            status: {
+              notIn: ['RESOLVED', 'CLOSED'],
+            },
+            deletedAt: null,
+          },
+        },
+      },
+    });
+
+    if (!cassette) {
+      throw new NotFoundException('Cassette not found');
+    }
+
+    if (cassette.status !== 'BAD') {
+      throw new BadRequestException('Only BAD cassettes can be unmarked');
+    }
+
+    // Only the user who marked it can undo
+    if (cassette.markedBrokenBy !== userId) {
+      throw new ForbiddenException('Only the user who marked this cassette as broken can undo it');
+    }
+
+    // Optional: Check if already has active ticket
+    if (cassette.problemTickets.length > 0) {
+      throw new BadRequestException(
+        `Cannot undo mark as broken. Cassette has ${cassette.problemTickets.length} active ticket(s).`,
+      );
+    }
+
+    const updated = await this.prisma.cassette.update({
+      where: { id },
+      data: {
+        status: 'OK',
+        notes: reason ? `${cassette.notes || ''}\n[Undo] ${reason}`.trim() : cassette.notes,
+        markedBrokenBy: null,
+      },
+    });
+
+    // Log to audit
+    try {
+      await this.auditLogService.logCassetteStatusChange(
+        id,
+        'BAD',
+        'OK',
+        userId,
+        'PENGELOLA',
+        { action: 'UNMARK_BROKEN', reason },
+      );
+    } catch (auditError) {
+      this.logger.warn('Failed to log audit for unmark as broken', auditError);
+    }
+
+    return updated;
+  }
+
+  async findBrokenAvailable(customerBankId?: string, pengelolaId?: string) {
+    const whereClause: any = {
+      status: 'BAD',
+      problemTickets: {
+        none: {
+          status: {
+            notIn: ['RESOLVED', 'CLOSED'],
+          },
+          deletedAt: null,
+        },
+      },
+    };
+
+    // Filter by bank if provided
+    if (customerBankId) {
+      whereClause.customerBankId = customerBankId;
+    }
+
+    // Filter by pengelola if provided (via machine assignments)
+    if (pengelolaId) {
+      whereClause.OR = [
+        {
+          machine: {
+            pengelolaId: pengelolaId,
+          },
+        },
+        {
+          customerBank: {
+            pengelolaAssignments: {
+              some: {
+                pengelolaId: pengelolaId,
+                status: 'ACTIVE',
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    return this.prisma.cassette.findMany({
+      where: whereClause,
+      include: {
+        cassetteType: true,
+        customerBank: true,
+        machine: {
+          include: {
+            pengelola: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc', // Newest marked broken first
+      },
+    });
+  }
+
+  async markMultipleAsBroken(cassetteIds: string[], reason: string, userId: string) {
+    const results = {
+      success: [] as string[],
+      failed: [] as Array<{ id: string; error: string }>,
+    };
+
+    for (const id of cassetteIds) {
+      try {
+        await this.markAsBroken(id, reason, userId);
+        results.success.push(id);
+      } catch (error: any) {
+        results.failed.push({
+          id,
+          error: error.message || 'Unknown error',
+        });
+      }
+    }
+
+    return results;
   }
 }
 

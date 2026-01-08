@@ -1,0 +1,179 @@
+﻿
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json preventive-maintenance.e2e-spec.ts --verbose
+
+  console.log
+    [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+[33m[HCM-Backend][39m [33m18888[39m 1/3/2026, 5:56:15 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T10:56:15.487Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "pm_admin_176743777523475",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+node.exe : [31m[Nest] 18888  - [39m01/03/2026, 5:56:15 PM [31m  
+ERROR[39m [38;5;3m[ExceptionsHandler] [39m[31m
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([31m[Nest] 188...ler] [39m 
+   [31m:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Invalid `this.prisma.pMCassetteDetail.update()` invocation in
+D:\Dev\HCS Cassete management\hcm\backend\src\preventive-maintenance\preve
+ntive-maintenance.service.ts:728:41
+
+  725   throw new BadRequestException('Cannot update cassette details for 
+completed or cancelled PM');
+  726 }
+  727 
+ÔåÆ 728 return this.prisma.pMCassetteDetail.update({
+        where: {
+          pmId_cassetteId: {
+            pmId: "f83756f2-6f71-4d45-a1d5-7a0219edd5e8",
+            cassetteId: "63f3cfb2-e1fc-45a6-a4f8-7b4cf68f56c1"
+          }
+        },
+        data: {
+          checklist: {
+            visualCheck: true,
+            ~~~~~~~~~~~
+            sensorCheck: true,
+      ?     set?: String | Null
+          },
+          findings: "Dust found",
+          actionsTaken: "Cleaned",
+          status: "OK"
+        },
+        include: {
+          cassette: {
+            include: {
+              cassetteType: true,
+              customerBank: true
+            }
+          }
+        }
+      })
+
+Unknown argument `visualCheck`. Available options are marked with ?.[39m
+PrismaClientValidationError: 
+Invalid `this.prisma.pMCassetteDetail.update()` invocation in
+D:\Dev\HCS Cassete management\hcm\backend\src\preventive-maintenance\preve
+ntive-maintenance.service.ts:728:41
+
+  725   throw new BadRequestException('Cannot update cassette details for 
+completed or cancelled PM');
+  726 }
+  727 
+ÔåÆ 728 return this.prisma.pMCassetteDetail.update({
+        where: {
+          pmId_cassetteId: {
+            pmId: "f83756f2-6f71-4d45-a1d5-7a0219edd5e8",
+            cassetteId: "63f3cfb2-e1fc-45a6-a4f8-7b4cf68f56c1"
+          }
+        },
+        data: {
+          checklist: {
+            visualCheck: true,
+            ~~~~~~~~~~~
+            sensorCheck: true,
+      ?     set?: String | Null
+          },
+          findings: "Dust found",
+          actionsTaken: "Cleaned",
+          status: "OK"
+        },
+        include: {
+          cassette: {
+            include: {
+              cassetteType: true,
+              customerBank: true
+            }
+          }
+        }
+      })
+
+Unknown argument `visualCheck`. Available options are marked with ?.
+    at Nn (D:\Dev\HCS Cassete management\hcm\backend\node_modules\@prisma\
+client\src\runtime\core\errorRendering\throwValidationException.ts:45:9)
+    at ei.throwValidationException [as handleRequestError] (D:\Dev\HCS 
+Cassete management\hcm\backend\node_modules\@prisma\client\src\runtime\Req
+uestHandler.ts:202:7)
+    at ei.handleAndLogRequestError (D:\Dev\HCS Cassete management\hcm\back
+end\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (D:\Dev\HCS Cassete management\hcm\backend\node_modules\
+@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (D:\Dev\HCS Cassete management\hcm\backend\node_modules\@prisma\c
+lient\src\runtime\getPrismaClient.ts:833:24)
+    at D:\Dev\HCS Cassete management\hcm\backend\node_modules\@nestjs\core
+\router\router-execution-context.js:46:28
+    at D:\Dev\HCS Cassete management\hcm\backend\node_modules\@nestjs\core
+\router\router-proxy.js:9:17
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+FAIL test/preventive-maintenance.e2e-spec.ts (8.869 s)
+  Preventive Maintenance (e2e)
+    POST /api/v1/preventive-maintenance
+      ÔêÜ should create a new PM task (58 ms)
+      ÔêÜ should validate cassette availability (cannot create 
+simultaneous PM) (22 ms)
+    GET /api/v1/preventive-maintenance
+      ÔêÜ should list PM tasks (23 ms)
+    POST /api/v1/preventive-maintenance/:id/take
+      ÔêÜ should assign PM task to self (31 ms)
+    PATCH /api/v1/preventive-maintenance/:id/cassette/:cassetteId
+      ├ù should update cassette detail checklist (156 ms)
+    PATCH /api/v1/preventive-maintenance/:id
+      ÔêÜ should complete the PM task (23 ms)
+
+  ÔùÅ Preventive Maintenance (e2e) ÔÇ║ PATCH 
+/api/v1/preventive-maintenance/:id/cassette/:cassetteId ÔÇ║ should update 
+cassette detail checklist
+
+    expected 200 "OK", got 500 "Internal Server Error"
+
+    [0m [90m 162 |[39m                     status[33m:[39m 
+[32m'OK'[39m
+     [90m 163 |[39m                 })
+    [31m[1m>[22m[39m[90m 164 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 165 |[39m
+     [90m 166 |[39m             expect(response[33m.[39mbody[33m.[39
+mfindings)[33m.[39mtoBe([32m'Dust found'[39m)[33m;[39m
+     [90m 167 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (preventive-maintenance.e2e-spec.ts:164:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 5 passed, 6 total
+Snapshots:   0 total
+Time:        9.36 s
+Ran all test suites matching /preventive-maintenance.e2e-spec.ts/i.

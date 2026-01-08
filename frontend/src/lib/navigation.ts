@@ -8,8 +8,9 @@ interface User {
   email: string;
   fullName: string;
   role: string;
-  userType: 'HITACHI' | 'PENGELOLA';
+  userType: 'HITACHI' | 'PENGELOLA' | 'BANK';
   pengelolaId?: string;
+  customerBankId?: string;
   department?: string;
   phone?: string;
 }
@@ -32,6 +33,11 @@ export function getDefaultLandingPage(user: User | null): string {
   // Pengelola/Vendor users → Tickets page (main workflow)
   if (user.userType === 'PENGELOLA') {
     return '/tickets';
+  }
+
+  // Bank users → Dashboard (read-only)
+  if (user.userType === 'BANK') {
+    return '/dashboard';
   }
 
   // Default fallback → Dashboard

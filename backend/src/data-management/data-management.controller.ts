@@ -11,6 +11,7 @@ import {
   Res,
   UploadedFile,
   UseInterceptors,
+  Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiQuery, ApiParam, ApiConsumes } from '@nestjs/swagger';
@@ -41,8 +42,9 @@ export class DataManagementController {
   @Post('query')
   @ApiOperation({ summary: 'Execute SQL query (SELECT only, Super Admin only)' })
   @ApiBody({ type: QueryDto })
-  async executeQuery(@Body() body: QueryDto) {
-    return this.dataManagementService.executeQuery(body.query);
+  async executeQuery(@Body() body: QueryDto, @Request() req: any) {
+    const requestId = req.id || req.headers['x-request-id'];
+    return this.dataManagementService.executeQuery(body.query, requestId);
   }
 
   @Post('maintenance')
@@ -133,10 +135,40 @@ export class DataManagementController {
       storage: diskStorage({
         destination: './uploads',
         filename: (req, file, cb) => {
+          // Sanitize filename to prevent path traversal
+          const sanitized = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `restore-${uniqueSuffix}-${file.originalname}`);
+          cb(null, `restore-${uniqueSuffix}-${sanitized}`);
         },
       }),
+      limits: {
+        fileSize: 100 * 1024 * 1024, // 100MB limit
+      },
+      fileFilter: (req, file, cb) => {
+        // Validate file extension
+        const validExtensions = ['.sql', '.gz', '.zip'];
+        const fileExtension = path.extname(file.originalname).toLowerCase();
+        
+        if (!validExtensions.includes(fileExtension)) {
+          return cb(new Error(`Invalid file type. Allowed: ${validExtensions.join(', ')}`), false);
+        }
+
+        // Validate MIME type
+        const validMimeTypes = [
+          'application/sql',
+          'text/plain',
+          'application/x-gzip',
+          'application/gzip',
+          'application/zip',
+          'application/x-zip-compressed',
+        ];
+        
+        if (file.mimetype && !validMimeTypes.includes(file.mimetype.toLowerCase())) {
+          return cb(new Error(`Invalid file MIME type: ${file.mimetype}`), false);
+        }
+
+        cb(null, true);
+      },
     }),
   )
   async restoreBackup(@UploadedFile() file: Express.Multer.File) {
@@ -144,6 +176,12 @@ export class DataManagementController {
       throw new Error('No backup file provided');
     }
     return this.dataManagementService.restoreBackup(file.path);
+  }
+
+  @Delete('machines-cassettes')
+  @ApiOperation({ summary: 'Delete all machines and cassettes (Super Admin only, use with caution!)' })
+  async deleteAllMachinesAndCassettes() {
+    return this.dataManagementService.deleteAllMachinesAndCassettes();
   }
 }
 

@@ -3,18 +3,18 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsStrongPassword } from '../../common/validators/password.validator';
 
 export class CreatePengelolaUserDto {
-  @ApiProperty({ example: 'technician01' })
+  @ApiProperty({ example: 'supervisor01' })
   @IsString()
   @MinLength(3)
   @MaxLength(100)
   username: string;
 
-  @ApiProperty({ example: 'tech01@tag.co.id' })
+  @ApiProperty({ example: 'supervisor01@tag.co.id' })
   @IsEmail()
   @MaxLength(255)
   email: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     example: 'SecurePass123!',
     description: 'Password must be at least 8 characters with uppercase, lowercase, number, and special character'
   })
@@ -22,7 +22,7 @@ export class CreatePengelolaUserDto {
   @IsStrongPassword()
   password: string;
 
-  @ApiProperty({ example: 'John Technician' })
+  @ApiProperty({ example: 'John Supervisor' })
   @IsString()
   @MinLength(3)
   @MaxLength(255)
@@ -40,9 +40,9 @@ export class CreatePengelolaUserDto {
   @MaxLength(50)
   whatsappNumber?: string;
 
-  @ApiProperty({ enum: ['ADMIN', 'SUPERVISOR', 'TECHNICIAN'], example: 'TECHNICIAN' })
-  @IsEnum(['ADMIN', 'SUPERVISOR', 'TECHNICIAN'])
-  role: 'ADMIN' | 'SUPERVISOR' | 'TECHNICIAN';
+  @ApiProperty({ enum: ['ADMIN', 'SUPERVISOR'], example: 'SUPERVISOR' })
+  @IsEnum(['ADMIN', 'SUPERVISOR'])
+  role: 'ADMIN' | 'SUPERVISOR';
 
   @ApiPropertyOptional({ example: 'EMP-001' })
   @IsOptional()

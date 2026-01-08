@@ -119,7 +119,7 @@ export default function NotificationBell() {
           </div>
 
           {/* Notifications List */}
-          <div className="overflow-y-auto flex-1">
+          <div className="overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
             {notifications.length === 0 ? (
               <div className="p-8 text-center">
                 <Bell className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />

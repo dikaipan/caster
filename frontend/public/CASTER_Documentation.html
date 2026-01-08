@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CASTER - System Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+
+        .page {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px;
+            page-break-after: always;
+        }
+
+        .cover {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: linear-gradient(135deg, #0d9488 0%, #0891b2 50%, #2563eb 100%);
+        }
+
+        .logo {
+            width: 200px;
+            height: auto;
+            margin-bottom: 40px;
+            filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
+        }
+
+        .cover h1 {
+            font-size: 4rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            margin-bottom: 10px;
+        }
+
+        .cover .subtitle {
+            font-size: 1.5rem;
+            opacity: 0.9;
+            margin-bottom: 60px;
+        }
+
+        .cover .doc-title {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            padding: 20px 50px;
+            border-radius: 15px;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .cover .version {
+            margin-top: 40px;
+            opacity: 0.7;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            color: #14b8a6;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #14b8a6;
+        }
+
+        h3 {
+            font-size: 1.5rem;
+            color: #67e8f9;
+            margin: 30px 0 15px 0;
+        }
+
+        h4 {
+            font-size: 1.2rem;
+            color: #a5f3fc;
+            margin: 20px 0 10px 0;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .card-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #14b8a6, #0891b2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th {
+            background: linear-gradient(135deg, #14b8a6, #0891b2);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        ul,
+        ol {
+            margin-left: 25px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-family: 'Consolas', monospace;
+            color: #67e8f9;
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            border-left: 4px solid #14b8a6;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-green {
+            background: #065f46;
+            color: #6ee7b7;
+        }
+
+        .badge-yellow {
+            background: #713f12;
+            color: #fde047;
+        }
+
+        .badge-red {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        .badge-blue {
+            background: #1e3a8a;
+            color: #93c5fd;
+        }
+
+        .flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 30px 0;
+        }
+
+        .flow-step {
+            background: linear-gradient(135deg, #14b8a6, #0891b2);
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .flow-arrow {
+            font-size: 1.5rem;
+            color: #14b8a6;
+        }
+
+        .security-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(20, 184, 166, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid #14b8a6;
+        }
+
+        .security-icon {
+            font-size: 1.5rem;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.7;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 40px;
+        }
+
+        @media print {
+            body {
+                background: white;
+                color: #1e293b;
+            }
+
+            h2 {
+                color: #0d9488;
+            }
+
+            h3,
+            h4 {
+                color: #0891b2;
+            }
+
+            .card {
+                border: 1px solid #e2e8f0;
+                background: #f8fafc;
+            }
+
+            th {
+                background: #0d9488;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="page cover">
+        <img src="logo.png" alt="CASTER Logo" class="logo">
+        <p class="subtitle">Cassette Tracking & Retrieval System</p>
+        <div class="doc-title">📘 System Documentation</div>
+        <p class="version">Version 1.0 | December 2025</p>
+    </div>
+
+    <div class="page">
+        <h2>📋 Table of Contents</h2>
+        <div class="card">
+            <ol style="font-size: 1.2rem;">
+                <li style="margin: 15px 0;">System Overview</li>
+                <li style="margin: 15px 0;">Technology Stack</li>
+                <li style="margin: 15px 0;">Security Features</li>
+                <li style="margin: 15px 0;">User Roles & Permissions</li>
+                <li style="margin: 15px 0;">User Manual</li>
+                <li style="margin: 15px 0;">API Reference</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="page">
+        <h2>🎯 System Overview</h2>
+        <p style="font-size: 1.2rem; margin-bottom: 30px;"><strong>CASTER</strong> adalah sistem manajemen cassette CRM
+            terintegrasi untuk Hitachi.</p>
+        <div class="card-grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon">📍</div>
+                    <div class="card-title">Tracking Cassette</div>
+                </div>
+                <p>Pelacakan lokasi dan status cassette secara real-time.</p>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon">🎫</div>
+                    <div class="card-title">Service Order</div>
+                </div>
+                <p>Pengelolaan tiket perbaikan dari pembuatan hingga selesai.</p>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon">🔧</div>
+                    <div class="card-title">Repair Workflow</div>
+                </div>
+                <p>Alur kerja perbaikan terstruktur dengan timer tracking.</p>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon">📱</div>
+                    <div class="card-title">PWA Ready</div>
+                </div>
+                <p>Dapat diinstall sebagai aplikasi mobile.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="page">
+        <h2>💻 Technology Stack</h2>
+        <h3>Frontend</h3>
+        <table>
+            <tr>
+                <th>Technology</th>
+                <th>Version</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><strong>Next.js</strong></td>
+                <td>14.2</td>
+                <td>React Framework with SSR</td>
+            </tr>
+            <tr>
+                <td><strong>React</strong></td>
+                <td>18.3</td>
+                <td>UI Library</td>
+            </tr>
+            <tr>
+                <td><strong>TypeScript</strong></td>
+                <td>5.x</td>
+                <td>Type-safe JavaScript</td>
+            </tr>
+            <tr>
+                <td><strong>TailwindCSS</strong></td>
+                <td>3.3</td>
+                <td>CSS Framework</td>
+            </tr>
+            <tr>
+                <td><strong>Zustand</strong></td>
+                <td>4.4</td>
+                <td>State Management</td>
+            </tr>
+        </table>
+        <h3>Backend</h3>
+        <table>
+            <tr>
+                <th>Technology</th>
+                <th>Version</th>
+                <th>Purpose</th>
+            </tr>
+            <tr>
+                <td><strong>NestJS</strong></td>
+                <td>10.3</td>
+                <td>Node.js Framework</td>
+            </tr>
+            <tr>
+                <td><strong>Prisma</strong></td>
+                <td>6.19</td>
+                <td>Database ORM</td>
+            </tr>
+            <tr>
+                <td><strong>MySQL</strong></td>
+                <td>8.x</td>
+                <td>Database</td>
+            </tr>
+            <tr>
+                <td><strong>JWT</strong></td>
+                <td>10.2</td>
+                <td>Authentication</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="page">
+        <h2>🔒 Security Features</h2>
+        <div class="security-item"><span class="security-icon">🔐</span>
+            <div>
+                <h4>JWT Authentication</h4>
+                <p>Access tokens (15 min) + Refresh tokens (7 days) in HTTP-Only cookies.</p>
+            </div>
+        </div>
+        <div class="security-item"><span class="security-icon">📱</span>
+            <div>
+                <h4>Two-Factor Authentication</h4>
+                <p>TOTP-based 2FA compatible with Google Authenticator.</p>
+            </div>
+        </div>
+        <div class="security-item"><span class="security-icon">🔑</span>
+            <div>
+                <h4>Password Hashing</h4>
+                <p>bcrypt with 10 salt rounds.</p>
+            </div>
+        </div>
+        <div class="security-item"><span class="security-icon">⚡</span>
+            <div>
+                <h4>Rate Limiting</h4>
+                <p>10 requests/minute per IP.</p>
+            </div>
+        </div>
+        <div class="security-item"><span class="security-icon">🛡️</span>
+            <div>
+                <h4>Security Headers</h4>
+                <p>Helmet with XSS, HSTS protection.</p>
+            </div>
+        </div>
+        <div class="security-item"><span class="security-icon">📝</span>
+            <div>
+                <h4>Audit Logging</h4>
+                <p>Complete activity tracking.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="page">
+        <h2>👥 User Roles</h2>
+        <h3>Hitachi Users</h3>
+        <table>
+            <tr>
+                <th>Role</th>
+                <th>Description</th>
+                <th>Permissions</th>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">SUPER_ADMIN</span></td>
+                <td>System Admin</td>
+                <td>Full access</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-yellow">RC_MANAGER</span></td>
+                <td>RC Manager</td>
+                <td>Manage repairs</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-blue">ADMIN</span></td>
+                <td>Administrator</td>
+                <td>User management</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-green">RC_STAFF</span></td>
+                <td>Technician</td>
+                <td>Repair cassettes</td>
+            </tr>
+        </table>
+        <h3>Pengelola Users</h3>
+        <table>
+            <tr>
+                <th>Role</th>
+                <th>Description</th>
+                <th>Permissions</th>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">MANAGER</span></td>
+                <td>Pengelola Manager</td>
+                <td>Full access</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-yellow">SUPERVISOR</span></td>
+                <td>Supervisor</td>
+                <td>Manage tickets</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-blue">TECHNICIAN</span></td>
+                <td>Technician</td>
+                <td>Create tickets</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-green">OPERATOR</span></td>
+                <td>Operator</td>
+                <td>View only</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="page">
+        <h2>📖 User Manual</h2>
+        <h3>Service Order Workflow</h3>
+        <div class="flow">
+            <div class="flow-step">OPEN</div><span class="flow-arrow">→</span>
+            <div class="flow-step">IN_DELIVERY</div><span class="flow-arrow">→</span>
+            <div class="flow-step">RECEIVED</div><span class="flow-arrow">→</span>
+            <div class="flow-step">IN_PROGRESS</div><span class="flow-arrow">→</span>
+            <div class="flow-step">RESOLVED</div><span class="flow-arrow">→</span>
+            <div class="flow-step">CLOSED</div>
+        </div>
+        <h3>Repair Timer</h3>
+        <div class="card-grid">
+            <div class="card" style="border-left: 4px solid #22c55e;"><span class="badge badge-green">🟢 GREEN</span>
+                <p><strong>&lt; 1 jam</strong> - On track</p>
+            </div>
+            <div class="card" style="border-left: 4px solid #eab308;"><span class="badge badge-yellow">🟡 YELLOW</span>
+                <p><strong>1-4 jam</strong> - Warning</p>
+            </div>
+            <div class="card" style="border-left: 4px solid #ef4444;"><span class="badge badge-red">🔴 RED</span>
+                <p><strong>&gt; 4 jam</strong> - Overdue</p>
+            </div>
+        </div>
+        <div class="footer">
+            <p><strong>© 2025 Hitachi. All rights reserved.</strong></p>
+        </div>
+    </div>
+</body>
+
+</html>

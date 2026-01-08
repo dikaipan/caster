@@ -7,8 +7,8 @@ export default function RequestNewPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redirect to tickets/create
-    router.replace('/tickets/create');
+    // Redirect to service-orders/create
+    router.replace('/service-orders/create?type=repair');
   }, [router]);
 
   return (

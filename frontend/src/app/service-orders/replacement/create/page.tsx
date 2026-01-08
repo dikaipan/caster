@@ -429,7 +429,9 @@ export default function CreateReplacementPage() {
     return null;
   }
 
-  if (user?.userType !== 'PENGELOLA') {
+  const isHitachi = user?.userType === 'HITACHI';
+  
+  if (!isPengelola && !isHitachi) {
     return (
       <PageLayout>
         <div className="max-w-2xl mx-auto mt-8">
@@ -440,7 +442,7 @@ export default function CreateReplacementPage() {
                 <div>
                   <CardTitle>Akses Ditolak</CardTitle>
                   <CardDescription>
-                    Hanya user pengelola yang dapat membuat permintaan pergantian kaset
+                    Hanya user pengelola dan Hitachi yang dapat membuat permintaan pergantian kaset
                   </CardDescription>
                 </div>
               </div>
@@ -458,7 +460,19 @@ export default function CreateReplacementPage() {
         <div className="mb-6">
           <Button
             variant="outline"
-            onClick={() => router.push('/service-orders/create')}
+            onClick={() => {
+              // Check if we're embedded in service-orders/create (check parent route)
+              const isEmbedded = typeof window !== 'undefined' && 
+                (window.location.pathname === '/service-orders/create' || 
+                 document.referrer.includes('/service-orders/create'));
+              
+              if (isEmbedded) {
+                // If embedded, trigger custom event to go back to selection
+                window.dispatchEvent(new CustomEvent('goBackToSOSelection'));
+              } else {
+                router.push('/service-orders/create');
+              }
+            }}
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -595,7 +609,7 @@ export default function CreateReplacementPage() {
                             {selectedCassettes.length}/{MAX_CASSETTES} dipilih • {scrappedCassettes.length} total
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto p-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
                           {scrappedCassettes.map((cassette: any) => {
                             const isSelected = selectedCassettes.some(c => c.id === cassette.id);
                             const isDisabled = !isSelected && selectedCassettes.length >= MAX_CASSETTES;

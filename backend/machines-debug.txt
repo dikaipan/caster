@@ -1,0 +1,32 @@
+﻿
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json machines.e2e-spec.ts --verbose
+
+  console.log
+    [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:95:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+[33m[HCM-Backend][39m [33m27376[39m 1/2/2026, 6:10:42 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T11:10:42.050Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "mach_admin_1767352241857119",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+

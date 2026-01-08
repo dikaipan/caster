@@ -28,6 +28,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, Search, Copy, Check, Loader2, ChevronLeft, ChevronRight, XCircle, Store } from 'lucide-react';
 
 interface Pengelola {
@@ -46,6 +47,7 @@ interface Pengelola {
 
 export default function VendorsTab() {
   const { user, isAuthenticated, loadUser } = useAuthStore();
+  const { toast } = useToast();
   const [pengelola, setPengelola] = useState<Pengelola[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -289,7 +291,7 @@ export default function VendorsTab() {
                   Add Pengelola
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
                 <DialogHeader>
                   <DialogTitle>Create Pengelola</DialogTitle>
                   <DialogDescription>
@@ -604,7 +606,7 @@ export default function VendorsTab() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <DialogHeader>
             <DialogTitle>Edit Pengelola</DialogTitle>
             <DialogDescription>

@@ -23,11 +23,11 @@ export class AnalyticsService {
     const whereClause: any = {};
     const dateFilter: any = {};
 
-    // Apply date filter
+    // Apply date filter - use createdAt for more reliable filtering
     if (startDate || endDate) {
-      dateFilter.receivedAtRc = {};
-      if (startDate) dateFilter.receivedAtRc.gte = startDate;
-      if (endDate) dateFilter.receivedAtRc.lte = endDate;
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.gte = startDate;
+      if (endDate) dateFilter.createdAt.lte = endDate;
     }
 
     // Apply bank filter if provided
@@ -38,7 +38,13 @@ export class AnalyticsService {
     }
 
     // Apply user permissions
-    if (userType === 'PENGELOLA' && pengelolaId) {
+    if (userType === 'BANK' && bankId) {
+      // BANK users can only see metrics for their own bank
+      whereClause.cassette = {
+        ...whereClause.cassette,
+        customerBankId: bankId,
+      };
+    } else if (userType === 'PENGELOLA' && pengelolaId) {
       try {
         // Pengelola can only see repairs for their assigned banks
         const pengelola = await this.prisma.pengelola.findUnique({
@@ -66,36 +72,58 @@ export class AnalyticsService {
       }
     }
 
-    // Build receivedAtRc condition - cannot combine not: null with gte/lte
-    const receivedAtRcCondition: any = {};
-    if (dateFilter.receivedAtRc) {
-      // If date filter exists, use gte/lte (implicitly excludes null)
-      if (dateFilter.receivedAtRc.gte) {
-        receivedAtRcCondition.gte = dateFilter.receivedAtRc.gte;
+    // Build date filter condition - use createdAt for more reliable filtering
+    const dateCondition: any = {};
+    if (dateFilter.createdAt) {
+      // If date filter exists, filter by createdAt (when repair ticket was created)
+      // This is more reliable than receivedAtRc which might not be set for all repairs
+      if (dateFilter.createdAt.gte) {
+        dateCondition.gte = dateFilter.createdAt.gte;
       }
-      if (dateFilter.receivedAtRc.lte) {
-        receivedAtRcCondition.lte = dateFilter.receivedAtRc.lte;
+      if (dateFilter.createdAt.lte) {
+        dateCondition.lte = dateFilter.createdAt.lte;
       }
-    } else {
-      // If no date filter, just check not null
-      receivedAtRcCondition.not = null;
     }
 
     // Build final where clause
+    // Don't filter by status in query - get all repairs first, then filter
     const finalWhereClause: any = {
       ...whereClause,
-      status: 'COMPLETED',
-      receivedAtRc: receivedAtRcCondition,
-      completedAt: { not: null },
+      deletedAt: null, // Exclude soft-deleted repairs
     };
+    
+    // Add date filter if provided (use createdAt for more reliable filtering)
+    if (Object.keys(dateCondition).length > 0) {
+      finalWhereClause.createdAt = dateCondition;
+    }
 
-    // Get completed repairs for MTTR calculation
-    const completedRepairs = await this.prisma.repairTicket.findMany({
+    // Get all repairs first (for logging and flexibility)
+    const allRepairs = await this.prisma.repairTicket.findMany({
       where: finalWhereClause,
       select: {
+        id: true,
+        status: true,
         receivedAtRc: true,
         completedAt: true,
         cassetteId: true,
+        createdAt: true,
+      },
+    });
+    
+    // Filter to only completed repairs with completedAt for MTTR calculation
+    const completedRepairs = allRepairs.filter(r => r.status === 'COMPLETED' && r.completedAt);
+    
+    // Log for debugging
+    console.log(`[Analytics] getOperationalMetrics: Found ${allRepairs.length} total repairs, ${completedRepairs.length} completed`, {
+      dateFilter: dateFilter,
+      whereClause: JSON.stringify(finalWhereClause),
+      repairsWithReceivedAtRc: completedRepairs.filter(r => r.receivedAtRc).length,
+      repairsWithCompletedAt: completedRepairs.filter(r => r.completedAt).length,
+      statusBreakdown: {
+        COMPLETED: allRepairs.filter(r => r.status === 'COMPLETED').length,
+        RECEIVED: allRepairs.filter(r => r.status === 'RECEIVED').length,
+        DIAGNOSING: allRepairs.filter(r => r.status === 'DIAGNOSING').length,
+        ON_PROGRESS: allRepairs.filter(r => r.status === 'ON_PROGRESS').length,
       },
     });
 
@@ -186,7 +214,10 @@ export class AnalyticsService {
     }
 
     // Apply user permissions
-    if (userType === 'PENGELOLA' && pengelolaId) {
+    if (userType === 'BANK' && bankId) {
+      // BANK users can only see analytics for their own bank
+      whereClause.customerBankId = bankId;
+    } else if (userType === 'PENGELOLA' && pengelolaId) {
       try {
         const pengelola = await this.prisma.pengelola.findUnique({
           where: { id: pengelolaId },
@@ -219,9 +250,13 @@ export class AnalyticsService {
           },
           select: {
             id: true,
+            ticketNumber: true,
           },
         },
         repairTickets: {
+          where: {
+            deletedAt: null, // Exclude soft-deleted repair tickets
+          },
           select: {
             id: true,
           },
@@ -234,6 +269,7 @@ export class AnalyticsService {
           },
           select: {
             id: true,
+            ticketId: true,
           },
         },
         customerBank: {
@@ -245,23 +281,78 @@ export class AnalyticsService {
     });
 
     // Calculate problem count for each cassette (single + multi-cassette tickets)
-    // problemTickets = single cassette tickets (where cassette is primary)
-    // ticketCassetteDetails = multi-cassette tickets (where cassette is one of many)
-    // These should not overlap, so adding them is correct
-    const cassetteProblems = cassettes.map(c => ({
-      id: c.id,
-      serialNumber: c.serialNumber,
-      bankName: c.customerBank?.bankName || 'N/A',
-      problemCount: c.problemTickets.length + c.ticketCassetteDetails.length,
-      repairCount: c.repairTickets.length,
-      totalIssues: c.problemTickets.length + c.ticketCassetteDetails.length + c.repairTickets.length,
-      createdAt: c.createdAt,
-      status: c.status,
-    }));
+    // IMPORTANT: Avoid double counting - a ticket can be in problemTickets OR ticketCassetteDetails, not both
+    // For each cassette:
+    // - problemTickets = tickets where this cassette is the primary cassette (single cassette tickets)
+    // - ticketCassetteDetails = tickets where this cassette is one of many (multi-cassette tickets)
+    // - We need to count unique tickets only (no overlap)
+    const cassetteProblems = cassettes.map(c => {
+      // Get unique ticket IDs from problemTickets (single cassette tickets)
+      const singleCassetteTicketIds = new Set(c.problemTickets.map(t => t.id));
+      
+      // Get unique ticket IDs from ticketCassetteDetails (multi-cassette tickets)
+      // Exclude tickets that are already counted in problemTickets to avoid double counting
+      const multiCassetteTicketIds = new Set(
+        c.ticketCassetteDetails
+          .map(d => d.ticketId)
+          .filter(ticketId => !singleCassetteTicketIds.has(ticketId)) // Exclude already counted
+      );
+      
+      // Total unique problem tickets (SO) = single + multi (no overlap)
+      const problemCount = singleCassetteTicketIds.size + multiCassetteTicketIds.size;
+      
+      // Repair count (repair tickets are separate from problem tickets)
+      const repairCount = c.repairTickets.length;
+      
+      // Total issues = problem tickets (SO) + repair tickets
+      // Note: Repair tickets are created from problem tickets, but we count them separately
+      // to show how many times the cassette has been repaired
+      const totalIssues = problemCount + repairCount;
+      
+      return {
+        id: c.id,
+        serialNumber: c.serialNumber,
+        bankName: c.customerBank?.bankName || 'N/A',
+        problemCount, // Unique SO count (no double counting)
+        repairCount, // Repair ticket count
+        totalIssues, // Total issues (SO + repairs)
+        createdAt: c.createdAt,
+        status: c.status,
+      };
+    });
+    
+    // Log for debugging
+    console.log(`[Analytics] getCassetteAnalytics: Found ${cassettes.length} cassettes`, {
+      totalProblemTickets: cassettes.reduce((sum, c) => sum + c.problemTickets.length, 0),
+      totalTicketDetails: cassettes.reduce((sum, c) => sum + c.ticketCassetteDetails.length, 0),
+      totalRepairTickets: cassettes.reduce((sum, c) => sum + c.repairTickets.length, 0),
+      top10ProblematicCount: cassetteProblems
+        .sort((a, b) => b.totalIssues - a.totalIssues)
+        .slice(0, 10)
+        .map(c => ({ serial: c.serialNumber, totalIssues: c.totalIssues, problemCount: c.problemCount, repairCount: c.repairCount })),
+    });
 
     // Top 10 kaset bermasalah
+    // Sort by totalIssues (desc), then by problemCount (desc), then by repairCount (desc), then by serialNumber (asc) for consistency
+    // Filter out cassettes with no issues (totalIssues === 0) to ensure we only show problematic cassettes
     const top10Problematic = cassetteProblems
-      .sort((a, b) => b.totalIssues - a.totalIssues)
+      .filter(c => c.totalIssues > 0) // Only show cassettes with at least one issue
+      .sort((a, b) => {
+        // Primary sort: totalIssues (descending)
+        if (b.totalIssues !== a.totalIssues) {
+          return b.totalIssues - a.totalIssues;
+        }
+        // Secondary sort: problemCount (descending) - SO count is more important than repair count
+        if (b.problemCount !== a.problemCount) {
+          return b.problemCount - a.problemCount;
+        }
+        // Tertiary sort: repairCount (descending)
+        if (b.repairCount !== a.repairCount) {
+          return b.repairCount - a.repairCount;
+        }
+        // Final tie-breaker: serialNumber (ascending) for consistent ordering
+        return a.serialNumber.localeCompare(b.serialNumber);
+      })
       .slice(0, 10);
 
     // Cycle problem distribution
@@ -339,11 +430,11 @@ export class AnalyticsService {
     const whereClause: any = {};
     const dateFilter: any = {};
 
-    // Apply date filter
+    // Apply date filter - use createdAt for more reliable filtering
     if (startDate || endDate) {
-      dateFilter.receivedAtRc = {};
-      if (startDate) dateFilter.receivedAtRc.gte = startDate;
-      if (endDate) dateFilter.receivedAtRc.lte = endDate;
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.gte = startDate;
+      if (endDate) dateFilter.createdAt.lte = endDate;
     }
 
     // Apply bank filter
@@ -379,37 +470,47 @@ export class AnalyticsService {
       }
     }
 
-    // Build receivedAtRc condition - cannot combine not: null with gte/lte
-    const receivedAtRcCondition: any = {};
-    if (dateFilter.receivedAtRc) {
-      // If date filter exists, use gte/lte (implicitly excludes null)
-      if (dateFilter.receivedAtRc.gte) {
-        receivedAtRcCondition.gte = dateFilter.receivedAtRc.gte;
+    // Build date filter condition - use createdAt for more reliable filtering
+    const dateCondition: any = {};
+    if (dateFilter.createdAt) {
+      // If date filter exists, filter by createdAt (when repair ticket was created)
+      if (dateFilter.createdAt.gte) {
+        dateCondition.gte = dateFilter.createdAt.gte;
       }
-      if (dateFilter.receivedAtRc.lte) {
-        receivedAtRcCondition.lte = dateFilter.receivedAtRc.lte;
+      if (dateFilter.createdAt.lte) {
+        dateCondition.lte = dateFilter.createdAt.lte;
       }
     }
-    // Note: If no date filter, we don't need to filter by receivedAtRc at all
 
     // Build final where clause
     const finalWhereClause: any = {
       ...whereClause,
+      deletedAt: null, // Exclude soft-deleted repairs
     };
-    if (Object.keys(receivedAtRcCondition).length > 0) {
-      finalWhereClause.receivedAtRc = receivedAtRcCondition;
+    
+    // Add date filter if provided (use createdAt for more reliable filtering)
+    if (Object.keys(dateCondition).length > 0) {
+      finalWhereClause.createdAt = dateCondition;
     }
 
     // Get all repairs
     const repairs = await this.prisma.repairTicket.findMany({
       where: finalWhereClause,
       select: {
+        id: true,
         status: true,
         qcPassed: true,
         partsReplaced: true,
         reportedIssue: true,
         repairActionTaken: true,
+        createdAt: true,
       },
+    });
+    
+    // Log for debugging
+    console.log(`[Analytics] getRepairAnalytics: Found ${repairs.length} repairs`, {
+      dateFilter: dateFilter,
+      completedCount: repairs.filter(r => r.status === 'COMPLETED').length,
     });
 
     // Calculate success rate (QC passed / total completed)
@@ -422,41 +523,122 @@ export class AnalyticsService {
     // Parts replacement frequency
     const partsFrequency: Record<string, number> = {};
     repairs.forEach(repair => {
-      if (repair.partsReplaced && typeof repair.partsReplaced === 'object') {
-        const parts = repair.partsReplaced as any;
-        if (Array.isArray(parts)) {
-          parts.forEach((part: string) => {
-            partsFrequency[part] = (partsFrequency[part] || 0) + 1;
-          });
-        } else if (typeof parts === 'object') {
-          Object.keys(parts).forEach(part => {
-            partsFrequency[part] = (partsFrequency[part] || 0) + (parts[part] || 1);
-          });
+      if (repair.partsReplaced) {
+        let parts: any = null;
+        
+        // Handle different formats: JSON string, array, or object
+        if (typeof repair.partsReplaced === 'string') {
+          try {
+            parts = JSON.parse(repair.partsReplaced);
+          } catch (e) {
+            // If parsing fails, treat as single string
+            parts = [repair.partsReplaced];
+          }
+        } else if (typeof repair.partsReplaced === 'object') {
+          parts = repair.partsReplaced;
+        }
+        
+        if (parts) {
+          if (Array.isArray(parts)) {
+            parts.forEach((part: string) => {
+              if (part && typeof part === 'string') {
+                partsFrequency[part] = (partsFrequency[part] || 0) + 1;
+              }
+            });
+          } else if (typeof parts === 'object') {
+            Object.keys(parts).forEach(part => {
+              if (part) {
+                partsFrequency[part] = (partsFrequency[part] || 0) + (parts[part] || 1);
+              }
+            });
+          }
+        }
+      }
+    });
+    
+    console.log(`[Analytics] getRepairAnalytics: Parts frequency`, {
+      totalParts: Object.keys(partsFrequency).length,
+      topParts: Object.entries(partsFrequency).sort(([, a], [, b]) => b - a).slice(0, 5),
+    });
+
+    // Top issues (from reportedIssue) - improved normalization
+    const issueFrequency: Record<string, number> = {};
+    repairs.forEach(repair => {
+      if (repair.reportedIssue) {
+        // Normalize issue text: trim, lowercase, remove extra spaces
+        const normalized = repair.reportedIssue
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, ' '); // Replace multiple spaces with single space
+        if (normalized.length > 0) {
+          issueFrequency[normalized] = (issueFrequency[normalized] || 0) + 1;
         }
       }
     });
 
-    // Top issues (from reportedIssue)
-    const issueFrequency: Record<string, number> = {};
-    repairs.forEach(repair => {
-      if (repair.reportedIssue) {
-        // Normalize issue text (simple approach)
-        const normalized = repair.reportedIssue.toLowerCase().trim();
-        issueFrequency[normalized] = (issueFrequency[normalized] || 0) + 1;
-      }
-    });
-
-    // Get top 10 issues
+    // Get top 10 issues with percentage
+    const totalIssuesCount = Object.values(issueFrequency).reduce((sum, count) => sum + count, 0);
     const topIssues = Object.entries(issueFrequency)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
-      .map(([issue, count]) => ({ issue, count }));
+      .map(([issue, count]) => ({
+        issue: issue.charAt(0).toUpperCase() + issue.slice(1), // Capitalize first letter
+        count,
+        percentage: totalIssuesCount > 0 ? Math.round((count / totalIssuesCount) * 100 * 10) / 10 : 0,
+      }));
 
-    // Get top 10 parts
+    // Calculate total parts replaced (sum of all parts, not just unique types)
+    const totalPartsReplaced = Object.values(partsFrequency).reduce((sum, count) => sum + count, 0);
+
+    // Get top 10 parts with percentage
     const topParts = Object.entries(partsFrequency)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
-      .map(([part, count]) => ({ part, count }));
+      .map(([part, count]) => ({
+        part: part.charAt(0).toUpperCase() + part.slice(1), // Capitalize first letter
+        count,
+        percentage: totalPartsReplaced > 0 ? Math.round((count / totalPartsReplaced) * 100 * 10) / 10 : 0,
+      }));
+
+    // Calculate repair status breakdown
+    // RepairTicketStatus enum: RECEIVED, DIAGNOSING, ON_PROGRESS, COMPLETED, SCRAPPED
+    const statusBreakdown = {
+      COMPLETED: repairs.filter(r => r.status === 'COMPLETED').length,
+      ON_PROGRESS: repairs.filter(r => r.status === 'ON_PROGRESS').length,
+      DIAGNOSING: repairs.filter(r => r.status === 'DIAGNOSING').length,
+      RECEIVED: repairs.filter(r => r.status === 'RECEIVED').length,
+      SCRAPPED: repairs.filter(r => r.status === 'SCRAPPED').length,
+    };
+
+    // Calculate average parts per repair (for completed repairs with parts)
+    const repairsWithParts = completedRepairs.filter(r => {
+      if (!r.partsReplaced) return false;
+      try {
+        const parts = typeof r.partsReplaced === 'string' 
+          ? JSON.parse(r.partsReplaced) 
+          : r.partsReplaced;
+        return Array.isArray(parts) ? parts.length > 0 : Object.keys(parts || {}).length > 0;
+      } catch {
+        return false;
+      }
+    });
+    const avgPartsPerRepair = repairsWithParts.length > 0
+      ? totalPartsReplaced / repairsWithParts.length
+      : 0;
+
+    // Log for debugging
+    console.log(`[Analytics] getRepairAnalytics: Summary`, {
+      totalRepairs: repairs.length,
+      completedRepairs: completedRepairs.length,
+      qcPassed,
+      qcFailed: completedRepairs.length - qcPassed,
+      successRate: Math.round(successRate * 10) / 10,
+      totalPartsReplaced,
+      uniquePartsCount: Object.keys(partsFrequency).length,
+      avgPartsPerRepair: Math.round(avgPartsPerRepair * 10) / 10,
+      topIssuesCount: topIssues.length,
+      topPartsCount: topParts.length,
+    });
 
     return {
       successRate: Math.round(successRate * 10) / 10,
@@ -466,7 +648,10 @@ export class AnalyticsService {
       qcFailed: completedRepairs.length - qcPassed,
       topIssues,
       topParts,
-      partsReplacedCount: Object.keys(partsFrequency).length,
+      partsReplacedCount: Object.keys(partsFrequency).length, // Unique parts types
+      totalPartsReplaced, // Total parts replaced (sum of all)
+      avgPartsPerRepair: Math.round(avgPartsPerRepair * 10) / 10,
+      statusBreakdown,
     };
   }
 
@@ -515,6 +700,15 @@ export class AnalyticsService {
       topIssues: [],
       topParts: [],
       partsReplacedCount: 0,
+      totalPartsReplaced: 0,
+      avgPartsPerRepair: 0,
+      statusBreakdown: {
+        COMPLETED: 0,
+        ON_PROGRESS: 0,
+        DIAGNOSING: 0,
+        RECEIVED: 0,
+        SCRAPPED: 0,
+      },
     };
   }
 
@@ -610,6 +804,15 @@ export class AnalyticsService {
           },
         },
       },
+    });
+    
+    // Log for debugging
+    console.log(`[Analytics] getServiceOrderAnalytics: Found ${tickets.length} tickets`, {
+      dateFilter: startDate && endDate ? `${startDate.toISOString()} - ${endDate.toISOString()}` : 'none',
+      bankId: bankId || 'none',
+      pengelolaFilterId: pengelolaFilterId || 'none',
+      userType,
+      pengelolaId: pengelolaId || 'none',
     });
 
     // SO per periode (monthly trend)
@@ -746,6 +949,13 @@ export class AnalyticsService {
           },
         },
       },
+    });
+    
+    // Log for debugging
+    console.log(`[Analytics] getPengelolaComparison: Found ${tickets.length} tickets`, {
+      dateFilter: startDate && endDate ? `${startDate.toISOString()} - ${endDate.toISOString()}` : 'none',
+      userType,
+      pengelolaId: pengelolaId || 'none',
     });
 
     // Group by pengelola

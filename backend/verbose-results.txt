@@ -1,0 +1,1353 @@
+﻿
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json --verbose
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+node.exe : PASS test/app.e2e-spec.ts (21.588 s)
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (PASS test/app.e2e-spec.ts (2 
+   1.588 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  AppController (e2e)
+    ÔêÜ /api/v1 (GET) - Health Check (646 ms)
+
+[33m[HCM-Backend][39m [33m27960[39m 1/2/2026, 5:25:40 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:40.729Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "usr_admin_1767349540249213",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+[33m[HCM-Backend][39m [33m24792[39m 1/2/2026, 5:25:40 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:40.755Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "bank_admin_176734954023335",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+[33m[HCM-Backend][39m [33m14892[39m 1/2/2026, 5:25:40 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:40.904Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "admin_1767349539773",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+[33m[HCM-Backend][39m [33m32840[39m 1/2/2026, 5:25:40 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:40.985Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "cass_admin_1767349540496625",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+[33m[HCM-Backend][39m [33m14892[39m 1/2/2026, 5:25:41 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:41.232Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "pengelola_1767349539773",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+313ms[39m
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+[33m[HCM-Backend][39m [33m32840[39m 1/2/2026, 5:25:41 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:41.546Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "cass_peng_1767349540496625",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+557ms[39m
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+[33m[HCM-Backend][39m [33m21376[39m 1/2/2026, 5:25:41 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:41.590Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "mach_admin_1767349540970767",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+FAIL test/banks.e2e-spec.ts (22.595 s)
+  Banks (e2e)
+    POST /api/v1/banks
+      ÔêÜ should create a new customer bank (151 ms)
+      ÔêÜ should reject duplicate bank code (40 ms)
+    GET /api/v1/banks/:id
+      ÔêÜ should get bank by ID (37 ms)
+    GET /api/v1/banks
+      ├ù should list all banks (51 ms)
+    PATCH /api/v1/banks/:id
+      ÔêÜ should update bank details (41 ms)
+    POST /api/v1/banks/:id/assign-pengelola
+      ├ù should assign pengelola to bank (23 ms)
+    GET /api/v1/banks/:id/analytics
+      ├ù should get bank analytics (18 ms)
+    DELETE /api/v1/banks/:id
+      ÔêÜ should delete bank (90 ms)
+
+  ÔùÅ Banks (e2e) ÔÇ║ GET /api/v1/banks ÔÇ║ should list all banks
+
+    expect(received).toHaveProperty(path)
+
+    Expected path: "data"
+    Received path: []
+
+    Received value: [{"_count": {"cassettes": 0, "machines": 0}, 
+"bankCode": "BANK-NEW-176734954023335", "bankName": "Test New Bank 
+176734954023335", "createdAt": "2026-01-02T10:25:41.000Z", "id": 
+"ccd4be32-3cef-4714-b5ea-348b018ea4c3", "pengelolaAssignments": [], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:25:41.000Z", "useMachines": true}, {"_count": 
+{"cassettes": 0, "machines": 0}, "bankCode": 
+"BANK-MACH-1767349540970767", "bankName": "Test Bank MACH 
+1767349540970767", "createdAt": "2026-01-02T10:25:40.987Z", "id": 
+"4938cfa5-98b1-42a1-9948-4e858028bf3d", "pengelolaAssignments": 
+[{"assignedBranches": null, "contractEndDate": null, "contractNumber": 
+null, "contractStartDate": null, "createdAt": "2026-01-02T10:25:41.024Z", 
+"customerBankId": "4938cfa5-98b1-42a1-9948-4e858028bf3d", "id": 
+"12a87c7a-e63f-40d9-863c-147ed4c72744", "notes": null, "pengelola": 
+{"companyAbbreviation": "TP1767349540970767", "companyName": "Test 
+Pengelola MACH 1767349540970767", "id": 
+"2e89c8fb-3511-4a24-9854-4a8449770b2f", "pengelolaCode": 
+"PENG-MACH-1767349540970767"}, "pengelolaId": 
+"2e89c8fb-3511-4a24-9854-4a8449770b2f", "serviceScope": null, 
+"slaResolutionTimeHours": null, "slaResponseTimeHours": null, "status": 
+"ACTIVE", "updatedAt": "2026-01-02T10:25:41.024Z"}], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:25:40.987Z", "useMachines": true}, {"_count": 
+{"cassettes": 0, "machines": 0}, "bankCode": 
+"BANK-CASS-1767349540496625", "bankName": "Test Bank CASS 
+1767349540496625", "createdAt": "2026-01-02T10:25:40.506Z", "id": 
+"73e473d3-9bbc-4f5b-a8d9-89011b38f890", "pengelolaAssignments": 
+[{"assignedBranches": null, "contractEndDate": null, "contractNumber": 
+null, "contractStartDate": null, "createdAt": "2026-01-02T10:25:40.532Z", 
+"customerBankId": "73e473d3-9bbc-4f5b-a8d9-89011b38f890", "id": 
+"583c078c-d730-4175-8bd5-0bcb98a21507", "notes": null, "pengelola": 
+{"companyAbbreviation": "TP1767349540496625", "companyName": "Test 
+Pengelola CASS 1767349540496625", "id": 
+"42b3b2ba-e2a5-43ab-9786-5e0c6522983e", "pengelolaCode": 
+"PENG-CASS-1767349540496625"}, "pengelolaId": 
+"42b3b2ba-e2a5-43ab-9786-5e0c6522983e", "serviceScope": null, 
+"slaResolutionTimeHours": null, "slaResponseTimeHours": null, "status": 
+"ACTIVE", "updatedAt": "2026-01-02T10:25:40.532Z"}], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:25:40.506Z", "useMachines": true}, {"_count": 
+{"cassettes": 2, "machines": 1}, "bankCode": "BANK-1767349539773", 
+"bankName": "Test Bank 1767349539773", "createdAt": 
+"2026-01-02T10:25:40.322Z", "id": "9d63eb2a-1a71-4929-b2cd-89e42244e020", 
+"pengelolaAssignments": [{"assignedBranches": null, "contractEndDate": 
+null, "contractNumber": null, "contractStartDate": null, "createdAt": 
+"2026-01-02T10:25:40.350Z", "customerBankId": 
+"9d63eb2a-1a71-4929-b2cd-89e42244e020", "id": 
+"74573247-0c49-4926-9828-7ae21a33b2a8", "notes": null, "pengelola": 
+{"companyAbbreviation": "TP1767349539773", "companyName": "Test Pengelola 
+1767349539773", "id": "70d41d8d-3e58-453d-b392-a6109d7f601b", 
+"pengelolaCode": "PENG-1767349539773"}, "pengelolaId": 
+"70d41d8d-3e58-453d-b392-a6109d7f601b", "serviceScope": null, 
+"slaResolutionTimeHours": null, "slaResponseTimeHours": null, "status": 
+"ACTIVE", "updatedAt": "2026-01-02T10:25:40.350Z"}], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:25:40.322Z", "useMachines": true}, {"_count": 
+{"cassettes": 0, "machines": 0}, "bankCode": "BANK-USR-1767349540249213", 
+"bankName": "Test Bank USR 1767349540249213", "createdAt": 
+"2026-01-02T10:25:40.256Z", "id": "0e5f2512-26b4-43ab-a6ac-087a0e47ab13", 
+"pengelolaAssignments": [{"assignedBranches": null, "contractEndDate": 
+null, "contractNumber": null, "contractStartDate": null, "createdAt": 
+"2026-01-02T10:25:40.292Z", "customerBankId": 
+"0e5f2512-26b4-43ab-a6ac-087a0e47ab13", "id": 
+"2f9085f2-2259-4fcf-acc3-5ae35470f560", "notes": null, "pengelola": 
+{"companyAbbreviation": "TP1767349540249213", "companyName": "Test 
+Pengelola USR 1767349540249213", "id": 
+"312dac4d-b042-44e5-814e-43399b9fc8c0", "pengelolaCode": 
+"PENG-USR-1767349540249213"}, "pengelolaId": 
+"312dac4d-b042-44e5-814e-43399b9fc8c0", "serviceScope": null, 
+"slaResolutionTimeHours": null, "slaResponseTimeHours": null, "status": 
+"ACTIVE", "updatedAt": "2026-01-02T10:25:40.292Z"}], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:25:40.256Z", "useMachines": true}, {"_count": 
+{"cassettes": 0, "machines": 0}, "bankCode": "BANK-BANK-176734954023335", 
+"bankName": "Test Bank BANK 176734954023335", "createdAt": 
+"2026-01-02T10:25:40.245Z", "id": "9a6a7a18-c948-45f5-bedc-19bbf67d5efb", 
+"pengelolaAssignments": [{"assignedBranches": null, "contractEndDate": 
+null, "contractNumber": null, "contractStartDate": null, "createdAt": 
+"2026-01-02T10:25:40.273Z", "customerBankId": 
+"9a6a7a18-c948-45f5-bedc-19bbf67d5efb", "id": 
+"46299463-52ba-4ae8-821b-05e76720a948", "notes": null, "pengelola": 
+{"companyAbbreviation": "TP176734954023335", "companyName": "Test 
+Pengelola BANK 176734954023335", "id": 
+"973eb916-c90e-43c0-a741-3359d3073ea4", "pengelolaCode": 
+"PENG-BANK-176734954023335"}, "pengelolaId": 
+"973eb916-c90e-43c0-a741-3359d3073ea4", "serviceScope": null, 
+"slaResolutionTimeHours": null, "slaResponseTimeHours": null, "status": 
+"ACTIVE", "updatedAt": "2026-01-02T10:25:40.273Z"}], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:25:40.245Z", "useMachines": true}, {"_count": 
+{"cassettes": 1, "machines": 0}, "bankCode": "BANK-R-1767348554864339", 
+"bankName": "Test Bank Repair 1767348554864339", "createdAt": 
+"2026-01-02T10:09:15.115Z", "id": "a05d7312-b5b8-4840-bddc-44fe62f88204", 
+"pengelolaAssignments": [], "primaryContactEmail": null, 
+"primaryContactName": null, "primaryContactPhone": null, "status": 
+"ACTIVE", "updatedAt": "2026-01-02T10:09:15.115Z", "useMachines": true}, 
+{"_count": {"cassettes": 0, "machines": 0}, "bankCode": 
+"BANK-BANK-1767348551882859", "bankName": "Test Bank BANK 
+1767348551882859", "createdAt": "2026-01-02T10:09:11.897Z", "id": 
+"d7cc7c2c-036c-4e5f-b5ac-d166a95505d5", "pengelolaAssignments": [], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:09:11.897Z", "useMachines": true}, {"_count": 
+{"cassettes": 1, "machines": 0}, "bankCode": "BANK-R-1767348181194563", 
+"bankName": "Test Bank Repair 1767348181194563", "createdAt": 
+"2026-01-02T10:03:01.430Z", "id": "fd72d2ef-d788-4478-bf4c-95e80144f9fd", 
+"pengelolaAssignments": [], "primaryContactEmail": null, 
+"primaryContactName": null, "primaryContactPhone": null, "status": 
+"ACTIVE", "updatedAt": "2026-01-02T10:03:01.430Z", "useMachines": true}, 
+{"_count": {"cassettes": 0, "machines": 0}, "bankCode": 
+"BANK-BANK-1767348178568292", "bankName": "Test Bank BANK 
+1767348178568292", "createdAt": "2026-01-02T10:02:58.576Z", "id": 
+"9f20746f-8ee9-4347-b583-04f8ea121ded", "pengelolaAssignments": [], 
+"primaryContactEmail": null, "primaryContactName": null, 
+"primaryContactPhone": null, "status": "ACTIVE", "updatedAt": 
+"2026-01-02T10:02:58.576Z", "useMachines": true}]
+
+    [0m [90m 106 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 107 |[39m
+    [31m[1m>[22m[39m[90m 108 |[39m             expect(response[33m.
+[39mbody)[33m.[39mtoHaveProperty([32m'data'[39m)[33m;[39m
+     [90m     |[39m                                   
+[31m[1m^[22m[39m
+     [90m 109 |[39m             expect([33mArray[39m[33m.[39misArray
+(response[33m.[39mbody[33m.[39mdata))[33m.[39mtoBe([36mtrue[39m)[
+33m;[39m
+     [90m 110 |[39m             expect(response[33m.[39mbody[33m.[39
+mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+     [90m 111 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (banks.e2e-spec.ts:108:35)
+
+  ÔùÅ Banks (e2e) ÔÇ║ POST /api/v1/banks/:id/assign-pengelola ÔÇ║ should 
+assign pengelola to bank
+
+    expected 201 "Created", got 404 "Not Found"
+
+    [0m [90m 134 |[39m                     pengelolaId[33m:[39m 
+pengelolaOrg[33m.[39mid[33m,[39m
+     [90m 135 |[39m                 })
+    [31m[1m>[22m[39m[90m 136 |[39m                 
+[33m.[39mexpect([35m201[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 137 |[39m
+     [90m 138 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'id'[39m)[33m;[39m
+     [90m 139 |[39m             expect(response[33m.[39mbody[33m.[39
+mcustomerBankId)[33m.[39mtoBe(createdBankId)[33m;[39m[0m
+
+      at Object.<anonymous> (banks.e2e-spec.ts:136:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Banks (e2e) ÔÇ║ GET /api/v1/banks/:id/analytics ÔÇ║ should get bank 
+analytics
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 147 |[39m                 [33m.[39m[36mget[39m([32m`/
+api/v1/banks/${createdBankId}/analytics`[39m)
+     [90m 148 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+    [31m[1m>[22m[39m[90m 149 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 150 |[39m
+     [90m 151 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'bankId'[39m)[33m;[39m
+     [90m 152 |[39m             expect(response[33m.[39mbody[33m.[39
+mbankId)[33m.[39mtoBe(createdBankId)[33m;[39m[0m
+
+      at Object.<anonymous> (banks.e2e-spec.ts:149:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+[31m[Nest] 32840  - [39m01/02/2026, 5:25:42 PM [31m  ERROR[39m 
+[38;5;3m[ExceptionsHandler] [39m[31m
+Invalid `this.prisma.cassette.create()` invocation in
+D:\Dev\HCS Cassete 
+management\hcm\backend\src\cassettes\cassettes.service.ts:1005:33
+
+  1002   });
+  1003 }
+  1004 
+ÔåÆ 1005 return this.prisma.cassette.create({
+         data: {
+           serialNumber: "CASS-NEW-1767349540496625",
+           cassetteTypeCode: "RB",
+           customerBankId: "73e473d3-9bbc-4f5b-a8d9-89011b38f890",
+           machineId: "3f869159-7683-473e-b392-595df4639b4e",
+           status: "OK",
+       +   cassetteType: {
+       +     create: CassetteTypeCreateWithoutCassettesInput | 
+CassetteTypeUncheckedCreateWithoutCassettesInput,
+       +     connectOrCreate: 
+CassetteTypeCreateOrConnectWithoutCassettesInput,
+       +     connect: CassetteTypeWhereUniqueInput
+       +   }
+         },
+         include: {
+           cassetteType: true,
+           customerBank: true
+         }
+       })
+
+Argument `cassetteType` is missing.[39m
+PrismaClientValidationError: 
+Invalid `this.prisma.cassette.create()` invocation in
+D:\Dev\HCS Cassete 
+management\hcm\backend\src\cassettes\cassettes.service.ts:1005:33
+
+  1002   });
+  1003 }
+  1004 
+ÔåÆ 1005 return this.prisma.cassette.create({
+         data: {
+           serialNumber: "CASS-NEW-1767349540496625",
+           cassetteTypeCode: "RB",
+           customerBankId: "73e473d3-9bbc-4f5b-a8d9-89011b38f890",
+           machineId: "3f869159-7683-473e-b392-595df4639b4e",
+           status: "OK",
+       +   cassetteType: {
+       +     create: CassetteTypeCreateWithoutCassettesInput | 
+CassetteTypeUncheckedCreateWithoutCassettesInput,
+       +     connectOrCreate: 
+CassetteTypeCreateOrConnectWithoutCassettesInput,
+       +     connect: CassetteTypeWhereUniqueInput
+       +   }
+         },
+         include: {
+           cassetteType: true,
+           customerBank: true
+         }
+       })
+
+Argument `cassetteType` is missing.
+    at Nn (D:\Dev\HCS Cassete management\hcm\backend\node_modules\@prisma\
+client\src\runtime\core\errorRendering\throwValidationException.ts:45:9)
+    at ei.throwValidationException [as handleRequestError] (D:\Dev\HCS 
+Cassete management\hcm\backend\node_modules\@prisma\client\src\runtime\Req
+uestHandler.ts:202:7)
+    at ei.handleAndLogRequestError (D:\Dev\HCS Cassete management\hcm\back
+end\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (D:\Dev\HCS Cassete management\hcm\backend\node_modules\
+@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at a (D:\Dev\HCS Cassete management\hcm\backend\node_modules\@prisma\c
+lient\src\runtime\getPrismaClient.ts:833:24)
+    at D:\Dev\HCS Cassete management\hcm\backend\node_modules\@nestjs\core
+\router\router-execution-context.js:46:28
+    at D:\Dev\HCS Cassete management\hcm\backend\node_modules\@nestjs\core
+\router\router-proxy.js:9:17
+[33m[HCM-Backend][39m [33m28396[39m 1/2/2026, 5:25:42 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:42.090Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "auth_admin_1767349541123805",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+[33m[HCM-Backend][39m [33m28396[39m 1/2/2026, 5:25:42 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:42.435Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "auth_pengelola_1767349541123805",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+334ms[39m
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+PASS test/tickets.e2e-spec.ts (23.453 s)
+  Tickets Integration (e2e)
+    ÔêÜ 1. Pengelola should Create a Ticket (320 ms)
+    ÔêÜ 2. Admin should Create Delivery (350 ms)
+    ÔêÜ 3. Admin should Receive Delivery (Faulty Cassette at RC) (145 ms)
+    ÔêÜ 3.5 Manually Resolve TicketAnd Cassette (Simulate Repair) (56 ms)
+    ÔêÜ 4. Admin should Confirm Pickup (Return) (89 ms)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+FAIL test/cassettes.e2e-spec.ts (23.643 s)
+  Cassettes (e2e)
+    POST /api/v1/cassettes
+      ├ù should create a new cassette (437 ms)
+      ├ù should reject duplicate serial number (4 ms)
+      ÔêÜ should reject creation without authentication (24 ms)
+    GET /api/v1/cassettes/:id
+      ├ù should get cassette by ID (1 ms)
+      ÔêÜ should return 404 for non-existent cassette (31 ms)
+    GET /api/v1/cassettes/serial/:serialNumber
+      ├ù should get cassette by serial number (2 ms)
+      ÔêÜ should return 404 for non-existent serial number (17 ms)
+    PATCH /api/v1/cassettes/:id
+      ├ù should update cassette status (1 ms)
+      ├ù should update cassette machine assignment (1 ms)
+    GET /api/v1/cassettes
+      ├ù should list cassettes with pagination (102 ms)
+      ├ù should filter cassettes by status (32 ms)
+      ├ù should filter cassettes by customer bank (38 ms)
+    GET /api/v1/cassettes/:id/qr
+      ├ù should generate QR code for cassette (7 ms)
+    DELETE /api/v1/cassettes/:id
+      ├ù should delete cassette (1 ms)
+      ÔêÜ should return 404 when deleting non-existent cassette (22 ms)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ POST /api/v1/cassettes ÔÇ║ should create a new 
+cassette
+
+    expected 201 "Created", got 500 "Internal Server Error"
+
+    [0m [90m  98 |[39m                     status[33m:[39m [33mTEST_
+CASSETTES[39m[33m.[39m[33mOK_CASSETTE[39m[33m.[39mstatus[33m,[39m
+     [90m  99 |[39m                 })
+    [31m[1m>[22m[39m[90m 100 |[39m                 
+[33m.[39mexpect([35m201[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 101 |[39m
+     [90m 102 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'id'[39m)[33m;[39m
+     [90m 103 |[39m             expect(response[33m.[39mbody[33m.[39
+mserialNumber)[33m.[39mtoBe([32m`CASS-NEW-${uniqueId}`[39m)[33m;[39m
+[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:100:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ POST /api/v1/cassettes ÔÇ║ should reject 
+duplicate serial number
+
+    TypeError: Cannot read properties of undefined (reading 
+'serialNumber')
+
+    [0m [90m 112 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+     [90m 113 |[39m                 [33m.[39msend({
+    [31m[1m>[22m[39m[90m 114 |[39m                     
+serialNumber[33m:[39m cassette[33m.[39mserialNumber[33m,[39m
+     [90m     |[39m                                            
+[31m[1m^[22m[39m
+     [90m 115 |[39m                     cassetteTypeCode[33m:[39m 
+[32m'RB'[39m[33m,[39m
+     [90m 116 |[39m                     customerBankId[33m:[39m 
+customerBank[33m.[39mid[33m,[39m
+     [90m 117 |[39m                     status[33m:[39m [33mTEST_CASS
+ETTES[39m[33m.[39m[33mOK_CASSETTE[39m[33m.[39mstatus[33m,[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:114:44)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ GET /api/v1/cassettes/:id ÔÇ║ should get 
+cassette by ID
+
+    TypeError: Cannot read properties of undefined (reading 'id')
+
+    [0m [90m 135 |[39m         it([32m'should get cassette by 
+ID'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 136 |[39m             [36mconst[39m response [33m=[39m 
+[36mawait[39m request(app[33m.[39mgetHttpServer())
+    [31m[1m>[22m[39m[90m 137 |[39m                 
+[33m.[39m[36mget[39m([32m`/api/v1/cassettes/${cassette.id}`[39m)
+     [90m     |[39m                                                    
+[31m[1m^[22m[39m
+     [90m 138 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+     [90m 139 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 140 |[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:137:52)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ GET /api/v1/cassettes/serial/:serialNumber ÔÇ║ 
+should get cassette by serial number
+
+    TypeError: Cannot read properties of undefined (reading 
+'serialNumber')
+
+    [0m [90m 154 |[39m         it([32m'should get cassette by serial 
+number'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 155 |[39m             [36mconst[39m response [33m=[39m 
+[36mawait[39m request(app[33m.[39mgetHttpServer())
+    [31m[1m>[22m[39m[90m 156 |[39m                 [33m.[39m[36mg
+et[39m([32m`/api/v1/cassettes/serial/${cassette.serialNumber}`[39m)
+     [90m     |[39m                                                     
+      [31m[1m^[22m[39m
+     [90m 157 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+     [90m 158 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 159 |[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:156:59)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ PATCH /api/v1/cassettes/:id ÔÇ║ should update 
+cassette status
+
+    TypeError: Cannot read properties of undefined (reading 'id')
+
+    [0m [90m 173 |[39m         it([32m'should update cassette 
+status'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 174 |[39m             [36mconst[39m response [33m=[39m 
+[36mawait[39m request(app[33m.[39mgetHttpServer())
+    [31m[1m>[22m[39m[90m 175 |[39m                 
+[33m.[39mpatch([32m`/api/v1/cassettes/${cassette.id}`[39m)
+     [90m     |[39m                                                     
+ [31m[1m^[22m[39m
+     [90m 176 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+     [90m 177 |[39m                 [33m.[39msend({
+     [90m 178 |[39m                     status[33m:[39m [33mTEST_CASS
+ETTES[39m[33m.[39m[33mBAD_CASSETTE[39m[33m.[39mstatus[33m,[39m[0
+m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:175:54)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ PATCH /api/v1/cassettes/:id ÔÇ║ should update 
+cassette machine assignment
+
+    TypeError: Cannot read properties of undefined (reading 'id')
+
+    [0m [90m 185 |[39m         it([32m'should update cassette machine 
+assignment'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 186 |[39m             [36mconst[39m response [33m=[39m 
+[36mawait[39m request(app[33m.[39mgetHttpServer())
+    [31m[1m>[22m[39m[90m 187 |[39m                 
+[33m.[39mpatch([32m`/api/v1/cassettes/${cassette.id}`[39m)
+     [90m     |[39m                                                     
+ [31m[1m^[22m[39m
+     [90m 188 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+     [90m 189 |[39m                 [33m.[39msend({
+     [90m 190 |[39m                     machineId[33m:[39m 
+[36mnull[39m[33m,[39m [90m// Unassign from machine[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:187:54)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ GET /api/v1/cassettes ÔÇ║ should list cassettes 
+with pagination
+
+    expect(received).toHaveProperty(path)
+
+    Expected path: "meta"
+    Received path: []
+
+    Received value: {"cassettes": [[Object], [Object], [Object], 
+[Object]], "count": 4, "data": [[Object], [Object], [Object], [Object]], 
+"pagination": {"limit": 10, "page": 1, "total": 4, "totalPages": 1}, 
+"statistics": {"statusCounts": [Object]}}
+
+    [0m [90m 205 |[39m
+     [90m 206 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'data'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 207 |[39m             expect(response[33m.
+[39mbody)[33m.[39mtoHaveProperty([32m'meta'[39m)[33m;[39m
+     [90m     |[39m                                   
+[31m[1m^[22m[39m
+     [90m 208 |[39m             expect([33mArray[39m[33m.[39misArray
+(response[33m.[39mbody[33m.[39mdata))[33m.[39mtoBe([36mtrue[39m)[
+33m;[39m
+     [90m 209 |[39m         })[33m;[39m
+     [90m 210 |[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:207:35)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ GET /api/v1/cassettes ÔÇ║ should filter 
+cassettes by status
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+    [0m [90m 216 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 217 |[39m
+    [31m[1m>[22m[39m[90m 218 |[39m             expect(response[33m.
+[39mbody[33m.[39mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m
+0[39m)[33m;[39m
+     [90m     |[39m                                               
+[31m[1m^[22m[39m
+     [90m 219 |[39m             
+response[33m.[39mbody[33m.[39mdata[33m.[39mforEach((c[33m:[39m 
+any) [33m=>[39m {
+     [90m 220 |[39m                 expect(c[33m.[39mstatus)[33m.[39
+mtoBe([33mTEST_CASSETTES[39m[33m.[39m[33mBAD_CASSETTE[39m[33m.[39m
+status)[33m;[39m
+     [90m 221 |[39m             })[33m;[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:218:47)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ GET /api/v1/cassettes ÔÇ║ should filter 
+cassettes by customer bank
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+    [0m [90m 229 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 230 |[39m
+    [31m[1m>[22m[39m[90m 231 |[39m             expect(response[33m.
+[39mbody[33m.[39mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m
+0[39m)[33m;[39m
+     [90m     |[39m                                               
+[31m[1m^[22m[39m
+     [90m 232 |[39m             
+response[33m.[39mbody[33m.[39mdata[33m.[39mforEach((c[33m:[39m 
+any) [33m=>[39m {
+     [90m 233 |[39m                 expect(c[33m.[39mcustomerBankId)[
+33m.[39mtoBe(customerBank[33m.[39mid)[33m;[39m
+     [90m 234 |[39m             })[33m;[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:231:47)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ GET /api/v1/cassettes/:id/qr ÔÇ║ should 
+generate QR code for cassette
+
+    TypeError: Cannot read properties of undefined (reading 'id')
+
+    [0m [90m 239 |[39m         it([32m'should generate QR code for 
+cassette'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 240 |[39m             [36mconst[39m response [33m=[39m 
+[36mawait[39m request(app[33m.[39mgetHttpServer())
+    [31m[1m>[22m[39m[90m 241 |[39m                 
+[33m.[39m[36mget[39m([32m`/api/v1/cassettes/${cassette.id}/qr`[39m)
+     [90m     |[39m                                                    
+[31m[1m^[22m[39m
+     [90m 242 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+     [90m 243 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 244 |[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:241:52)
+
+  ÔùÅ Cassettes (e2e) ÔÇ║ DELETE /api/v1/cassettes/:id ÔÇ║ should delete 
+cassette
+
+    TypeError: Cannot read properties of undefined (reading 'id')
+
+    [0m [90m 251 |[39m         it([32m'should delete 
+cassette'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+     [90m 252 |[39m             [36mawait[39m 
+request(app[33m.[39mgetHttpServer())
+    [31m[1m>[22m[39m[90m 253 |[39m                 
+[33m.[39m[36mdelete[39m([32m`/api/v1/cassettes/${cassette.id}`[39m)
+     [90m     |[39m                                                     
+  [31m[1m^[22m[39m
+     [90m 254 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+     [90m 255 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 256 |[39m[0m
+
+      at Object.<anonymous> (cassettes.e2e-spec.ts:253:55)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+FAIL test/machines.e2e-spec.ts (23.806 s)
+  Machines (e2e)
+    POST /api/v1/machines
+      ÔêÜ should create a new machine (196 ms)
+      ÔêÜ should reject duplicate machine code (34 ms)
+      ÔêÜ should reject creation without authentication (17 ms)
+    GET /api/v1/machines/:id
+      ÔêÜ should get machine by ID (42 ms)
+      ÔêÜ should return 404 for non-existent machine (23 ms)
+    GET /api/v1/machines
+      ├ù should list machines with pagination (49 ms)
+      ÔêÜ should filter machines by customer bank (36 ms)
+      ├ù should filter machines by pengelola (58 ms)
+      ├ù should search machines by model name (23 ms)
+    PATCH /api/v1/machines/:id
+      ÔêÜ should update machine details (65 ms)
+      ÔêÜ should update machine status (37 ms)
+    GET /api/v1/machines/:id/analytics
+      ├ù should get machine analytics (16 ms)
+    GET /api/v1/machines/:id/cassettes
+      ├ù should get cassettes linked to machine (16 ms)
+    DELETE /api/v1/machines/:id
+      ÔêÜ should delete machine (53 ms)
+      ÔêÜ should return 404 when deleting non-existent machine (17 ms)
+
+  ÔùÅ Machines (e2e) ÔÇ║ GET /api/v1/machines ÔÇ║ should list machines 
+with pagination
+
+    expect(received).toHaveProperty(path)
+
+    Expected path: "meta"
+    Received path: []
+
+    Received value: {"data": [{"_count": {"cassettes": 0, 
+"problemTickets": 0}, "branchCode": null, "cassetteCount": 0, "city": 
+null, "createdAt": "2026-01-02T10:25:42.089Z", "currentWsid": null, 
+"customerBank": {"bankCode": "BANK-MACH-1767349540970767", "bankName": 
+"Test Bank MACH 1767349540970767", "id": 
+"4938cfa5-98b1-42a1-9948-4e858028bf3d"}, "customerBankId": 
+"4938cfa5-98b1-42a1-9948-4e858028bf3d", "id": 
+"73cb0652-17c0-4cb6-a36f-e3a358a34507", "installationDate": null, 
+"machineCode": "MACH-NEW-1767349540970767", "modelName": "CRM-2000", 
+"notes": null, "pengelola": {"companyName": "Test Pengelola MACH 
+1767349540970767", "id": "2e89c8fb-3511-4a24-9854-4a8449770b2f", 
+"pengelolaCode": "PENG-MACH-1767349540970767"}, "pengelolaId": 
+"2e89c8fb-3511-4a24-9854-4a8449770b2f", "physicalLocation": "Jakarta Head 
+Office", "province": null, "serialNumberManufacturer": 
+"SN-NEW-1767349540970767", "status": "OPERATIONAL", "updatedAt": 
+"2026-01-02T10:25:42.089Z"}, {"_count": {"cassettes": 0, 
+"problemTickets": 0}, "branchCode": null, "cassetteCount": 0, "city": 
+null, "createdAt": "2026-01-02T10:25:41.610Z", "currentWsid": 
+"WS-1767349540496625", "customerBank": {"bankCode": 
+"BANK-CASS-1767349540496625", "bankName": "Test Bank CASS 
+1767349540496625", "id": "73e473d3-9bbc-4f5b-a8d9-89011b38f890"}, 
+"customerBankId": "73e473d3-9bbc-4f5b-a8d9-89011b38f890", "id": 
+"3f869159-7683-473e-b392-595df4639b4e", "installationDate": null, 
+"machineCode": "CASS-M-1767349540496625", "modelName": "TestModel", 
+"notes": null, "pengelola": {"companyName": "Test Pengelola CASS 
+1767349540496625", "id": "42b3b2ba-e2a5-43ab-9786-5e0c6522983e", 
+"pengelolaCode": "PENG-CASS-1767349540496625"}, "pengelolaId": 
+"42b3b2ba-e2a5-43ab-9786-5e0c6522983e", "physicalLocation": "Test 
+Location", "province": null, "serialNumberManufacturer": 
+"SN-1767349540496625", "status": "OPERATIONAL", "updatedAt": 
+"2026-01-02T10:25:41.610Z"}, {"_count": {"cassettes": 0, 
+"problemTickets": 0}, "branchCode": null, "cassetteCount": 0, "city": 
+null, "createdAt": "2026-01-02T10:25:40.557Z", "currentWsid": 
+"WS-TEST-1767349539773", "customerBank": {"bankCode": 
+"BANK-1767349539773", "bankName": "Test Bank 1767349539773", "id": 
+"9d63eb2a-1a71-4929-b2cd-89e42244e020"}, "customerBankId": 
+"9d63eb2a-1a71-4929-b2cd-89e42244e020", "id": 
+"402658dd-4773-495c-84b2-a38791901404", "installationDate": null, 
+"machineCode": "MACH-1767349539773", "modelName": "TestModel", "notes": 
+null, "pengelola": {"companyName": "Test Pengelola 1767349539773", "id": 
+"70d41d8d-3e58-453d-b392-a6109d7f601b", "pengelolaCode": 
+"PENG-1767349539773"}, "pengelolaId": 
+"70d41d8d-3e58-453d-b392-a6109d7f601b", "physicalLocation": "Test 
+Location", "province": null, "serialNumberManufacturer": 
+"SN-1767349539773", "status": "OPERATIONAL", "updatedAt": 
+"2026-01-02T10:25:40.557Z"}], "pagination": {"limit": 10, "page": 1, 
+"total": 3, "totalPages": 1}}
+
+    [0m [90m 139 |[39m
+     [90m 140 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'data'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 141 |[39m             expect(response[33m.
+[39mbody)[33m.[39mtoHaveProperty([32m'meta'[39m)[33m;[39m
+     [90m     |[39m                                   
+[31m[1m^[22m[39m
+     [90m 142 |[39m             expect([33mArray[39m[33m.[39misArray
+(response[33m.[39mbody[33m.[39mdata))[33m.[39mtoBe([36mtrue[39m)[
+33m;[39m
+     [90m 143 |[39m         })[33m;[39m
+     [90m 144 |[39m[0m
+
+      at Object.<anonymous> (machines.e2e-spec.ts:141:35)
+
+  ÔùÅ Machines (e2e) ÔÇ║ GET /api/v1/machines ÔÇ║ should filter machines 
+by pengelola
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2e89c8fb-3511-4a24-9854-4a8449770b2f"
+    Received: "42b3b2ba-e2a5-43ab-9786-5e0c6522983e"
+
+    [0m [90m 165 |[39m             expect(response[33m.[39mbody[33m.
+[39mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[
+39m
+     [90m 166 |[39m             
+response[33m.[39mbody[33m.[39mdata[33m.[39mforEach((m[33m:[39m 
+any) [33m=>[39m {
+    [31m[1m>[22m[39m[90m 167 |[39m                 expect(m[33m.[3
+9mpengelolaId)[33m.[39mtoBe(pengelolaOrg[33m.[39mid)[33m;[39m
+     [90m     |[39m                                       
+[31m[1m^[22m[39m
+     [90m 168 |[39m             })[33m;[39m
+     [90m 169 |[39m         })[33m;[39m
+     [90m 170 |[39m[0m
+
+      at machines.e2e-spec.ts:167:39
+          at Array.forEach (<anonymous>)
+      at Object.<anonymous> (machines.e2e-spec.ts:166:32)
+
+  ÔùÅ Machines (e2e) ÔÇ║ GET /api/v1/machines ÔÇ║ should search machines 
+by model name
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+    [0m [90m 176 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 177 |[39m
+    [31m[1m>[22m[39m[90m 178 |[39m             expect(response[33m.
+[39mbody[33m.[39mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m
+0[39m)[33m;[39m
+     [90m     |[39m                                               
+[31m[1m^[22m[39m
+     [90m 179 |[39m         })[33m;[39m
+     [90m 180 |[39m     })[33m;[39m
+     [90m 181 |[39m[0m
+
+      at Object.<anonymous> (machines.e2e-spec.ts:178:47)
+
+  ÔùÅ Machines (e2e) ÔÇ║ GET /api/v1/machines/:id/analytics ÔÇ║ should 
+get machine analytics
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 212 |[39m                 [33m.[39m[36mget[39m([32m`/
+api/v1/machines/${machine.id}/analytics`[39m)
+     [90m 213 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+    [31m[1m>[22m[39m[90m 214 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 215 |[39m
+     [90m 216 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'machineId'[39m)[33m;[39m
+     [90m 217 |[39m             expect(response[33m.[39mbody[33m.[39
+mmachineId)[33m.[39mtoBe(machine[33m.[39mid)[33m;[39m[0m
+
+      at Object.<anonymous> (machines.e2e-spec.ts:214:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Machines (e2e) ÔÇ║ GET /api/v1/machines/:id/cassettes ÔÇ║ should 
+get cassettes linked to machine
+
+    expected 200 "OK", got 404 "Not Found"
+
+    [0m [90m 224 |[39m                 [33m.[39m[36mget[39m([32m`/
+api/v1/machines/${machine.id}/cassettes`[39m)
+     [90m 225 |[39m                 
+[33m.[39m[36mset[39m([32m'Authorization'[39m[33m,[39m 
+[32m`Bearer ${adminToken}`[39m)
+    [31m[1m>[22m[39m[90m 226 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 227 |[39m
+     [90m 228 |[39m             expect([33mArray[39m[33m.[39misArray
+(response[33m.[39mbody))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+     [90m 229 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (machines.e2e-spec.ts:226:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+FAIL test/auth.e2e-spec.ts (24.136 s)
+  Auth (e2e)
+    POST /api/v1/auth/login
+      ├ù should login HitachiUser with valid credentials (573 ms)
+      ├ù should login PengelolaUser with valid credentials (280 ms)
+      ÔêÜ should reject login with invalid username (28 ms)
+      ÔêÜ should reject login with invalid password (206 ms)
+      ├ù should reject login with missing credentials (30 ms)
+    POST /api/v1/auth/refresh
+      ├ù should refresh access token with valid refresh token (17 ms)
+      ÔêÜ should reject invalid refresh token (16 ms)
+    POST /api/v1/auth/logout
+      ├ù should logout user successfully (16 ms)
+      ├ù should reject logout without token (35 ms)
+    GET /api/v1/auth/profile
+      ├ù should get current user profile (19 ms)
+      ÔêÜ should reject profile request without token (18 ms)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/login ÔÇ║ should login HitachiUser 
+with valid credentials
+
+    expect(received).toHaveProperty(path)
+
+    Expected path: "refresh_token"
+    Received path: []
+
+    Received value: {"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+.eyJzdWIiOiI4ZDYwZjZkNi1hYjkyLTQ3YWItYjQ3OC05MDQwZjU2MGYwNDAiLCJ1c2VybmFtZ
+SI6ImF1dGhfYWRtaW5fMTc2NzM0OTU0MTEyMzgwNSIsImVtYWlsIjoiYXV0aF9hZG1pbl8xNzY
+3MzQ5NTQxMTIzODA1QGV4YW1wbGUuY29tIiwicm9sZSI6IlNVUEVSX0FETUlOIiwidXNlclR5c
+GUiOiJISVRBQ0hJIiwiZGVwYXJ0bWVudCI6IlJFUEFJUl9DRU5URVIiLCJpYXQiOjE3NjczNDk
+1NDIsImV4cCI6MTc2NzQzNTk0Mn0.N320z1_IROutMXgs87VQe7fpL3jRCHykbZke2xgfIMQ"}
+
+    [0m [90m 81 |[39m             expect(response[33m.[39mbody)[33m.
+[39mtoHaveProperty([32m'tokens'[39m)[33m;[39m
+     [90m 82 |[39m             expect(response[33m.[39mbody[33m.[39m
+tokens)[33m.[39mtoHaveProperty([32m'access_token'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 83 |[39m             expect(response[33m.
+[39mbody[33m.[39mtokens)[33m.[39mtoHaveProperty([32m'refresh_token'[
+39m)[33m;[39m
+     [90m    |[39m                                          
+[31m[1m^[22m[39m
+     [90m 84 |[39m             expect(response[33m.[39mbody)[33m.[39
+mtoHaveProperty([32m'user'[39m)[33m;[39m
+     [90m 85 |[39m             expect(response[33m.[39mbody[33m.[39m
+user[33m.[39musername)[33m.[39mtoBe(adminUser[33m.[39musername)[33m
+;[39m
+     [90m 86 |[39m             expect(response[33m.[39mbody[33m.[39m
+user[33m.[39mrole)[33m.[39mtoBe(adminUser[33m.[39mrole)[33m;[39m[
+0m
+
+      at Object.<anonymous> (auth.e2e-spec.ts:83:42)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/login ÔÇ║ should login 
+PengelolaUser with valid credentials
+
+    expect(received).toHaveProperty(path)
+
+    Expected path: "refresh_token"
+    Received path: []
+
+    Received value: {"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+.eyJzdWIiOiJjYTE2MDIzYi0wYzlhLTQ3MmMtYjUwMS01NTcxM2QzNWEzMjIiLCJ1c2VybmFtZ
+SI6ImF1dGhfcGVuZ2Vsb2xhXzE3NjczNDk1NDExMjM4MDUiLCJlbWFpbCI6ImF1dGhfcGVuZ2V
+sb2xhXzE3NjczNDk1NDExMjM4MDVAZXhhbXBsZS5jb20iLCJyb2xlIjoiQURNSU4iLCJ1c2VyV
+HlwZSI6IlBFTkdFTE9MQSIsInBlbmdlbG9sYUlkIjoiYmU5Yzg3YjYtNzIyYy00NDc4LWExNzQ
+tYTc5YWRjY2UzNTQzIiwiaWF0IjoxNzY3MzQ5NTQyLCJleHAiOjE3Njc0MzU5NDJ9.in5MCmi1
+VwxqYIPxXUd0D7bc4j1YmTQ2jxxmzeVhZMg"}
+
+    [0m [90m  98 |[39m             expect(response[33m.[39mbody)[33m
+.[39mtoHaveProperty([32m'tokens'[39m)[33m;[39m
+     [90m  99 |[39m             expect(response[33m.[39mbody[33m.[39
+mtokens)[33m.[39mtoHaveProperty([32m'access_token'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 100 |[39m             expect(response[33m.
+[39mbody[33m.[39mtokens)[33m.[39mtoHaveProperty([32m'refresh_token'
+[39m)[33m;[39m
+     [90m     |[39m                                          
+[31m[1m^[22m[39m
+     [90m 101 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'user'[39m)[33m;[39m
+     [90m 102 |[39m             expect(response[33m.[39mbody[33m.[39
+muser[33m.[39musername)[33m.[39mtoBe(pengelolaUser[33m.[39musername)
+[33m;[39m
+     [90m 103 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (auth.e2e-spec.ts:100:42)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/login ÔÇ║ should reject login with 
+missing credentials
+
+    expected 400 "Bad Request", got 401 "Unauthorized"
+
+    [0m [90m 131 |[39m                 
+[33m.[39mpost([32m'/api/v1/auth/login'[39m)
+     [90m 132 |[39m                 [33m.[39msend({})
+    [31m[1m>[22m[39m[90m 133 |[39m                 
+[33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 134 |[39m         })[33m;[39m
+     [90m 135 |[39m     })[33m;[39m
+     [90m 136 |[39m[0m
+
+      at Object.<anonymous> (auth.e2e-spec.ts:133:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/refresh ÔÇ║ should refresh access 
+token with valid refresh token
+
+    TypeError: Cannot read properties of undefined (reading 
+'refresh_token')
+
+    [0m [90m 145 |[39m                 })[33m;[39m
+     [90m 146 |[39m
+    [31m[1m>[22m[39m[90m 147 |[39m             [36mconst[39m 
+refreshToken [33m=[39m loginResponse[33m.[39mbody[33m.[39mtokens[33
+m.[39mrefresh_token[33m;[39m
+     [90m     |[39m                                                     
+       [31m[1m^[22m[39m
+     [90m 148 |[39m
+     [90m 149 |[39m             [90m// Use refresh token to get new 
+access token[39m
+     [90m 150 |[39m             [36mconst[39m response [33m=[39m 
+[36mawait[39m request(app[33m.[39mgetHttpServer())[0m
+
+      at Object.<anonymous> (auth.e2e-spec.ts:147:60)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/logout ÔÇ║ should logout user 
+successfully
+
+    Login failed for auth_admin_1767349541123805: 
+{"statusCode":429,"message":"ThrottlerException: Too Many Requests"}
+
+    [0m [90m 156 |[39m
+     [90m 157 |[39m     [36mif[39m ([33m![39mresponse[33m.[39mbody
+[33m.[39mtokens[33m?[39m[33m.[39maccess_token) {
+    [31m[1m>[22m[39m[90m 158 |[39m         [36mthrow[39m 
+[36mnew[39m [33mError[39m([32m`Login failed for ${username}: 
+${JSON.stringify(response.body)}`[39m)[33m;[39m
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 159 |[39m     }
+     [90m 160 |[39m
+     [90m 161 |[39m     [36mreturn[39m response[33m.[39mbody[33m.[
+39mtokens[33m.[39maccess_token[33m;[39m[0m
+
+      at loginUser (test-helpers.ts:158:15)
+      at Object.<anonymous> (auth.e2e-spec.ts:170:27)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/logout ÔÇ║ should reject logout 
+without token
+
+    expected 401 "Unauthorized", got 201 "Created"
+
+    [0m [90m 186 |[39m             [36mawait[39m 
+request(app[33m.[39mgetHttpServer())
+     [90m 187 |[39m                 
+[33m.[39mpost([32m'/api/v1/auth/logout'[39m)
+    [31m[1m>[22m[39m[90m 188 |[39m                 
+[33m.[39mexpect([35m401[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 189 |[39m         })[33m;[39m
+     [90m 190 |[39m     })[33m;[39m
+     [90m 191 |[39m[0m
+
+      at Object.<anonymous> (auth.e2e-spec.ts:188:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Auth (e2e) ÔÇ║ GET /api/v1/auth/profile ÔÇ║ should get current user 
+profile
+
+    Login failed for auth_admin_1767349541123805: 
+{"statusCode":429,"message":"ThrottlerException: Too Many Requests"}
+
+    [0m [90m 156 |[39m
+     [90m 157 |[39m     [36mif[39m ([33m![39mresponse[33m.[39mbody
+[33m.[39mtokens[33m?[39m[33m.[39maccess_token) {
+    [31m[1m>[22m[39m[90m 158 |[39m         [36mthrow[39m 
+[36mnew[39m [33mError[39m([32m`Login failed for ${username}: 
+${JSON.stringify(response.body)}`[39m)[33m;[39m
+     [90m     |[39m               [31m[1m^[22m[39m
+     [90m 159 |[39m     }
+     [90m 160 |[39m
+     [90m 161 |[39m     [36mreturn[39m response[33m.[39mbody[33m.[
+39mtokens[33m.[39maccess_token[33m;[39m[0m
+
+      at loginUser (test-helpers.ts:158:15)
+      at Object.<anonymous> (auth.e2e-spec.ts:194:27)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+FAIL test/users.e2e-spec.ts (24.683 s)
+  Users (e2e)
+    POST /api/v1/users/hitachi
+      ÔêÜ should create a new Hitachi user (1050 ms)
+      ÔêÜ should reject duplicate username (54 ms)
+      ├ù should reject invalid email format (36 ms)
+    POST /api/v1/users/pengelola
+      ÔêÜ should create a new Pengelola user (768 ms)
+      ├ù should reject Pengelola user without pengelolaId (41 ms)
+    GET /api/v1/users/hitachi/:id
+      ÔêÜ should get Hitachi user by ID (44 ms)
+      ÔêÜ should return 404 for non-existent user (24 ms)
+    GET /api/v1/users/hitachi
+      ├ù should list Hitachi users (34 ms)
+      ├ù should filter users by role (34 ms)
+    PATCH /api/v1/users/hitachi/:id
+      ÔêÜ should update Hitachi user profile (40 ms)
+      ÔêÜ should update user role (24 ms)
+    PATCH /api/v1/users/hitachi/:id/password
+      ÔêÜ should change user password (495 ms)
+    PATCH /api/v1/users/hitachi/:id/deactivate
+      ÔêÜ should deactivate user (15 ms)
+      ÔêÜ should reactivate user (14 ms)
+    DELETE /api/v1/users/hitachi/:id
+      ÔêÜ should delete Hitachi user (21 ms)
+    DELETE /api/v1/users/pengelola/:id
+      ÔêÜ should delete Pengelola user (14 ms)
+
+  ÔùÅ Users (e2e) ÔÇ║ POST /api/v1/users/hitachi ÔÇ║ should reject 
+invalid email format
+
+    expected 400 "Bad Request", got 409 "Conflict"
+
+    [0m [90m 112 |[39m                     fullName[33m:[39m 
+[32m'Test Invalid Email'[39m[33m,[39m
+     [90m 113 |[39m                 })
+    [31m[1m>[22m[39m[90m 114 |[39m                 
+[33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 115 |[39m         })[33m;[39m
+     [90m 116 |[39m     })[33m;[39m
+     [90m 117 |[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:114:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Users (e2e) ÔÇ║ POST /api/v1/users/pengelola ÔÇ║ should reject 
+Pengelola user without pengelolaId
+
+    expected 400 "Bad Request", got 409 "Conflict"
+
+    [0m [90m 151 |[39m                     fullName[33m:[39m 
+[32m'Test No Org'[39m[33m,[39m
+     [90m 152 |[39m                 })
+    [31m[1m>[22m[39m[90m 153 |[39m                 
+[33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 154 |[39m         })[33m;[39m
+     [90m 155 |[39m     })[33m;[39m
+     [90m 156 |[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:153:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Users (e2e) ÔÇ║ GET /api/v1/users/hitachi ÔÇ║ should list Hitachi 
+users
+
+    expect(received).toHaveProperty(path)
+
+    Expected path: "data"
+    Received path: []
+
+    Received value: [{"createdAt": "2026-01-02T10:25:41.723Z", 
+"department": "REPAIR_CENTER", "email": 
+"new_hitachi_1767349540249213@example.com", "fullName": "Test RC Staff", 
+"id": "61482d61-2dcf-44e8-935b-1397d7f8a832", "lastLogin": null, "role": 
+"RC_STAFF", "status": "ACTIVE", "username": 
+"new_hitachi_1767349540249213"}, {"createdAt": 
+"2026-01-02T10:25:41.367Z", "department": "REPAIR_CENTER", "email": 
+"auth_admin_1767349541123805@example.com", "fullName": "Test auth_admin 
+1767349541123805", "id": "8d60f6d6-ab92-47ab-b478-9040f560f040", 
+"lastLogin": "2026-01-02T10:25:42.159Z", "role": "SUPER_ADMIN", "status": 
+"ACTIVE", "username": "auth_admin_1767349541123805"}, {"createdAt": 
+"2026-01-02T10:25:40.469Z", "department": "REPAIR_CENTER", "email": 
+"usr_admin_1767349540249213@example.com", "fullName": "Test usr_admin 
+1767349540249213", "id": "5e268cfb-f396-4982-8a21-b842e2abf3b9", 
+"lastLogin": "2026-01-02T10:25:40.789Z", "role": "SUPER_ADMIN", "status": 
+"ACTIVE", "username": "usr_admin_1767349540249213"}, {"createdAt": 
+"2026-01-02T10:09:14.278Z", "department": "REPAIR_CENTER", "email": 
+"invalid-email", "fullName": "Test Invalid Email", "id": 
+"bc168da2-8fe8-449e-beac-b75b02bc4291", "lastLogin": null, "role": 
+"RC_STAFF", "status": "ACTIVE", "username": 
+"invalid_email_1767348551630970"}]
+
+    [0m [90m 181 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 182 |[39m
+    [31m[1m>[22m[39m[90m 183 |[39m             expect(response[33m.
+[39mbody)[33m.[39mtoHaveProperty([32m'data'[39m)[33m;[39m
+     [90m     |[39m                                   
+[31m[1m^[22m[39m
+     [90m 184 |[39m             expect([33mArray[39m[33m.[39misArray
+(response[33m.[39mbody[33m.[39mdata))[33m.[39mtoBe([36mtrue[39m)[
+33m;[39m
+     [90m 185 |[39m             expect(response[33m.[39mbody[33m.[39
+mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+     [90m 186 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:183:35)
+
+  ÔùÅ Users (e2e) ÔÇ║ GET /api/v1/users/hitachi ÔÇ║ should filter users 
+by role
+
+    TypeError: Cannot read properties of undefined (reading 'forEach')
+
+    [0m [90m 193 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 194 |[39m
+    [31m[1m>[22m[39m[90m 195 |[39m             
+response[33m.[39mbody[33m.[39mdata[33m.[39mforEach((user[33m:[39m 
+any) [33m=>[39m {
+     [90m     |[39m                                [31m[1m^[22m[39m
+     [90m 196 |[39m                 expect(user[33m.[39mrole)[33m.[3
+9mtoBe([33mHitachiUserRole[39m[33m.[39m[33mRC_STAFF[39m)[33m;[39m
+     [90m 197 |[39m             })[33m;[39m
+     [90m 198 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:195:32)
+
+[33m[HCM-Backend][39m [33m34340[39m 1/2/2026, 5:25:43 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T10:25:43.702Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "admin_r_1767349543254620",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+PASS test/repairs.e2e-spec.ts
+  Repairs Integration (e2e)
+    ÔêÜ 1. Admin should Create Repair Tickets (Bulk from Problem Ticket) 
+(88 ms)
+    ÔêÜ 2. Admin should Take Ticket (27 ms)
+    ÔêÜ 3. Admin should Complete Repair (56 ms)
+    ÔêÜ 4. Status Sync Check: Problem Ticket should be RESOLVED (5 ms)
+
+Test Suites: 5 failed, 3 passed, 8 total
+Tests:       30 failed, 45 passed, 75 total
+Snapshots:   0 total
+Time:        26.512 s, estimated 37 s
+Ran all test suites.

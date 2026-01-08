@@ -33,7 +33,9 @@ import {
   Check,
   Plus,
   Edit,
-  Loader2
+  Loader2,
+  AlertTriangle,
+  FileText
 } from 'lucide-react';
 import Link from 'next/link';
 import { TableSkeleton, StatsCardSkeleton } from '@/components/ui/loading';
@@ -65,11 +67,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function CassettesPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
   const { toast } = useToast();
+  const isBank = user?.userType === 'BANK';
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInputValue, setSearchInputValue] = useState(''); // Local state for input (immediate update)
   const [currentPage, setCurrentPage] = useState(1);
@@ -158,10 +162,23 @@ export default function CassettesPage() {
   const [addCassetteDialogOpen, setAddCassetteDialogOpen] = useState(false);
   const [editCassetteDialogOpen, setEditCassetteDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [markBrokenDialogOpen, setMarkBrokenDialogOpen] = useState(false);
   const [cassetteToEdit, setCassetteToEdit] = useState<any>(null);
   const [cassetteToDelete, setCassetteToDelete] = useState<any>(null);
+  const [cassetteToMarkBroken, setCassetteToMarkBroken] = useState<any>(null);
+  const [markBrokenReason, setMarkBrokenReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [markingBroken, setMarkingBroken] = useState(false);
+  const [selectedCassetteIds, setSelectedCassetteIds] = useState<string[]>([]);
+  const [bulkMarkBrokenDialogOpen, setBulkMarkBrokenDialogOpen] = useState(false);
+  const [bulkMarkBrokenReason, setBulkMarkBrokenReason] = useState('');
+  const [bulkMarkingBroken, setBulkMarkingBroken] = useState(false);
+  const [unmarkBrokenDialogOpen, setUnmarkBrokenDialogOpen] = useState(false);
+  const [cassetteToUnmark, setCassetteToUnmark] = useState<any>(null);
+  const [unmarkBrokenReason, setUnmarkBrokenReason] = useState('');
+  const [unmarkingBroken, setUnmarkingBroken] = useState(false);
+  const [quickCreateTicketDialogOpen, setQuickCreateTicketDialogOpen] = useState(false);
   
   // Form States
   const [formData, setFormData] = useState({
@@ -547,12 +564,140 @@ export default function CassettesPage() {
     }
   };
 
+  const handleMarkAsBroken = async () => {
+    if (!cassetteToMarkBroken || !markBrokenReason.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Alasan harus diisi',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      setMarkingBroken(true);
+      await api.patch(`/cassettes/${cassetteToMarkBroken.id}/mark-broken`, {
+        reason: markBrokenReason.trim(),
+      });
+      toast({
+        title: 'Berhasil',
+        description: 'Kaset berhasil ditandai sebagai rusak',
+      });
+      setMarkBrokenDialogOpen(false);
+      setCassetteToMarkBroken(null);
+      setMarkBrokenReason('');
+      refetch();
+    } catch (error: any) {
+      console.error('Error marking cassette as broken:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Gagal menandai kaset sebagai rusak. Silakan coba lagi.';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+        duration: 5000,
+      });
+    } finally {
+      setMarkingBroken(false);
+    }
+  };
+
+  const handleUnmarkAsBroken = async () => {
+    if (!cassetteToUnmark) return;
+
+    try {
+      setUnmarkingBroken(true);
+      await api.patch(`/cassettes/${cassetteToUnmark.id}/unmark-broken`, {
+        reason: unmarkBrokenReason.trim() || undefined,
+      });
+      toast({
+        title: 'Berhasil',
+        description: 'Status kaset berhasil dikembalikan menjadi OK',
+      });
+      setUnmarkBrokenDialogOpen(false);
+      setCassetteToUnmark(null);
+      setUnmarkBrokenReason('');
+      refetch();
+    } catch (error: any) {
+      console.error('Error unmarking cassette as broken:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Gagal mengembalikan status kaset. Silakan coba lagi.';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+        duration: 5000,
+      });
+    } finally {
+      setUnmarkingBroken(false);
+    }
+  };
+
+  const handleBulkMarkAsBroken = async () => {
+    if (selectedCassetteIds.length === 0 || !bulkMarkBrokenReason.trim()) return;
+
+    try {
+      setBulkMarkingBroken(true);
+      const response = await api.patch('/cassettes/mark-broken-bulk', {
+        cassetteIds: selectedCassetteIds,
+        reason: bulkMarkBrokenReason.trim(),
+      });
+      
+      const { success, failed } = response.data;
+      
+      if (failed.length > 0) {
+        toast({
+          title: 'Sebagian Gagal',
+          description: `${success.length} kaset berhasil ditandai, ${failed.length} kaset gagal`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Berhasil',
+          description: `${success.length} kaset berhasil ditandai sebagai rusak`,
+        });
+      }
+      
+      setBulkMarkBrokenDialogOpen(false);
+      setBulkMarkBrokenReason('');
+      setSelectedCassetteIds([]);
+      refetch();
+    } catch (error: any) {
+      console.error('Error bulk marking cassettes as broken:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Gagal menandai kaset sebagai rusak. Silakan coba lagi.';
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+        duration: 5000,
+      });
+    } finally {
+      setBulkMarkingBroken(false);
+    }
+  };
+
+  const handleQuickCreateTicket = async () => {
+    const brokenCassettes = paginatedCassettes.filter((c: any) => 
+      c.status === 'BAD' && selectedCassetteIds.includes(c.id)
+    );
+    
+    if (brokenCassettes.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Tidak ada kaset rusak yang dipilih',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Redirect to create service order page with pre-selected cassettes
+    const cassetteIds = brokenCassettes.map((c: any) => c.id).join(',');
+    router.push(`/service-orders/create?type=repair&cassettes=${cassetteIds}`);
+  };
+
   // Additional role-based permissions
   const isHitachi = user?.userType === 'HITACHI';
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const isRCManager = user?.role === 'RC_MANAGER';
   const isRCStaff = user?.role === 'RC_STAFF';
-  const isTechnician = user?.role === 'TECHNICIAN';
   const canManageCassettes = isHitachi && isSuperAdmin;
   
   // Status counts are now provided by backend in response.statistics.statusCounts
@@ -565,7 +710,7 @@ export default function CassettesPage() {
   const endIndex = Math.min(startIndex + paginatedCassettes.length, effectiveTotalItems);
 
   const exportToCSV = () => {
-    const headers = ['Serial Number', 'Cassette Type', 'Machine Type', 'Bank', 'Status', 'Usage Type', 'Cycle Problem (SO)', 'Repair Count', 'Notes'];
+    const headers = ['Serial Number', 'Cassette Type', 'Machine Type', 'Bank', 'Status', 'Usage Type', 'Cycle Problem (SO)', 'Repair Count', 'Pengelola'];
     // Note: Export only current page data. For full export, use server-side export endpoint
     const csvData = paginatedCassettes.map((c: any) => {
       const singleCassetteCount = c._count?.problemTickets || 0;
@@ -581,7 +726,68 @@ export default function CassettesPage() {
         c.usageType === 'MAIN' ? 'Utama' : c.usageType === 'BACKUP' ? 'Cadangan' : '-',
         problemCount,
         repairCount,
-        (c.notes || '-').replace(/"/g, '""') // Escape quotes in notes
+        ((() => {
+          // Priority: Show pengelola from machine (actual ownership/management)
+          // Hanya tampilkan pengelola jika kaset terpasang di machine dan machine punya pengelola
+          
+          // Cek apakah kaset memiliki machine
+          if (c.machine) {
+            // Kaset memiliki machine - hanya tampilkan pengelola dari machine
+            const machinePengelola = c.machine?.pengelola;
+            
+            if (machinePengelola) {
+              // Machine memiliki pengelola - tampilkan pengelola tersebut
+              const name = machinePengelola.companyName || machinePengelola.companyAbbreviation || machinePengelola.pengelolaCode;
+              if (name) {
+                // SECURITY: If user is pengelola, only show if it's their own
+                if (isPengelola && user?.pengelolaId) {
+                  if (machinePengelola.id !== user.pengelolaId) {
+                    return '-';
+                  }
+                }
+                return name;
+              }
+            }
+            
+            // Kaset punya machine tapi machine tidak punya pengelola - tampilkan "-"
+            return '-';
+          }
+          
+          // Fallback: Kaset TIDAK memiliki machine (standalone cassette)
+          // Untuk kaset standalone, tampilkan pengelola dari bank assignments
+          const assignments = c.customerBank?.pengelolaAssignments;
+          if (assignments && Array.isArray(assignments) && assignments.length > 0) {
+            let filteredAssignments = assignments
+              .filter((a: any) => a?.pengelola) // Filter hanya yang memiliki pengelola
+              .map((a: any) => {
+                const pengelola = a.pengelola;
+                return {
+                  id: pengelola?.id,
+                  name: pengelola?.companyName || pengelola?.companyAbbreviation || pengelola?.pengelolaCode,
+                };
+              })
+              .filter((a: any) => a.name); // Hapus yang null/undefined/empty
+            
+            // SECURITY: If user is pengelola, only show their own pengelola name
+            if (isPengelola && user?.pengelolaId) {
+              filteredAssignments = filteredAssignments.filter((a: any) => 
+                a.id === user.pengelolaId
+              );
+            }
+            
+            // Deduplicate by pengelola ID to avoid duplicate names
+            const uniquePengelola = new Map<string, string>();
+            filteredAssignments.forEach((a: any) => {
+              if (a.id && !uniquePengelola.has(a.id)) {
+                uniquePengelola.set(a.id, a.name);
+              }
+            });
+            
+            const names = Array.from(uniquePengelola.values());
+            return names.length > 0 ? names.join(', ') : '-';
+          }
+          return '-';
+        })()).replace(/"/g, '""') // Escape quotes in pengelola names
       ];
     });
     
@@ -590,13 +796,67 @@ export default function CassettesPage() {
       ...csvData.map((row: any[]) => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
     
+    // Generate dynamic filename based on active filters
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filenameParts: string[] = ['cassettes'];
+    
+    // Add status filter to filename
+    if (selectedStatus) {
+      // Convert status to filename-friendly format
+      const statusMap: Record<string, string> = {
+        'OK': 'ok',
+        'BAD': 'rusak',
+        'IN_REPAIR': 'dalam_perbaikan',
+        'READY_FOR_PICKUP': 'siap_diambil',
+        'IN_TRANSIT_TO_RC': 'dalam_perjalanan_rc',
+        'IN_TRANSIT_TO_PENGELOLA': 'dalam_perjalanan_pengelola',
+        'SCRAPPED': 'tidak_layak_pakai',
+      };
+      const statusSlug = statusMap[selectedStatus] || selectedStatus.toLowerCase().replace(/_/g, '_');
+      filenameParts.push(statusSlug);
+    }
+    
+    // Add bank filter to filename
+    if (selectedBankId) {
+      const selectedBank = banks.find(b => b.id === selectedBankId);
+      if (selectedBank) {
+        // Use bank code if available, otherwise use sanitized bank name
+        const bankSlug = (selectedBank.bankCode || selectedBank.bankName || 'bank')
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_|_$/g, '');
+        filenameParts.push(bankSlug);
+      }
+    }
+    
+    // Add search term to filename (if exists and not too long)
+    if (searchInputValue && searchInputValue.trim()) {
+      const searchSlug = searchInputValue
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '_')
+        .substring(0, 30); // Limit to 30 chars
+      if (searchSlug) {
+        filenameParts.push(searchSlug);
+      }
+    }
+    
+    // If no filters, add "all"
+    if (filenameParts.length === 1) {
+      filenameParts.push('all');
+    }
+    
+    // Add date and extension
+    filenameParts.push(dateStr);
+    const filename = `${filenameParts.join('_')}.csv`;
+    
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const userType = isHitachi ? 'hitachi' : 'pengelola';
-    const dateStr = new Date().toISOString().split('T')[0];
-    a.download = `cassettes-${userType}-${dateStr}.csv`;
+    a.download = filename;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -613,45 +873,6 @@ export default function CassettesPage() {
   return (
     <PageLayout>
 
-      {/* Role-based info banner */}
-      {isPengelola && (
-        <Card className="mb-6 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-                <Package className="h-5 w-5 text-[#2563EB] dark:text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-[#2563EB] dark:text-blue-400">Mode Pengelola</h3>
-                <p className="text-sm text-[#1E40AF] dark:text-blue-300 mt-1">
-                  Anda melihat kaset dari <strong>bank-bank yang di-assign</strong> ke pengelola Anda.
-                  {isTechnician 
-                    ? ' Mode tampilan saja (read-only).'
-                    : ''}
-                </p>
-                {paginatedCassettes.length === 0 && totalItems === 0 && (
-                  <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
-                    <p className="text-sm text-amber-800 dark:text-amber-300">
-                      <strong>⚠️ Tidak ada data kaset</strong>
-                    </p>
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                      Kemungkinan: Pengelola Anda belum memiliki bank assignment, atau belum ada kaset untuk bank yang di-assign.
-                    </p>
-                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                      Hubungi administrator untuk mengatur bank assignment.
-                    </p>
-                  </div>
-                )}
-                {user?.pengelolaId && (
-                  <p className="text-xs text-[#2563EB] dark:text-blue-400 mt-2">
-                    Pengelola ID: {user.pengelolaId}
-                  </p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -797,22 +1018,24 @@ export default function CassettesPage() {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
             <div className="flex flex-1 gap-2 w-full sm:max-w-2xl">
-              <Select 
-                value={selectedBankId || 'all'} 
-                onValueChange={(value) => setSelectedBankId(value === 'all' ? null : value)}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by Bank" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Banks</SelectItem>
-                  {banks.map((bank) => (
-                    <SelectItem key={bank.id} value={bank.id}>
-                      {bank.bankName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {!isBank && (
+                <Select 
+                  value={selectedBankId || 'all'} 
+                  onValueChange={(value) => setSelectedBankId(value === 'all' ? null : value)}
+                >
+                  <SelectTrigger className="w-full sm:w-[180px] h-9 sm:h-10 text-xs sm:text-sm">
+                    <SelectValue placeholder="Filter by Bank" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[200px] sm:max-h-none w-[var(--radix-select-trigger-width)]">
+                    <SelectItem value="all" className="text-xs sm:text-sm py-1.5 sm:py-2">All Banks</SelectItem>
+                    {banks.map((bank) => (
+                      <SelectItem key={bank.id} value={bank.id} className="text-xs sm:text-sm py-1.5 sm:py-2">
+                        {bank.bankName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-slate-500 h-4 w-4" />
                 <Input
@@ -825,21 +1048,25 @@ export default function CassettesPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Per halaman:</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
+              <span className="text-xs sm:text-sm text-muted-foreground">Per halaman:</span>
+              <Select
+                value={itemsPerPage.toString()}
+                onValueChange={(value) => {
+                  setItemsPerPage(Number(value));
                   setCurrentPage(1);
                 }}
-                  className="px-3 py-2 border rounded-md text-sm bg-white dark:bg-slate-700 border-gray-200 dark:border-slate-600 text-gray-900 dark:text-slate-100 hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
               >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
+                <SelectTrigger className="w-16 sm:w-20 h-9 sm:h-10 text-xs sm:text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="w-[var(--radix-select-trigger-width)]">
+                  <SelectItem value="10" className="text-xs sm:text-sm py-1.5 sm:py-2">10</SelectItem>
+                  <SelectItem value="20" className="text-xs sm:text-sm py-1.5 sm:py-2">20</SelectItem>
+                  <SelectItem value="25" className="text-xs sm:text-sm py-1.5 sm:py-2">25</SelectItem>
+                  <SelectItem value="50" className="text-xs sm:text-sm py-1.5 sm:py-2">50</SelectItem>
+                  <SelectItem value="100" className="text-xs sm:text-sm py-1.5 sm:py-2">100</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             </div>
             
@@ -940,7 +1167,7 @@ export default function CassettesPage() {
                 <Download className="h-4 w-4 mr-2" />
                 <span className="hidden sm:inline">Export CSV</span>
               </Button>
-              {canManageCassettes && (
+              {canManageCassettes && !isBank && (
                 <Button
                   size="sm"
                   onClick={() => {
@@ -982,8 +1209,6 @@ export default function CassettesPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   {searchInputValue || selectedStatus 
                     ? 'Coba ubah filter atau kata kunci pencarian' 
-                    : isPengelola 
-                    ? 'Tidak ada kaset dari bank yang di-assign ke pengelola Anda.'
                     : 'Belum ada kaset yang terdaftar dalam sistem.'}
                 </p>
                 {(searchInputValue || selectedStatus) && (
@@ -1000,82 +1225,147 @@ export default function CassettesPage() {
                     Hapus Filter
                   </Button>
                 )}
-                {isPengelola && !searchTerm && !selectedStatus && (
-                  <div className="text-xs text-left bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded p-3 mt-2">
-                    <p className="font-semibold text-amber-900 dark:text-amber-300 mb-1">Kemungkinan Penyebab:</p>
-                    <ul className="list-disc list-inside text-amber-700 dark:text-amber-400 space-y-1">
-                      <li>Pengelola Anda belum memiliki bank assignment</li>
-                      <li>Bank yang di-assign belum memiliki kaset</li>
-                      <li>Data belum dimuat dari server</li>
-                    </ul>
-                    <p className="text-amber-600 dark:text-amber-500 mt-2">
-                      💡 Hubungi administrator sistem untuk bantuan.
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-slate-700">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="border-b bg-gray-50/95 dark:bg-slate-700/95 backdrop-blur-sm shadow-sm">
-                      <th 
-                        className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300 bg-gray-50/95 dark:bg-slate-700/95"
-                        onClick={() => handleSort('serialNumber')}
-                      >
-                        <div className="flex items-center gap-2">
-                          Nomor Serial
-                          <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
-                        </div>
-                      </th>
-                      <th 
-                        className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300"
-                        onClick={() => handleSort('type')}
-                      >
-                        <div className="flex items-center gap-2">
-                          Tipe Kaset
-                          <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
-                        </div>
-                      </th>
-                      <th 
-                        className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300"
-                        onClick={() => handleSort('machineType')}
-                      >
-                        <div className="flex items-center gap-2">
-                          Tipe Mesin
-                          <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
-                        </div>
-                      </th>
-                      <th 
-                        className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300"
-                        onClick={() => handleSort('bank')}
-                      >
-                        <div className="flex items-center gap-2">
-                          Bank
-                          <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
-                        </div>
-                      </th>
-                      <th 
-                        className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300"
-                        onClick={() => handleSort('status')}
-                      >
-                        <div className="flex items-center gap-2">
-                          Status
-                          <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
-                        </div>
-                      </th>
-                      <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50/95 dark:bg-slate-700/95">Jenis Penggunaan</th>
-                      <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50/95 dark:bg-slate-700/95">Cycle Problem</th>
-                      <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50/95 dark:bg-slate-700/95">Replacement Info</th>
-                      <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50/95 dark:bg-slate-700/95">Catatan</th>
-                      {canManageCassettes && (
-                        <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50/95 dark:bg-slate-700/95">Actions</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+                <div className="max-h-[calc(100vh-300px)] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-30 bg-gray-50 dark:bg-slate-700 shadow-sm">
+                        {/* Action buttons row */}
+                        {isPengelola && selectedCassetteIds.length > 0 && (
+                          <tr className="border-b bg-teal-50 dark:bg-teal-900/20 sticky top-0 z-30">
+                            <td colSpan={isPengelola ? 11 : 10} className="p-3 bg-teal-50 dark:bg-teal-900/20">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const okCassettes = paginatedCassettes.filter((c: any) => 
+                                      c.status === 'OK' && selectedCassetteIds.includes(c.id)
+                                    );
+                                    if (okCassettes.length > 0) {
+                                      setBulkMarkBrokenReason('');
+                                      setBulkMarkBrokenDialogOpen(true);
+                                    } else {
+                                      toast({
+                                        title: 'Info',
+                                        description: 'Pilih kaset dengan status OK untuk ditandai sebagai rusak',
+                                      });
+                                    }
+                                  }}
+                                  className="h-8 text-xs"
+                                >
+                                  <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                                  Mark {selectedCassetteIds.length} Selected as Broken
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const brokenCassettes = paginatedCassettes.filter((c: any) => 
+                                      c.status === 'BAD' && selectedCassetteIds.includes(c.id)
+                                    );
+                                    if (brokenCassettes.length > 0) {
+                                      setQuickCreateTicketDialogOpen(true);
+                                    } else {
+                                      toast({
+                                        title: 'Info',
+                                        description: 'Pilih kaset dengan status BAD untuk membuat tiket',
+                                      });
+                                    }
+                                  }}
+                                  className="h-8 text-xs bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/30 dark:hover:bg-teal-900/50 border-teal-300 dark:border-teal-700"
+                                >
+                                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                                  Create Ticket ({paginatedCassettes.filter((c: any) => c.status === 'BAD' && selectedCassetteIds.includes(c.id)).length} BAD)
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {/* Header row */}
+                        <tr className="border-b bg-gray-50 dark:bg-slate-700 sticky top-0 z-30 shadow-sm">
+                          {isPengelola && selectedCassetteIds.length > 0 && (
+                            <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700 w-12 sticky left-0 z-40">
+                              {/* Empty for action row alignment */}
+                            </th>
+                          )}
+                          {isPengelola && (
+                            <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700 w-12 sticky left-0 z-40">
+                              <input
+                                type="checkbox"
+                                checked={selectedCassetteIds.length > 0 && selectedCassetteIds.length === paginatedCassettes.length}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedCassetteIds(paginatedCassettes.map((c: any) => c.id));
+                                  } else {
+                                    setSelectedCassetteIds([]);
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                            </th>
+                          )}
+                          <th 
+                            className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700 sticky left-12 md:left-auto z-40"
+                            onClick={() => handleSort('serialNumber')}
+                          >
+                            <div className="flex items-center gap-2">
+                              Nomor Serial
+                              <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+                            </div>
+                          </th>
+                          <th 
+                            className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700"
+                            onClick={() => handleSort('type')}
+                          >
+                            <div className="flex items-center gap-2">
+                              Tipe Kaset
+                              <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+                            </div>
+                          </th>
+                          <th 
+                            className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700"
+                            onClick={() => handleSort('machineType')}
+                          >
+                            <div className="flex items-center gap-2">
+                              Tipe Mesin
+                              <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+                            </div>
+                          </th>
+                          <th 
+                            className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700"
+                            onClick={() => handleSort('bank')}
+                          >
+                            <div className="flex items-center gap-2">
+                              Bank
+                              <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+                            </div>
+                          </th>
+                          <th 
+                            className="text-left p-4 font-semibold cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700"
+                            onClick={() => handleSort('status')}
+                          >
+                            <div className="flex items-center gap-2">
+                              Status
+                              <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-slate-500" />
+                            </div>
+                          </th>
+                          <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700">Jenis Penggunaan</th>
+                          <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700">Cycle Problem</th>
+                          <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700">Replacement Info</th>
+                          <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700">Pengelola</th>
+                          {canManageCassettes && (
+                            <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700">Actions</th>
+                          )}
+                          {isPengelola && (
+                            <th className="text-left p-4 font-semibold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-700">Quick Actions</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
                     {paginatedCassettes.map((cassette: any, index: number) => {
                       // Cycle Problem = berapa kali kaset bermasalah (Service Orders)
                       // Include both single cassette SOs and multi-cassette SOs
@@ -1083,6 +1373,7 @@ export default function CassettesPage() {
                       const singleCassetteCount = cassette._count?.problemTickets || 0;
                       const multiCassetteCount = cassette._count?.ticketCassetteDetails || 0;
                       const repairCount = cassette.repairCount ?? (cassette._count?.repairTickets || 0);
+                      const canUndo = isPengelola && cassette.status === 'BAD' && cassette.markedBrokenBy === user?.id;
                       return (
                         <tr
                           key={cassette.id}
@@ -1090,7 +1381,27 @@ export default function CassettesPage() {
                             index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-gray-50/30 dark:bg-slate-800/50'
                           }`}
                         >
-                        <td className="p-4">
+                          {isPengelola && (
+                            <td className={`p-4 sticky left-0 z-10 ${
+                              index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-gray-50/30 dark:bg-slate-800/50'
+                            }`}>
+                              <input
+                                type="checkbox"
+                                checked={selectedCassetteIds.includes(cassette.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedCassetteIds([...selectedCassetteIds, cassette.id]);
+                                  } else {
+                                    setSelectedCassetteIds(selectedCassetteIds.filter(id => id !== cassette.id));
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-gray-300"
+                              />
+                            </td>
+                          )}
+                        <td className={`p-4 sticky left-12 md:left-auto z-10 ${
+                          index % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-gray-50/30 dark:bg-slate-800/50'
+                        }`}>
                           <div className="flex items-center gap-2 group">
                             <Disc className="h-4 w-4 text-gray-400 dark:text-slate-500" />
                             <span className="font-mono font-medium text-gray-900 dark:text-slate-100">{cassette.serialNumber}</span>
@@ -1112,11 +1423,6 @@ export default function CassettesPage() {
                             <Badge variant="outline" className="w-fit">
                               {cassette.cassetteType?.typeCode || 'N/A'}
                             </Badge>
-                            {cassette.cassetteType?.description && (
-                              <span className="text-xs text-muted-foreground mt-1">
-                                {cassette.cassetteType.description}
-                              </span>
-                            )}
                           </div>
                         </td>
                         <td className="p-4">
@@ -1136,7 +1442,7 @@ export default function CassettesPage() {
                           )}
                         </td>
                         <td className="p-4">
-                          <span className="font-medium text-gray-900 dark:text-slate-100">{cassette.customerBank?.bankName || 'N/A'}</span>
+                          <span className="font-medium text-gray-900 dark:text-slate-100">{cassette.customerBank?.bankCode || cassette.customerBank?.bankName || 'N/A'}</span>
                         </td>
                         <td className="p-4">
                           <Badge
@@ -1203,9 +1509,84 @@ export default function CassettesPage() {
                           </div>
                         </td>
                         <td className="p-4">
-                          <span className="text-muted-foreground text-xs max-w-xs truncate block" title={cassette.notes || ''}>
-                            {cassette.notes || '-'}
-                          </span>
+                          {(() => {
+                            // Priority: Show pengelola from machine (actual ownership/management)
+                            // Hanya tampilkan pengelola jika kaset terpasang di machine dan machine punya pengelola
+                            
+                            // Cek apakah kaset memiliki machine
+                            if (cassette.machine && cassette.machine.id) {
+                              // Kaset memiliki machine - hanya tampilkan pengelola dari machine
+                              const machinePengelola = cassette.machine?.pengelola;
+                              
+                              if (machinePengelola && machinePengelola.id) {
+                                // Machine memiliki pengelola - tampilkan pengelola tersebut
+                                const name = machinePengelola.companyName || machinePengelola.companyAbbreviation || machinePengelola.pengelolaCode;
+                                if (name) {
+                                  // SECURITY: If user is pengelola, only show if it's their own
+                                  if (isPengelola && user?.pengelolaId) {
+                                    if (machinePengelola.id !== user.pengelolaId) {
+                                      return <span className="text-muted-foreground text-xs">-</span>;
+                                    }
+                                  }
+                                  return (
+                                    <span className="text-xs text-muted-foreground">{name}</span>
+                                  );
+                                }
+                              }
+                              
+                              // Kaset punya machine tapi machine tidak punya pengelola - tampilkan "-"
+                              // JANGAN tampilkan bank assignments untuk kaset yang sudah punya machine
+                              return <span className="text-muted-foreground text-xs">-</span>;
+                            }
+                            
+                            // Fallback: Kaset TIDAK memiliki machine (standalone cassette)
+                            // Untuk kaset standalone, tampilkan pengelola dari bank assignments
+                            // karena standalone cassettes di-manage oleh pengelola yang di-assign ke bank
+                            const assignments = cassette.customerBank?.pengelolaAssignments;
+                            if (assignments && Array.isArray(assignments) && assignments.length > 0) {
+                              // Filter hanya assignment yang memiliki pengelola dengan data lengkap
+                              let validAssignments = assignments
+                                .filter((a: any) => a?.pengelola)
+                                .map((a: any) => {
+                                  const pengelola = a.pengelola;
+                                  const name = pengelola?.companyName || pengelola?.companyAbbreviation || pengelola?.pengelolaCode;
+                                  return name ? { ...a, displayName: name } : null;
+                                })
+                                .filter(Boolean);
+                              
+                              // SECURITY: If user is pengelola, only show their own pengelola name
+                              if (isPengelola && user?.pengelolaId) {
+                                validAssignments = validAssignments.filter((a: any) => 
+                                  a.pengelola?.id === user.pengelolaId
+                                );
+                              }
+                              
+                              // Deduplicate by pengelola ID to avoid showing duplicate pengelola names
+                              const uniquePengelola = new Map<string, any>();
+                              validAssignments.forEach((assignment: any) => {
+                                const pengelolaId = assignment.pengelola?.id;
+                                if (pengelolaId && !uniquePengelola.has(pengelolaId)) {
+                                  uniquePengelola.set(pengelolaId, assignment);
+                                }
+                              });
+                              const deduplicatedAssignments = Array.from(uniquePengelola.values());
+                              
+                              if (deduplicatedAssignments.length > 0) {
+                                return (
+                                  <div className="flex flex-col gap-1">
+                                    {deduplicatedAssignments.map((assignment: any, idx: number) => (
+                                      <span key={assignment.pengelola?.id || assignment.id || idx} className="text-xs text-muted-foreground">
+                                        {assignment.displayName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                            }
+                            
+                            // Tidak ada pengelola sama sekali
+                            return <span className="text-muted-foreground text-xs">-</span>;
+                          })()}
                         </td>
                         {canManageCassettes && (
                           <td className="p-4">
@@ -1246,11 +1627,49 @@ export default function CassettesPage() {
                             </div>
                           </td>
                         )}
+                        {isPengelola && (
+                          <td className="p-4">
+                            <div className="flex flex-col gap-2">
+                              {cassette.status === 'OK' ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setCassetteToMarkBroken(cassette);
+                                    setMarkBrokenReason('');
+                                    setMarkBrokenDialogOpen(true);
+                                  }}
+                                  className="h-8 px-3 hover:bg-orange-50 dark:hover:bg-orange-900/30 hover:text-orange-600 dark:hover:text-orange-400 hover:border-orange-300 dark:hover:border-orange-600"
+                                >
+                                  <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                                  Tandai Rusak
+                                </Button>
+                              ) : canUndo ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setCassetteToUnmark(cassette);
+                                    setUnmarkBrokenReason('');
+                                    setUnmarkBrokenDialogOpen(true);
+                                  }}
+                                  className="h-8 px-3 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400 hover:border-green-300 dark:hover:border-green-600"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                                  Undo Mark
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </div>
+                          </td>
+                        )}
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
+                </div>
               </div>
 
               {/* Pagination */}
@@ -1313,7 +1732,7 @@ export default function CassettesPage() {
 
       {/* Add Cassette Dialog */}
       <Dialog open={addCassetteDialogOpen} onOpenChange={setAddCassetteDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-teal-600" />
@@ -1481,7 +1900,7 @@ export default function CassettesPage() {
 
       {/* Edit Cassette Dialog */}
       <Dialog open={editCassetteDialogOpen} onOpenChange={setEditCassetteDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="h-5 w-5 text-blue-600" />
@@ -1635,6 +2054,263 @@ export default function CassettesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Mark as Broken Dialog */}
+      <Dialog open={markBrokenDialogOpen} onOpenChange={setMarkBrokenDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+              Tandai Kaset sebagai Rusak
+            </DialogTitle>
+            <DialogDescription>
+              Tandai kaset dengan status OK sebagai rusak. Kaset harus dalam status OK untuk dapat ditandai sebagai rusak.
+            </DialogDescription>
+          </DialogHeader>
+          {cassetteToMarkBroken && (
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-md">
+                <p className="text-sm font-medium">Serial Number: {cassetteToMarkBroken.serialNumber}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Bank: {cassetteToMarkBroken.customerBank?.bankName || 'N/A'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Status Saat Ini: <Badge className={getStatusColor(cassetteToMarkBroken.status)}>
+                    {formatStatusLabel(cassetteToMarkBroken.status)}
+                  </Badge>
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="markBrokenReason">
+                  Alasan Kaset Rusak <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  id="markBrokenReason"
+                  value={markBrokenReason}
+                  onChange={(e) => setMarkBrokenReason(e.target.value)}
+                  placeholder="Contoh: Sensor error - cassette not accepting bills, Jammed mechanism, dll."
+                  className="mt-2 min-h-[100px]"
+                  disabled={markingBroken}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Jelaskan alasan mengapa kaset ditandai sebagai rusak. Informasi ini akan disimpan sebagai catatan.
+                </p>
+              </div>
+              {cassetteToMarkBroken.status !== 'OK' && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                  <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+                    ⚠️ Kaset harus dalam status OK untuk dapat ditandai sebagai rusak. Status saat ini: {formatStatusLabel(cassetteToMarkBroken.status)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setMarkBrokenDialogOpen(false);
+                setCassetteToMarkBroken(null);
+                setMarkBrokenReason('');
+              }} 
+              disabled={markingBroken}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleMarkAsBroken}
+              disabled={markingBroken || !markBrokenReason.trim() || (cassetteToMarkBroken?.status !== 'OK')}
+              className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600"
+            >
+              {markingBroken ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Tandai sebagai Rusak
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unmark Broken Dialog */}
+      <Dialog open={unmarkBrokenDialogOpen} onOpenChange={setUnmarkBrokenDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              Kembalikan Status Kaset menjadi OK
+            </DialogTitle>
+            <DialogDescription>
+              Hanya user yang melakukan mark dapat mengembalikan status kaset menjadi OK.
+            </DialogDescription>
+          </DialogHeader>
+          {cassetteToUnmark && (
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-md">
+                <p className="text-sm font-medium">Serial Number: {cassetteToUnmark.serialNumber}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Bank: {cassetteToUnmark.customerBank?.bankName || 'N/A'}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Status Saat Ini: <Badge className={getStatusColor(cassetteToUnmark.status)}>
+                    {formatStatusLabel(cassetteToUnmark.status)}
+                  </Badge>
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="unmarkBrokenReason">
+                  Alasan Pengembalian (Opsional)
+                </Label>
+                <Textarea
+                  id="unmarkBrokenReason"
+                  value={unmarkBrokenReason}
+                  onChange={(e) => setUnmarkBrokenReason(e.target.value)}
+                  placeholder="Contoh: False alarm - cassette is working properly"
+                  className="mt-2 min-h-[100px]"
+                  disabled={unmarkingBroken}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setUnmarkBrokenDialogOpen(false);
+                setCassetteToUnmark(null);
+                setUnmarkBrokenReason('');
+              }}
+              disabled={unmarkingBroken}
+            >
+              Batal
+            </Button>
+            <Button 
+              onClick={handleUnmarkAsBroken}
+              disabled={unmarkingBroken}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {unmarkingBroken ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                'Kembalikan ke OK'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Mark Broken Dialog */}
+      <Dialog open={bulkMarkBrokenDialogOpen} onOpenChange={setBulkMarkBrokenDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+              Tandai {selectedCassetteIds.length} Kaset sebagai Rusak
+            </DialogTitle>
+            <DialogDescription>
+              Tandai beberapa kaset sekaligus sebagai rusak. Hanya kaset dengan status OK yang akan diproses.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-md">
+              <p className="text-sm font-medium">
+                {selectedCassetteIds.length} kaset akan ditandai sebagai rusak
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Hanya kaset dengan status OK yang akan diproses
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="bulkMarkBrokenReason">
+                Alasan Kaset Rusak <span className="text-red-500">*</span>
+              </Label>
+              <Textarea
+                id="bulkMarkBrokenReason"
+                value={bulkMarkBrokenReason}
+                onChange={(e) => setBulkMarkBrokenReason(e.target.value)}
+                placeholder="Contoh: Sensor error - cassette not accepting bills"
+                className="mt-2 min-h-[100px]"
+                disabled={bulkMarkingBroken}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setBulkMarkBrokenDialogOpen(false);
+                setBulkMarkBrokenReason('');
+              }}
+              disabled={bulkMarkingBroken}
+            >
+              Batal
+            </Button>
+            <Button 
+              onClick={handleBulkMarkAsBroken}
+              disabled={bulkMarkingBroken || !bulkMarkBrokenReason.trim()}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              {bulkMarkingBroken ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                `Tandai ${selectedCassetteIds.length} Kaset`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Create Ticket Dialog */}
+      <Dialog open={quickCreateTicketDialogOpen} onOpenChange={setQuickCreateTicketDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-teal-600" />
+              Buat Tiket untuk Kaset Rusak
+            </DialogTitle>
+            <DialogDescription>
+              Buat tiket perbaikan untuk kaset yang sudah ditandai sebagai rusak.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 bg-gray-50 dark:bg-slate-800 rounded-md">
+              <p className="text-sm font-medium">
+                {paginatedCassettes.filter((c: any) => c.status === 'BAD' && selectedCassetteIds.includes(c.id)).length} kaset rusak akan ditambahkan ke tiket
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Anda akan diarahkan ke halaman create ticket dengan kaset terpilih
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setQuickCreateTicketDialogOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button 
+              onClick={handleQuickCreateTicket}
+              className="bg-teal-600 hover:bg-teal-700"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Buat Tiket
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }

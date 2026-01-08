@@ -1,0 +1,183 @@
+﻿
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json users.e2e-spec.ts --verbose
+
+  console.log
+    [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+[33m[HCM-Backend][39m [33m32364[39m 1/3/2026, 8:31:07 AM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T01:31:07.297Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "usr_admin_1767403866974485",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+node.exe : FAIL test/users.e2e-spec.ts (11.838 s)
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL test/users.e2e-spec.ts 
+(11.8    38 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Users (e2e)
+    POST /api/v1/users/hitachi
+      ÔêÜ should create a new Hitachi user (486 ms)
+      ÔêÜ should reject duplicate username (11 ms)
+      ├ù should reject invalid email format (9 ms)
+    POST /api/v1/users/pengelola
+      ÔêÜ should create a new Pengelola user (449 ms)
+      ├ù should reject Pengelola user without pengelolaId (9 ms)
+    GET /api/v1/users/hitachi/:id
+      ÔêÜ should get Hitachi user by ID (9 ms)
+      ÔêÜ should return 404 for non-existent user (7 ms)
+    GET /api/v1/users/hitachi
+      ├ù should list Hitachi users (11 ms)
+      ├ù should filter users by role (10 ms)
+    PATCH /api/v1/users/hitachi/:id
+      ÔêÜ should update Hitachi user profile (12 ms)
+      ÔêÜ should update user role (11 ms)
+    PATCH /api/v1/users/hitachi/:id/password
+      ÔêÜ should change user password (427 ms)
+    PATCH /api/v1/users/hitachi/:id/deactivate
+      ÔêÜ should deactivate user (14 ms)
+      ÔêÜ should reactivate user (14 ms)
+    DELETE /api/v1/users/hitachi/:id
+      ÔêÜ should delete Hitachi user (20 ms)
+    DELETE /api/v1/users/pengelola/:id
+      ÔêÜ should delete Pengelola user (12 ms)
+
+  ÔùÅ Users (e2e) ÔÇ║ POST /api/v1/users/hitachi ÔÇ║ should reject 
+invalid email format
+
+    expected 400 "Bad Request", got 409 "Conflict"
+
+    [0m [90m 112 |[39m                     fullName[33m:[39m 
+[32m'Test Invalid Email'[39m[33m,[39m
+     [90m 113 |[39m                 })
+    [31m[1m>[22m[39m[90m 114 |[39m                 
+[33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 115 |[39m         })[33m;[39m
+     [90m 116 |[39m     })[33m;[39m
+     [90m 117 |[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:114:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Users (e2e) ÔÇ║ POST /api/v1/users/pengelola ÔÇ║ should reject 
+Pengelola user without pengelolaId
+
+    expected 400 "Bad Request", got 409 "Conflict"
+
+    [0m [90m 151 |[39m                     fullName[33m:[39m 
+[32m'Test No Org'[39m[33m,[39m
+     [90m 152 |[39m                 })
+    [31m[1m>[22m[39m[90m 153 |[39m                 
+[33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 154 |[39m         })[33m;[39m
+     [90m 155 |[39m     })[33m;[39m
+     [90m 156 |[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:153:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Users (e2e) ÔÇ║ GET /api/v1/users/hitachi ÔÇ║ should list Hitachi 
+users
+
+    expect(received).toHaveProperty(path)
+
+    Expected path: "data"
+    Received path: []
+
+    Received value: [{"createdAt": "2026-01-03T01:31:07.803Z", 
+"department": "REPAIR_CENTER", "email": 
+"new_hitachi_1767403866974485@example.com", "fullName": "Test RC Staff", 
+"id": "3178814c-7d04-444e-b3b9-c89e3cffec48", "lastLogin": null, "role": 
+"RC_STAFF", "status": "ACTIVE", "username": 
+"new_hitachi_1767403866974485"}, {"createdAt": 
+"2026-01-03T01:31:07.127Z", "department": "REPAIR_CENTER", "email": 
+"usr_admin_1767403866974485@example.com", "fullName": "Test usr_admin 
+1767403866974485", "id": "705e714a-8f79-4356-9491-a56a96078427", 
+"lastLogin": "2026-01-03T01:31:07.313Z", "role": "SUPER_ADMIN", "status": 
+"ACTIVE", "username": "usr_admin_1767403866974485"}, {"createdAt": 
+"2026-01-02T10:09:14.278Z", "department": "REPAIR_CENTER", "email": 
+"invalid-email", "fullName": "Test Invalid Email", "id": 
+"bc168da2-8fe8-449e-beac-b75b02bc4291", "lastLogin": null, "role": 
+"RC_STAFF", "status": "ACTIVE", "username": 
+"invalid_email_1767348551630970"}]
+
+    [0m [90m 181 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 182 |[39m
+    [31m[1m>[22m[39m[90m 183 |[39m             expect(response[33m.
+[39mbody)[33m.[39mtoHaveProperty([32m'data'[39m)[33m;[39m
+     [90m     |[39m                                   
+[31m[1m^[22m[39m
+     [90m 184 |[39m             expect([33mArray[39m[33m.[39misArray
+(response[33m.[39mbody[33m.[39mdata))[33m.[39mtoBe([36mtrue[39m)[
+33m;[39m
+     [90m 185 |[39m             expect(response[33m.[39mbody[33m.[39
+mdata[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+     [90m 186 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:183:35)
+
+  ÔùÅ Users (e2e) ÔÇ║ GET /api/v1/users/hitachi ÔÇ║ should filter users 
+by role
+
+    TypeError: Cannot read properties of undefined (reading 'forEach')
+
+    [0m [90m 193 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m 194 |[39m
+    [31m[1m>[22m[39m[90m 195 |[39m             
+response[33m.[39mbody[33m.[39mdata[33m.[39mforEach((user[33m:[39m 
+any) [33m=>[39m {
+     [90m     |[39m                                [31m[1m^[22m[39m
+     [90m 196 |[39m                 expect(user[33m.[39mrole)[33m.[3
+9mtoBe([33mHitachiUserRole[39m[33m.[39m[33mRC_STAFF[39m)[33m;[39m
+     [90m 197 |[39m             })[33m;[39m
+     [90m 198 |[39m         })[33m;[39m[0m
+
+      at Object.<anonymous> (users.e2e-spec.ts:195:32)
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 12 passed, 16 total
+Snapshots:   0 total
+Time:        12.311 s, estimated 18 s
+Ran all test suites matching /users.e2e-spec.ts/i.

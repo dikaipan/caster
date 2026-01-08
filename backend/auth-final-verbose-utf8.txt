@@ -1,0 +1,152 @@
+﻿
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json auth.e2e-spec.ts --verbose
+
+  console.log
+    [AppModule] NODE_ENV: test
+
+      at new AppModule (../src/app.module.ts:97:13)
+          at async Promise.all (index 0)
+          at async Promise.all (index 2)
+
+[33m[HCM-Backend][39m [33m5360[39m 1/3/2026, 7:54:14 AM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T00:54:14.118Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "auth_admin_1767401653694335",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+[33m[HCM-Backend][39m [33m5360[39m 1/3/2026, 7:54:14 AM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T00:54:14.262Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "auth_pengelola_1767401653694335",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+142ms[39m
+[33m[HCM-Backend][39m [33m5360[39m 1/3/2026, 7:54:14 AM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T00:54:14.517Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "auth_admin_1767401653694335",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+255ms[39m
+[33m[HCM-Backend][39m [33m5360[39m 1/3/2026, 7:54:14 AM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T00:54:14.647Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "auth_admin_1767401653694335",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+130ms[39m
+[33m[HCM-Backend][39m [33m5360[39m 1/3/2026, 7:54:14 AM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-03T00:54:14.777Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "auth_admin_1767401653694335",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+130ms[39m
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    ­ƒöî Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+node.exe : FAIL test/auth.e2e-spec.ts (9.432 s)
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL test/auth.e2e-spec.ts ( 
+   9.432 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Auth (e2e)
+    POST /api/v1/auth/login
+      ÔêÜ should login HitachiUser with valid credentials (186 ms)
+      ÔêÜ should login PengelolaUser with valid credentials (134 ms)
+      ÔêÜ should reject login with invalid username (10 ms)
+      ÔêÜ should reject login with invalid password (108 ms)
+      ├ù should reject login with missing credentials (7 ms)
+    POST /api/v1/auth/refresh
+      ├ù should refresh access token with valid refresh token (124 ms)
+      ÔêÜ should reject invalid refresh token (5 ms)
+    POST /api/v1/auth/logout
+      ÔêÜ should logout user successfully (128 ms)
+      ÔêÜ should reject logout without token (5 ms)
+    GET /api/v1/auth/profile
+      ÔêÜ should get current user profile (127 ms)
+      ÔêÜ should reject profile request without token (5 ms)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/login ÔÇ║ should reject login with 
+missing credentials
+
+    expected 400 "Bad Request", got 401 "Unauthorized"
+
+    [0m [90m 131 |[39m                 
+[33m.[39mpost([32m'/api/v1/auth/login'[39m)
+     [90m 132 |[39m                 [33m.[39msend({})
+    [31m[1m>[22m[39m[90m 133 |[39m                 
+[33m.[39mexpect([35m400[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 134 |[39m         })[33m;[39m
+     [90m 135 |[39m     })[33m;[39m
+     [90m 136 |[39m[0m
+
+      at Object.<anonymous> (auth.e2e-spec.ts:133:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+  ÔùÅ Auth (e2e) ÔÇ║ POST /api/v1/auth/refresh ÔÇ║ should refresh access 
+token with valid refresh token
+
+    expected 200 "OK", got 401 "Unauthorized"
+
+    [0m [90m 151 |[39m                 
+[33m.[39mpost([32m'/api/v1/auth/refresh'[39m)
+     [90m 152 |[39m                 [33m.[39msend({ 
+refresh_token[33m:[39m refreshToken })
+    [31m[1m>[22m[39m[90m 153 |[39m                 
+[33m.[39mexpect([35m200[39m)[33m;[39m
+     [90m     |[39m                  [31m[1m^[22m[39m
+     [90m 154 |[39m
+     [90m 155 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'access_token'[39m)[33m;[39m
+     [90m 156 |[39m             expect(response[33m.[39mbody)[33m.[3
+9mtoHaveProperty([32m'refresh_token'[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (auth.e2e-spec.ts:153:18)
+      ----
+      at Test._assertStatus (../node_modules/supertest/lib/test.js:309:14)
+      at ../node_modules/supertest/lib/test.js:365:13
+      at Test._assertFunction 
+(../node_modules/supertest/lib/test.js:342:13)
+      at Test.assert (../node_modules/supertest/lib/test.js:195:23)
+      at localAssert (../node_modules/supertest/lib/test.js:138:14)
+      at Server.<anonymous> (../node_modules/supertest/lib/test.js:152:11)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 9 passed, 11 total
+Snapshots:   0 total
+Time:        9.975 s, estimated 22 s
+Ran all test suites matching /auth.e2e-spec.ts/i.

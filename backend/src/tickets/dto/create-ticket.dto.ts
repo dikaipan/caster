@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsEnum, IsOptional, IsArray, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, IsOptional, IsArray, IsDateString, IsIn, ValidateIf } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum ProblemTicketPriority {
@@ -53,9 +53,11 @@ export class CreateTicketDto {
   @IsOptional()
   errorCode?: string;
 
-  @ApiPropertyOptional({ example: 'COURIER', enum: ['SELF_DELIVERY', 'COURIER'], description: 'Delivery method: SELF_DELIVERY or COURIER' })
-  @IsString()
-  @IsOptional()
+  @ApiPropertyOptional({ example: 'COURIER', enum: ['SELF_DELIVERY', 'COURIER'], description: 'Delivery method: SELF_DELIVERY or COURIER. Required if repairLocation is AT_RC or not specified.' })
+  @ValidateIf((o) => o.repairLocation !== 'ON_SITE')
+  @IsString({ message: 'deliveryMethod must be a string' })
+  @ValidateIf((o) => o.repairLocation !== 'ON_SITE')
+  @IsIn(['SELF_DELIVERY', 'COURIER'], { message: 'Delivery method must be either SELF_DELIVERY or COURIER' })
   deliveryMethod?: string;
 
   @ApiPropertyOptional({ example: 'JNE', description: 'Courier service name (required if deliveryMethod is COURIER)' })
@@ -126,5 +128,15 @@ export class CreateTicketDto {
   @IsString()
   @IsOptional()
   replacementReason?: string;
+
+  @ApiPropertyOptional({ 
+    example: 'ON_SITE', 
+    enum: ['ON_SITE', 'AT_RC'], 
+    description: 'Repair location: ON_SITE (repair at pengelola location) or AT_RC (repair at Repair Center). Default: AT_RC' 
+  })
+  @IsString()
+  @IsOptional()
+  @IsIn(['ON_SITE', 'AT_RC'], { message: 'repairLocation must be either ON_SITE or AT_RC' })
+  repairLocation?: 'ON_SITE' | 'AT_RC';
 }
 

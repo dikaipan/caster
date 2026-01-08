@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 export interface Notification {
   id: string;
-  type: 'SO_STATUS_CHANGE' | 'SO_CREATED' | 'SO_ASSIGNED' | 'DELIVERY_RECEIVED' | 'REPAIR_COMPLETED' | 'CASSETTE_RETURNED';
+  type: 'SO_STATUS_CHANGE' | 'SO_CREATED' | 'SO_ASSIGNED' | 'DELIVERY_RECEIVED' | 'REPAIR_COMPLETED' | 'CASSETTE_RETURNED' | 'REPAIR_UNASSIGNED';
   title: string;
   message: string;
   ticketId?: string;
@@ -18,11 +18,13 @@ interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   lastCheckedTickets: Record<string, string>; // ticketId -> status
+  lastTicketCount: number; // Last known ticket count for polling optimization
   addNotification: (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => void;
   markAsRead: (notificationId: string) => void;
   markAllAsRead: () => void;
   clearNotifications: () => void;
   updateTicketStatus: (ticketId: string, status: string) => boolean; // returns true if status changed
+  setLastTicketCount: (count: number) => void;
   getUnreadCount: () => number;
 }
 
@@ -32,6 +34,7 @@ export const useNotificationStore = create<NotificationState>()(
       notifications: [],
       unreadCount: 0,
       lastCheckedTickets: {},
+      lastTicketCount: 0,
 
       addNotification: (notification) => {
         const newNotification: Notification = {
@@ -71,7 +74,7 @@ export const useNotificationStore = create<NotificationState>()(
       updateTicketStatus: (ticketId, newStatus) => {
         const state = get();
         const lastStatus = state.lastCheckedTickets[ticketId];
-        
+
         if (lastStatus && lastStatus !== newStatus) {
           // Status changed!
           set((state) => ({
@@ -90,12 +93,16 @@ export const useNotificationStore = create<NotificationState>()(
             },
           }));
         }
-        
+
         return false;
       },
 
       getUnreadCount: () => {
         return get().unreadCount;
+      },
+
+      setLastTicketCount: (count: number) => {
+        set({ lastTicketCount: count });
       },
     }),
     {

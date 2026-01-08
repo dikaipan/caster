@@ -13,6 +13,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { TicketsService } from './tickets.service';
+import { DeliveryService } from './delivery.service';
+import { ReturnService } from './return.service';
 import { CreateTicketDto, UpdateTicketDto, CloseTicketDto, CreateDeliveryDto, ReceiveDeliveryDto, CreateReturnDto, ReceiveReturnDto, CreateMultiTicketDto } from './dto';
 import { Roles, AllowUserTypes, UserType } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -23,7 +25,11 @@ import { RolesGuard } from '../common/guards/roles.guard';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class TicketsController {
-  constructor(private readonly ticketsService: TicketsService) {}
+  constructor(
+    private readonly ticketsService: TicketsService,
+    private readonly deliveryService: DeliveryService,
+    private readonly returnService: ReturnService,
+  ) { }
 
   @Get()
   @Throttle({ short: { limit: 60, ttl: 60000 } }) // Higher limit for polling: 60 requests per minute
@@ -48,7 +54,7 @@ export class TicketsController {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? Math.min(parseInt(limit, 10), 1000) : 50;
     const validSortOrder = sortOrder === 'asc' || sortOrder === 'desc' ? sortOrder : 'desc';
-    
+
     return this.ticketsService.findAll(
       req.user.userType,
       req.user.pengelolaId,
@@ -84,7 +90,7 @@ export class TicketsController {
 
   @Get('pending-confirmation')
   @Throttle({ short: { limit: 60, ttl: 60000 } }) // Higher limit for polling: 60 requests per minute
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get cassettes pending confirmation (Pengelola only)',
     description: 'List cassettes with status IN_TRANSIT_TO_PENGELOLA that have return records and need confirmation from Pengelola. Shows all cassettes in transit that have not been received yet, regardless of estimated arrival date.'
   })
@@ -114,9 +120,9 @@ export class TicketsController {
   }
 
   @Post('multi-cassette')
-  @AllowUserTypes(UserType.PENGELOLA)
-  @ApiOperation({ 
-    summary: 'Create 1 ticket with multiple cassettes (Pengelola only)',
+  @AllowUserTypes(UserType.PENGELOLA, UserType.HITACHI)
+  @ApiOperation({
+    summary: 'Create 1 ticket with multiple cassettes (Pengelola & Hitachi)',
     description: 'Create a single ticket containing up to 30 cassettes. Each cassette will have its own detail record.'
   })
   async createMultiCassette(@Body() createDto: CreateMultiTicketDto, @Request() req) {
@@ -132,8 +138,8 @@ export class TicketsController {
   }
 
   @Post()
-  @AllowUserTypes(UserType.PENGELOLA)
-  @ApiOperation({ summary: 'Create new problem ticket (Pengelola only)' })
+  @AllowUserTypes(UserType.PENGELOLA, UserType.HITACHI)
+  @ApiOperation({ summary: 'Create new problem ticket (Pengelola & Hitachi)' })
   async create(@Body() createDto: CreateTicketDto, @Request() req) {
     try {
       return await this.ticketsService.create(createDto, req.user.id, req.user.userType);
@@ -154,9 +160,32 @@ export class TicketsController {
     return this.ticketsService.update(id, updateDto, req.user.id, req.user.userType);
   }
 
+  @Patch(':id/approve-on-site')
+  @AllowUserTypes(UserType.HITACHI)
+  @Roles('RC_STAFF', 'RC_MANAGER', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Approve on-site repair request (Hitachi only)' })
+  approveOnSiteRepair(
+    @Param('id') id: string,
+    @Request() req,
+  ) {
+    return this.ticketsService.approveOnSiteRepair(id, req.user.id, req.user.userType);
+  }
+
+  @Patch(':id/reject-on-site')
+  @AllowUserTypes(UserType.HITACHI)
+  @Roles('RC_STAFF', 'RC_MANAGER', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Reject on-site repair request (Hitachi only)' })
+  rejectOnSiteRepair(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Request() req,
+  ) {
+    return this.ticketsService.rejectOnSiteRepair(id, req.user.id, req.user.userType, body.reason);
+  }
+
   @Post('delivery')
   @AllowUserTypes(UserType.PENGELOLA, UserType.HITACHI)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Create delivery form (Pengelola/Admin)',
     description: 'Pengelola creates delivery form to send cassette to RC. Admin can also create for testing.'
   })
@@ -164,13 +193,13 @@ export class TicketsController {
     @Body() createDto: CreateDeliveryDto,
     @Request() req,
   ) {
-    return this.ticketsService.createDelivery(createDto, req.user.id, req.user.userType);
+    return this.deliveryService.createDelivery(createDto, req.user.id, req.user.userType);
   }
 
   @Post(':id/receive-delivery')
   @AllowUserTypes(UserType.HITACHI)
   @Roles('RC_STAFF', 'RC_MANAGER', 'SUPER_ADMIN')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Receive cassette at RC (RC Staff only)',
     description: 'Confirm receipt of cassette at Repair Center and create repair ticket'
   })
@@ -179,13 +208,13 @@ export class TicketsController {
     @Body() receiveDto: ReceiveDeliveryDto,
     @Request() req,
   ) {
-    return this.ticketsService.receiveDelivery(id, receiveDto, req.user.id, req.user.userType);
+    return this.deliveryService.receiveDelivery(id, receiveDto, req.user.id, req.user.userType);
   }
 
   @Post('return')
   @AllowUserTypes(UserType.HITACHI)
   @Roles('RC_STAFF', 'RC_MANAGER', 'SUPER_ADMIN')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Confirm pickup by Pengelola (RC Staff only)',
     description: 'RC staff confirms that Pengelola has picked up the repaired cassette at RC. Cassette status will be immediately updated to OK.'
   })
@@ -193,12 +222,12 @@ export class TicketsController {
     @Body() createDto: CreateReturnDto,
     @Request() req,
   ) {
-    return this.ticketsService.createReturn(createDto, req.user.id, req.user.userType);
+    return this.returnService.createReturn(createDto, req.user.id, req.user.userType);
   }
 
   @Post(':id/receive-return')
   @AllowUserTypes(UserType.PENGELOLA)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Receive cassette return (Pengelola only)',
     description: 'Pengelola confirms receipt of repaired cassette from RC'
   })
@@ -207,7 +236,7 @@ export class TicketsController {
     @Body() receiveDto: ReceiveReturnDto,
     @Request() req,
   ) {
-    return this.ticketsService.receiveReturn(id, receiveDto, req.user.id, req.user.userType);
+    return this.returnService.receiveReturn(id, receiveDto, req.user.id, req.user.userType);
   }
 
   @Post(':id/close')
@@ -225,7 +254,7 @@ export class TicketsController {
   @Delete(':id')
   @AllowUserTypes(UserType.HITACHI)
   @Roles('RC_STAFF', 'RC_MANAGER', 'SUPER_ADMIN')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Soft delete ticket (Hitachi only)',
     description: 'Soft delete ticket and restore cassette status to OK. Only Hitachi users (RC Staff, RC Manager, Super Admin) can delete tickets.'
   })

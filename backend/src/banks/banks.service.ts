@@ -4,7 +4,7 @@ import { CreateBankDto, UpdateBankDto } from './dto';
 
 @Injectable()
 export class BanksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async findAll() {
     return this.prisma.customerBank.findMany({
@@ -141,6 +141,7 @@ export class BanksService {
       ]);
 
     return {
+      bankId: id,
       totalMachines,
       operationalMachines,
       maintenanceMachines: totalMachines - operationalMachines,
@@ -195,7 +196,7 @@ export class BanksService {
         contractEndDate: assignmentDto?.contractEndDate
           ? new Date(assignmentDto.contractEndDate)
           : undefined,
-        assignedBranches: assignmentDto?.assignedBranches || null,
+        assignedBranches: assignmentDto?.assignedBranches ? JSON.stringify(assignmentDto.assignedBranches) : null,
         notes: Object.keys(notesData).length > 0 ? JSON.stringify(notesData) : null,
         status: 'ACTIVE',
       },

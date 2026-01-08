@@ -1,11 +1,16 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditLogService } from '../audit/audit-log.service';
 import { CreatePengelolaDto, UpdatePengelolaDto, CreatePengelolaUserDto, UpdatePengelolaUserDto } from './dto';
 import * as bcrypt from 'bcrypt';
+import { BCRYPT_SALT_ROUNDS } from '../auth/constants';
 
 @Injectable()
 export class PengelolaService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) { }
 
   async findAll() {
     return this.prisma.pengelola.findMany({
@@ -71,7 +76,7 @@ export class PengelolaService {
     return pengelola;
   }
 
-  async create(createPengelolaDto: CreatePengelolaDto) {
+  async create(createPengelolaDto: CreatePengelolaDto, userId: string, userType: any) {
     const existingPengelola = await this.prisma.pengelola.findUnique({
       where: { pengelolaCode: createPengelolaDto.pengelolaCode },
     });
@@ -82,9 +87,21 @@ export class PengelolaService {
       );
     }
 
-    return this.prisma.pengelola.create({
+    const pengelola = await this.prisma.pengelola.create({
       data: createPengelolaDto,
     });
+
+    // Log creation
+    await this.auditLogService.logCreate(
+      'PENGELOLA',
+      pengelola.id,
+      pengelola,
+      userId,
+      userType,
+      { pengelolaCode: pengelola.pengelolaCode }
+    );
+
+    return pengelola;
   }
 
   async update(id: string, updatePengelolaDto: UpdatePengelolaDto) {
@@ -144,7 +161,7 @@ export class PengelolaService {
       throw new ConflictException('Username or email already exists');
     }
 
-    const passwordHash = await bcrypt.hash(createUserDto.password, 10);
+    const passwordHash = await bcrypt.hash(createUserDto.password, BCRYPT_SALT_ROUNDS);
 
     return this.prisma.pengelolaUser.create({
       data: {
@@ -160,7 +177,7 @@ export class PengelolaService {
         canCreateTickets: createUserDto.canCreateTickets ?? true,
         canCloseTickets: createUserDto.canCloseTickets ?? false,
         canManageMachines: createUserDto.canManageMachines ?? false,
-        assignedBranches: createUserDto.assignedBranches,
+        assignedBranches: createUserDto.assignedBranches ? JSON.stringify(createUserDto.assignedBranches) : null,
         status: 'ACTIVE',
       },
       select: {
@@ -179,7 +196,7 @@ export class PengelolaService {
   async getPengelolaUsers(pengelolaId: string) {
     await this.findOne(pengelolaId);
 
-    return this.prisma.pengelolaUser.findMany({
+    const users = await this.prisma.pengelolaUser.findMany({
       where: { pengelolaId },
       select: {
         id: true,
@@ -200,6 +217,21 @@ export class PengelolaService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Parse assignedBranches from JSON string to array
+    return users.map(user => ({
+      ...user,
+      assignedBranches: user.assignedBranches
+        ? (() => {
+          try {
+            return JSON.parse(user.assignedBranches) as string[];
+          } catch {
+            // Fallback for backward compatibility
+            return user.assignedBranches ? [user.assignedBranches] : [];
+          }
+        })()
+        : [],
+    }));
   }
 
   async getPengelolaMachines(pengelolaId: string, currentUserId: string, userType: string) {
@@ -213,8 +245,13 @@ export class PengelolaService {
         select: { assignedBranches: true, role: true },
       });
 
-      if (pengelolaUser && pengelolaUser.role === 'TECHNICIAN') {
-        assignedBranches = pengelolaUser.assignedBranches as string[];
+      if (pengelolaUser && pengelolaUser.assignedBranches) {
+        try {
+          assignedBranches = JSON.parse(pengelolaUser.assignedBranches) as string[];
+        } catch (error) {
+          // If parsing fails, treat as single branch code (backward compatibility)
+          assignedBranches = pengelolaUser.assignedBranches ? [pengelolaUser.assignedBranches] : null;
+        }
       }
     }
 
@@ -279,13 +316,28 @@ export class PengelolaService {
 
     const updateData: any = { ...updateUserDto };
 
-    // Hash password if provided
-    if (updateUserDto.password) {
-      updateData.passwordHash = await bcrypt.hash(updateUserDto.password, 10);
+    // Hash password if provided (and not empty string)
+    if (updateUserDto.password && updateUserDto.password.trim() !== '') {
+      updateData.passwordHash = await bcrypt.hash(updateUserDto.password, BCRYPT_SALT_ROUNDS);
+      delete updateData.password;
+    } else {
+      // Remove password from updateData if it's empty or undefined
       delete updateData.password;
     }
 
-    return this.prisma.pengelolaUser.update({
+    // Convert assignedBranches array to JSON string if provided
+    if (updateUserDto.assignedBranches !== undefined) {
+      if (Array.isArray(updateUserDto.assignedBranches) && updateUserDto.assignedBranches.length > 0) {
+        updateData.assignedBranches = JSON.stringify(updateUserDto.assignedBranches);
+      } else {
+        updateData.assignedBranches = null;
+      }
+    } else {
+      // Remove from updateData if undefined to avoid overwriting with undefined
+      delete updateData.assignedBranches;
+    }
+
+    const updatedUser = await this.prisma.pengelolaUser.update({
       where: { id: userId },
       data: updateData,
       select: {
@@ -305,6 +357,21 @@ export class PengelolaService {
         createdAt: true,
       },
     });
+
+    // Parse assignedBranches from JSON string to array for response
+    return {
+      ...updatedUser,
+      assignedBranches: updatedUser.assignedBranches
+        ? (() => {
+          try {
+            return JSON.parse(updatedUser.assignedBranches) as string[];
+          } catch {
+            // Fallback for backward compatibility
+            return updatedUser.assignedBranches ? [updatedUser.assignedBranches] : [];
+          }
+        })()
+        : [],
+    };
   }
 
   async deletePengelolaUser(

@@ -11,15 +11,16 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     API_URL,
     cleanApiUrl,
-    baseURL: `${cleanApiUrl}/api`,
+    baseURL: `${cleanApiUrl}/api/v1`,
   });
 }
 
 export const api = axios.create({
-  baseURL: `${cleanApiUrl}/api`,
+  baseURL: `${cleanApiUrl}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Send cookies with every request
 });
 
 // Add auth token to requests
@@ -75,27 +76,16 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      // Try to refresh token
-      const refreshToken = localStorage.getItem('refresh_token');
-      
-      if (!refreshToken) {
-        // No refresh token - logout
-        processQueue(error, null);
-        isRefreshing = false;
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('user');
-          window.location.href = '/login';
-        }
-        return Promise.reject(error);
-      }
-
       try {
+        // Refresh token is now in HttpOnly cookie, so we just call the endpoint
+        // No body needed (except empty object if required by strict api, but cookie is key)
         const response = await axios.post(
-          `${API_URL}/api/auth/refresh`,
-          { refresh_token: refreshToken },
-          { headers: { 'Content-Type': 'application/json' } }
+          `${API_URL}/api/v1/auth/refresh`,
+          {},
+          {
+            headers: { 'Content-Type': 'application/json' },
+            withCredentials: true
+          }
         );
 
         const { access_token } = response.data;
@@ -114,14 +104,14 @@ api.interceptors.response.use(
         // Refresh failed - logout
         processQueue(refreshError, null);
         isRefreshing = false;
-        
+
         if (typeof window !== 'undefined') {
+          // Clear remaining local storage
           localStorage.removeItem('token');
-          localStorage.removeItem('refresh_token');
           localStorage.removeItem('user');
           window.location.href = '/login';
         }
-        
+
         return Promise.reject(refreshError);
       }
     }
@@ -130,5 +120,29 @@ api.interceptors.response.use(
   }
 );
 
-export default api;
 
+// 2FA Endpoints
+export const authApi = {
+  setup2FA: async () => {
+    const response = await api.post('/auth/2fa/setup');
+    return response.data;
+  },
+  verifySetup: async (code: string) => {
+    const response = await api.post('/auth/2fa/verify-setup', { code });
+    return response.data;
+  },
+  disable2FA: async (code: string) => {
+    const response = await api.post('/auth/2fa/disable', { code });
+    return response.data;
+  },
+  verifyLogin2FA: async (tempToken: string, code: string) => {
+    const response = await axios.post(`${API_URL}/api/v1/auth/2fa/verify-login`, { tempToken, code });
+    return response.data;
+  },
+  getProfile: async () => {
+    const response = await api.get('/auth/profile');
+    return response.data;
+  }
+};
+
+export default api;

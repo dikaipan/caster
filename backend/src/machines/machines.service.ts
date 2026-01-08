@@ -5,8 +5,8 @@ import { CreateMachineDto, UpdateMachineDto, UpdateWsidDto } from './dto';
 @Injectable()
 export class MachinesService {
   private readonly logger = new Logger(MachinesService.name);
-  
-  constructor(private prisma: PrismaService) {}
+
+  constructor(private prisma: PrismaService) { }
 
   async findAll(
     userType: string,
@@ -24,28 +24,60 @@ export class MachinesService {
 
     // SUPER ADMIN (HITACHI) can see ALL machines
     // Pengelola users can only see their assigned machines
+    // BANK users can only see machines from their own bank
     if (userType === 'HITACHI') {
       // Admin can see everything - no filter
       // But if customerBankId is provided, filter by it
       if (customerBankId) {
         whereClause.customerBankId = customerBankId;
       }
+      if (pengelolaId) {
+        whereClause.pengelolaId = pengelolaId;
+      }
       this.logger.debug('Admin user - showing all machines');
+    } else if (userType === 'BANK' && customerBankId) {
+      // BANK users can only see machines from their own bank
+      whereClause.customerBankId = customerBankId;
+      this.logger.debug('BANK user - showing machines from their bank');
     } else if (userType === 'PENGELOLA' && pengelolaId) {
+      // SECURITY: Pengelola can only see machines from banks they are assigned to
+      // First, get all banks assigned to this pengelola
+      const bankAssignments = await this.prisma.bankPengelolaAssignment.findMany({
+        where: {
+          pengelolaId,
+          status: 'ACTIVE',
+        },
+        select: {
+          customerBankId: true,
+        },
+      });
+
+      // If pengelola has no bank assignments, they should see NO machines
+      if (!bankAssignments || bankAssignments.length === 0) {
+        return {
+          data: [],
+          meta: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          },
+        };
+      }
+
+      // Filter machines by assigned banks
+      const assignedBankIds = bankAssignments.map(a => a.customerBankId);
+      whereClause.customerBankId = { in: assignedBankIds };
+
+      // Also filter by pengelolaId to ensure machine is assigned to this pengelola
+      // (machines without pengelolaId should not be visible to pengelola)
       whereClause.pengelolaId = pengelolaId;
 
       // If customerBankId is provided, validate that pengelola has access to this bank
       if (customerBankId) {
         // Verify that pengelola is assigned to this bank
-        const bankAssignment = await this.prisma.bankPengelolaAssignment.findFirst({
-          where: {
-            pengelolaId,
-            customerBankId,
-            status: 'ACTIVE',
-          },
-        });
-
-        if (!bankAssignment) {
+        const hasAccess = assignedBankIds.includes(customerBankId);
+        if (!hasAccess) {
           // Pengelola doesn't have access to this bank, return empty result
           return {
             data: [],
@@ -61,14 +93,20 @@ export class MachinesService {
         whereClause.customerBankId = customerBankId;
       }
 
-      // Technicians can only see machines in their assigned branches
+      // Users with assigned branches can only see machines in their assigned branches
       const pengelolaUser = await this.prisma.pengelolaUser.findUnique({
         where: { id: userId },
         select: { role: true, assignedBranches: true },
       });
 
-      if (pengelolaUser && pengelolaUser.role === 'TECHNICIAN' && pengelolaUser.assignedBranches) {
-        whereClause.branchCode = { in: pengelolaUser.assignedBranches as string[] };
+      if (pengelolaUser && pengelolaUser.assignedBranches) {
+        try {
+          const branches = JSON.parse(pengelolaUser.assignedBranches) as string[];
+          whereClause.branchCode = { in: branches };
+        } catch (error) {
+          // If parsing fails, treat as single branch code
+          whereClause.branchCode = pengelolaUser.assignedBranches;
+        }
       }
     }
 
@@ -87,6 +125,7 @@ export class MachinesService {
           { serialNumberManufacturer: { contains: searchTerm.toLowerCase() } },
           { machineCode: { contains: searchTerm.toLowerCase() } },
           { branchCode: { contains: searchTerm.toLowerCase() } },
+          { modelName: { contains: searchTerm.toLowerCase() } },
         ],
       };
 
@@ -147,7 +186,7 @@ export class MachinesService {
 
     return {
       data: machinesWithCassetteCount,
-      pagination: {
+      meta: {
         page,
         limit,
         total,
@@ -192,9 +231,32 @@ export class MachinesService {
       throw new NotFoundException(`Machine with ID ${id} not found`);
     }
 
-    // Check Pengelola access
-    if (userType?.toUpperCase() === 'PENGELOLA' && pengelolaId && machine.pengelolaId !== pengelolaId) {
-      throw new ForbiddenException('You do not have access to this machine');
+    // SECURITY: Pengelola users can only access machines assigned to them AND from banks they are assigned to
+    if (userType?.toUpperCase() === 'PENGELOLA' && pengelolaId) {
+      // Check if machine is assigned to this pengelola (must match exactly, including null check)
+      if (!machine.pengelolaId || machine.pengelolaId !== pengelolaId) {
+        throw new ForbiddenException(
+          machine.pengelolaId
+            ? 'You do not have access to this machine. This machine is assigned to another pengelola.'
+            : 'You do not have access to this machine. This machine is not assigned to any pengelola yet.'
+        );
+      }
+
+      // Check if pengelola has access to the machine's bank
+      const bankAssignment = await this.prisma.bankPengelolaAssignment.findFirst({
+        where: {
+          pengelolaId,
+          customerBankId: machine.customerBankId,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (!bankAssignment) {
+        throw new ForbiddenException(
+          `You do not have access to machines from bank ${machine.customerBank?.bankName || machine.customerBankId}. ` +
+          `Please contact your administrator to assign this bank to your pengelola.`
+        );
+      }
     }
 
     return machine;
@@ -247,9 +309,62 @@ export class MachinesService {
       }
     }
 
+    // Prepare update data - exclude undefined/null/empty values and handle special fields
+    const updateData: any = {};
+    for (const [key, value] of Object.entries(updateMachineDto)) {
+      if (value !== undefined && value !== null) {
+        // Handle empty strings - treat as null (don't update)
+        if (typeof value === 'string' && value.trim().length === 0) {
+          // For optional string fields, set to null if empty
+          if (['branchCode', 'city', 'province', 'currentWsid', 'notes'].includes(key)) {
+            updateData[key] = null;
+          }
+          // For other string fields, skip if empty
+          continue;
+        }
+
+        // Handle pengelolaId - only include if valid (not empty)
+        if (key === 'pengelolaId') {
+          if (typeof value === 'string' && value.trim().length > 0) {
+            updateData[key] = value;
+          }
+          // If empty, don't include it (keep existing value)
+          continue;
+        }
+
+        // Handle installationDate - convert date string to Date object
+        if (key === 'installationDate') {
+          if (typeof value === 'string' && value.trim().length > 0) {
+            // If it's just a date (YYYY-MM-DD), convert to Date object
+            const dateStr = value.trim();
+            if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              // For Date field in Prisma, we can use just the date string
+              // Prisma will handle the conversion
+              updateData[key] = new Date(dateStr + 'T00:00:00.000Z');
+            } else {
+              // Already a DateTime string, parse it
+              const dateObj = new Date(value);
+              if (isNaN(dateObj.getTime())) {
+                // Invalid date, skip it
+                continue;
+              }
+              updateData[key] = dateObj;
+            }
+          } else {
+            // Empty date, set to null
+            updateData[key] = null;
+          }
+          continue;
+        }
+
+        // For all other fields, include the value
+        updateData[key] = value;
+      }
+    }
+
     return this.prisma.machine.update({
       where: { id },
-      data: updateMachineDto,
+      data: updateData,
       include: {
         customerBank: true,
         pengelola: true,
@@ -297,11 +412,11 @@ export class MachinesService {
       // Find machine by serial number (SN is the primary identifier, WSID changes frequently)
       const foundMachine = await this.prisma.machine.findFirst({
         where: { serialNumberManufacturer: identifier },
-        select: { 
-          id: true, 
-          serialNumberManufacturer: true, 
-          machineCode: true, 
-          currentWsid: true 
+        select: {
+          id: true,
+          serialNumberManufacturer: true,
+          machineCode: true,
+          currentWsid: true
         },
       });
 
@@ -314,11 +429,11 @@ export class MachinesService {
       // Find machine by ID (UUID)
       const foundMachine = await this.prisma.machine.findUnique({
         where: { id: identifier },
-        select: { 
-          id: true, 
-          serialNumberManufacturer: true, 
-          machineCode: true, 
-          currentWsid: true 
+        select: {
+          id: true,
+          serialNumberManufacturer: true,
+          machineCode: true,
+          currentWsid: true
         },
       });
 
@@ -396,14 +511,20 @@ export class MachinesService {
     };
   }
 
-  async getDashboardStats(userType: string, pengelolaId?: string) {
+  async getDashboardStats(userType: string, pengelolaId?: string, customerBankId?: string) {
     const now = new Date();
     const lastMonth = new Date(now);
     lastMonth.setMonth(lastMonth.getMonth() - 1);
 
     // Filter by Pengelola if not admin
     const whereClause: any = {};
-    if (userType !== 'HITACHI' && pengelolaId) {
+    const cassetteWhereClause: any = {};
+    
+    if (userType === 'BANK' && customerBankId) {
+      // BANK users can only see machines and cassettes from their own bank
+      whereClause.customerBankId = customerBankId;
+      cassetteWhereClause.customerBankId = customerBankId;
+    } else if (userType !== 'HITACHI' && pengelolaId) {
       whereClause.pengelolaId = pengelolaId;
     }
 
@@ -412,9 +533,13 @@ export class MachinesService {
       reporter: {
         pengelolaId: pengelolaId,
       },
+    } : userType === 'BANK' && customerBankId ? {
+      machine: {
+        customerBankId: customerBankId,
+      },
     } : {};
-    
-    this.logger.debug(`Dashboard getDashboardStats: userType=${userType}, pengelolaId=${pengelolaId}`);
+
+    this.logger.debug(`Dashboard getDashboardStats: userType=${userType}, pengelolaId=${pengelolaId}, customerBankId=${customerBankId}`);
 
     // Basic counts
     const [
@@ -443,11 +568,12 @@ export class MachinesService {
           status: {
             not: 'SCRAPPED',
           },
+          ...cassetteWhereClause,
         },
       }),
       this.prisma.customerBank.count(),
       this.prisma.pengelola.count(),
-      
+
       // Last month counts for trends
       this.prisma.machine.count({
         where: {
@@ -462,6 +588,7 @@ export class MachinesService {
             not: 'SCRAPPED',
           },
           createdAt: { lt: lastMonth },
+          ...cassetteWhereClause,
         },
       }),
 
@@ -478,6 +605,7 @@ export class MachinesService {
           status: {
             not: 'SCRAPPED',
           },
+          ...cassetteWhereClause,
         },
         _count: true,
       }),
@@ -551,6 +679,7 @@ export class MachinesService {
       this.prisma.cassette.count({
         where: {
           status: 'BAD',
+          ...cassetteWhereClause,
         },
       }),
 
@@ -571,7 +700,7 @@ export class MachinesService {
     ]);
 
     // Calculate trends
-    const machineTrend = machinesLastMonth > 0 
+    const machineTrend = machinesLastMonth > 0
       ? ((totalMachines - machinesLastMonth) / machinesLastMonth * 100).toFixed(1)
       : '0';
     const cassetteTrend = cassettesLastMonth > 0
@@ -618,7 +747,7 @@ export class MachinesService {
 
     // Health score calculation
     const totalOperational = (machineStatusMap.OPERATIONAL || 0);
-    const healthScore = totalMachines > 0 
+    const healthScore = totalMachines > 0
       ? ((totalOperational / totalMachines) * 100).toFixed(1)
       : '0';
 
@@ -640,26 +769,31 @@ export class MachinesService {
           }[]
         >`
           WITH ticket_cassettes AS (
-            SELECT t.reported_by, t.cassette_id
+            -- Single cassette tickets (where cassette is primary)
+            SELECT DISTINCT t.id AS ticket_id, t.reported_by, t.cassette_id
             FROM problem_tickets t
             WHERE t.cassette_id IS NOT NULL
-            UNION ALL
-            SELECT t.reported_by, d.cassette_id
+              AND t.deleted_at IS NULL
+            UNION
+            -- Multi-cassette tickets (where cassette is in details)
+            SELECT DISTINCT t.id AS ticket_id, t.reported_by, d.cassette_id
             FROM ticket_cassette_details d
             JOIN problem_tickets t ON d.ticket_id = t.id
+            WHERE d.cassette_id IS NOT NULL
+              AND t.deleted_at IS NULL
           )
           SELECT 
             pu.pengelola_id AS pengelolaId,
             pe.company_name AS pengelolaName,
             c.serial_number AS cassetteSerialNumber,
-            CAST(COUNT(*) AS SIGNED) AS openTickets
+            CAST(COUNT(DISTINCT tc.ticket_id) AS SIGNED) AS openTickets
           FROM ticket_cassettes tc
           JOIN pengelola_users pu ON tc.reported_by = pu.id
           JOIN pengelola pe ON pu.pengelola_id = pe.id
           JOIN cassettes c ON tc.cassette_id = c.id
           GROUP BY pu.pengelola_id, pe.company_name, c.serial_number
-          ORDER BY COUNT(*) DESC
-          LIMIT 10
+          ORDER BY COUNT(DISTINCT tc.ticket_id) DESC
+          LIMIT 50
         `;
       } catch (error) {
         this.logger.error('Error generating ticketUsageByCassetteAndPengelola analytics', error.stack);
@@ -701,11 +835,11 @@ export class MachinesService {
       this.logger.debug(`Dashboard: Processing ${recentTickets?.length || 0} recentTickets`);
       if (recentTickets && recentTickets.length > 0) {
       }
-      
+
       if (!recentTickets || recentTickets.length === 0) {
         return [];
       }
-      
+
       const formattedActivities = recentTickets.map(ticket => {
         const statusLabels: Record<string, string> = {
           'OPEN': 'Dibuka',
@@ -713,10 +847,9 @@ export class MachinesService {
           'RECEIVED': 'Diterima di RC',
           'IN_PROGRESS': 'Sedang Diperbaiki',
           'RESOLVED': 'Selesai Diperbaiki',
-          'RETURN_SHIPPED': 'Dikirim ke Pengelola',
           'CLOSED': 'Ditutup',
         };
-        
+
         const priorityLabels: Record<string, string> = {
           'CRITICAL': 'Kritis',
           'HIGH': 'Tinggi',
@@ -724,11 +857,11 @@ export class MachinesService {
           'LOW': 'Rendah',
         };
 
-        const activityType = ticket.status === 'OPEN' || ticket.status === 'IN_DELIVERY' 
-          ? 'ticket_created' 
+        const activityType = ticket.status === 'OPEN' || ticket.status === 'IN_DELIVERY'
+          ? 'ticket_created'
           : ticket.status === 'RESOLVED' || ticket.status === 'CLOSED'
-          ? 'ticket_resolved'
-          : 'ticket_updated';
+            ? 'ticket_resolved'
+            : 'ticket_updated';
 
         return {
           type: activityType,
@@ -738,23 +871,23 @@ export class MachinesService {
           ticketId: ticket.id,
         };
       });
-      
+
       this.logger.debug(`Dashboard: Found ${recentTickets.length} recent tickets, formatted ${formattedActivities.length} activities`);
-      
+
       return formattedActivities;
     })();
-    
+
     const result = {
       // Basic stats
       totalMachines,
       totalCassettes,
       totalBanks,
       totalVendors,
-      
+
       // Trends
       machineTrend: parseFloat(machineTrend),
       cassetteTrend: parseFloat(cassetteTrend),
-      
+
       // Status breakdowns
       machineStatus: {
         operational: machineStatusMap.OPERATIONAL || 0,
@@ -767,10 +900,10 @@ export class MachinesService {
         inTransit: cassetteStatusMap.IN_TRANSIT_TO_RC || 0,
         inRepair: cassetteStatusMap.IN_REPAIR || 0,
       },
-      
+
       // Health score
       healthScore: parseFloat(healthScore),
-      
+
       // Top banks
       topBanks: topBanksWithNames,
 
@@ -782,7 +915,6 @@ export class MachinesService {
           RECEIVED: ticketStatusMap.RECEIVED || 0,
           IN_PROGRESS: ticketStatusMap.IN_PROGRESS || 0,
           RESOLVED: ticketStatusMap.RESOLVED || 0,
-          RETURN_SHIPPED: ticketStatusMap.RETURN_SHIPPED || 0,
           CLOSED: ticketStatusMap.CLOSED || 0,
         },
         byPriority: {
@@ -799,7 +931,7 @@ export class MachinesService {
 
       // Recent activities - tickets
       recentActivities,
-      
+
       // Critical alerts
       alerts: {
         criticalTickets,
@@ -807,9 +939,9 @@ export class MachinesService {
         badCassettes,
       },
     };
-    
+
     this.logger.debug(`Dashboard: Returning result with ${result.recentActivities.length} recentActivities`);
-    
+
     return result;
   }
 
@@ -864,6 +996,273 @@ export class MachinesService {
     // Delete machine
     return this.prisma.machine.delete({
       where: { id },
+    });
+  }
+
+  async bulkAssignMachines(pengelolaId: string, machineIds: string[], userId: string) {
+    // Verify pengelola exists
+    const pengelola = await this.prisma.pengelola.findUnique({
+      where: { id: pengelolaId },
+    });
+
+    if (!pengelola) {
+      throw new NotFoundException(`Pengelola with ID ${pengelolaId} not found`);
+    }
+
+    // Verify all machines exist and get their bank IDs
+    const machines = await this.prisma.machine.findMany({
+      where: { id: { in: machineIds } },
+      select: {
+        id: true,
+        machineCode: true,
+        serialNumberManufacturer: true,
+        customerBankId: true,
+      },
+    });
+
+    if (machines.length !== machineIds.length) {
+      const foundIds = machines.map(m => m.id);
+      const missingIds = machineIds.filter(id => !foundIds.includes(id));
+      throw new NotFoundException(`Some machines not found: ${missingIds.join(', ')}`);
+    }
+
+    // Get unique bank IDs from machines
+    const bankIds = [...new Set(machines.map(m => m.customerBankId).filter(Boolean))];
+
+    // Create or update bank-pengelola assignments for all banks
+    const assignmentPromises = bankIds.map(bankId =>
+      this.prisma.bankPengelolaAssignment.upsert({
+        where: {
+          customerBankId_pengelolaId: {
+            customerBankId: bankId,
+            pengelolaId,
+          },
+        },
+        update: { status: 'ACTIVE' },
+        create: {
+          customerBankId: bankId,
+          pengelolaId,
+          status: 'ACTIVE',
+        },
+      })
+    );
+
+    // Update all machines and create assignments in a transaction
+    await this.prisma.$transaction(async (tx) => {
+      // Create/update bank-pengelola assignments
+      await Promise.all(assignmentPromises);
+
+      // Update all machines
+      await tx.machine.updateMany({
+        where: { id: { in: machineIds } },
+        data: { pengelolaId },
+      });
+    });
+
+    const result = { count: machines.length };
+
+    this.logger.log(`Bulk assigned ${result.count} machines to pengelola ${pengelola.companyName} (${pengelola.pengelolaCode}) and created ${bankIds.length} bank assignment(s) by user ${userId}`);
+
+    return {
+      success: true,
+      assignedCount: result.count,
+      pengelola: {
+        id: pengelola.id,
+        companyName: pengelola.companyName,
+        pengelolaCode: pengelola.pengelolaCode,
+      },
+      machines: machines.map(m => ({
+        id: m.id,
+        machineCode: m.machineCode,
+        serialNumberManufacturer: m.serialNumberManufacturer,
+      })),
+      bankAssignmentsCreated: bankIds.length,
+    };
+  }
+
+  async distributeMachines(pengelolaIds: string[], customerBankId?: string, userId?: string) {
+    // Verify all pengelola exist
+    const pengelolaList = await this.prisma.pengelola.findMany({
+      where: { id: { in: pengelolaIds } },
+      select: { id: true, companyName: true, pengelolaCode: true },
+    });
+
+    if (pengelolaList.length !== pengelolaIds.length) {
+      const foundIds = pengelolaList.map(p => p.id);
+      const missingIds = pengelolaIds.filter(id => !foundIds.includes(id));
+      throw new NotFoundException(`Some pengelola not found: ${missingIds.join(', ')}`);
+    }
+
+    // Get all unassigned machines (or from specific bank)
+    const whereClause: any = {
+      pengelolaId: null, // Only unassigned machines
+    };
+
+    if (customerBankId) {
+      whereClause.customerBankId = customerBankId;
+    }
+
+    const unassignedMachines = await this.prisma.machine.findMany({
+      where: whereClause,
+      select: { id: true, machineCode: true, serialNumberManufacturer: true, customerBankId: true },
+      orderBy: { createdAt: 'asc' }, // Distribute in order
+    });
+
+    if (unassignedMachines.length === 0) {
+      throw new BadRequestException('No unassigned machines found' + (customerBankId ? ' for this bank' : ''));
+    }
+
+    // Distribute machines evenly
+    const machinesPerPengelola = Math.floor(unassignedMachines.length / pengelolaIds.length);
+    const remainder = unassignedMachines.length % pengelolaIds.length;
+
+    const assignments: Array<{ pengelolaId: string; machineIds: string[] }> = [];
+    let machineIndex = 0;
+
+    for (let i = 0; i < pengelolaIds.length; i++) {
+      const pengelolaId = pengelolaIds[i];
+      const count = machinesPerPengelola + (i < remainder ? 1 : 0); // Distribute remainder to first pengelola
+      const machineIds = unassignedMachines.slice(machineIndex, machineIndex + count).map(m => m.id);
+
+      if (machineIds.length > 0) {
+        assignments.push({ pengelolaId, machineIds });
+        machineIndex += count;
+      }
+    }
+
+    // Execute assignments in a transaction
+    const results: Array<{
+      pengelolaId: string;
+      pengelola: { id: string; companyName: string; pengelolaCode: string } | undefined;
+      assignedCount: number;
+      machineIds: string[];
+      bankAssignmentsCreated: number;
+    }> = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const assignment of assignments) {
+        // Get bank IDs for machines in this assignment
+        const assignmentMachines = unassignedMachines.filter(m =>
+          assignment.machineIds.includes(m.id)
+        );
+        const bankIds = [...new Set(assignmentMachines.map(m => m.customerBankId).filter(Boolean))];
+
+        // Create or update bank-pengelola assignments for this pengelola
+        const assignmentPromises = bankIds.map(bankId =>
+          tx.bankPengelolaAssignment.upsert({
+            where: {
+              customerBankId_pengelolaId: {
+                customerBankId: bankId,
+                pengelolaId: assignment.pengelolaId,
+              },
+            },
+            update: { status: 'ACTIVE' },
+            create: {
+              customerBankId: bankId,
+              pengelolaId: assignment.pengelolaId,
+              status: 'ACTIVE',
+            },
+          })
+        );
+
+        await Promise.all(assignmentPromises);
+
+        // Update machines
+        const result = await tx.machine.updateMany({
+          where: { id: { in: assignment.machineIds } },
+          data: { pengelolaId: assignment.pengelolaId },
+        });
+
+        results.push({
+          pengelolaId: assignment.pengelolaId,
+          pengelola: pengelolaList.find(p => p.id === assignment.pengelolaId),
+          assignedCount: result.count,
+          machineIds: assignment.machineIds,
+          bankAssignmentsCreated: bankIds.length,
+        });
+      }
+    });
+
+    this.logger.log(`Distributed ${unassignedMachines.length} machines to ${pengelolaIds.length} pengelola and created bank assignments by user ${userId}`);
+
+    return {
+      success: true,
+      totalMachines: unassignedMachines.length,
+      totalPengelola: pengelolaIds.length,
+      machinesPerPengelola,
+      remainder,
+      assignments: results,
+    };
+  }
+
+  async unassignMachines(pengelolaId?: string, customerBankId?: string, machineIds?: string[], userId?: string) {
+    const whereClause: any = {};
+
+    // If specific machine IDs provided, only unassign those
+    if (machineIds && machineIds.length > 0) {
+      whereClause.id = { in: machineIds };
+    } else {
+      // Otherwise, filter by pengelolaId or customerBankId
+      if (pengelolaId) {
+        whereClause.pengelolaId = pengelolaId;
+      } else {
+        // If no pengelolaId specified, unassign all machines (pengelolaId is not null)
+        whereClause.pengelolaId = { not: null };
+      }
+
+      if (customerBankId) {
+        whereClause.customerBankId = customerBankId;
+      }
+    }
+
+    // Get machines that will be unassigned (for logging)
+    const machinesToUnassign = await this.prisma.machine.findMany({
+      where: whereClause,
+      select: { id: true, machineCode: true, serialNumberManufacturer: true, pengelolaId: true, customerBankId: true },
+    });
+
+    if (machinesToUnassign.length === 0) {
+      throw new BadRequestException('No machines found to unassign' +
+        (pengelolaId ? ` for pengelola ${pengelolaId}` : '') +
+        (customerBankId ? ` for bank ${customerBankId}` : ''));
+    }
+
+    // Unassign machines (set pengelolaId to null)
+    const result = await this.prisma.machine.updateMany({
+      where: whereClause,
+      data: { pengelolaId: null },
+    });
+
+    this.logger.log(`Unassigned ${result.count} machine(s) by user ${userId}` +
+      (pengelolaId ? ` from pengelola ${pengelolaId}` : '') +
+      (customerBankId ? ` from bank ${customerBankId}` : ''));
+
+    return {
+      success: true,
+      unassignedCount: result.count,
+      machines: machinesToUnassign.map(m => ({
+        id: m.id,
+        machineCode: m.machineCode,
+        serialNumberManufacturer: m.serialNumberManufacturer,
+        previousPengelolaId: m.pengelolaId,
+      })),
+    };
+  }
+
+  async getMachineCassettes(id: string) {
+    const machine = await this.prisma.machine.findUnique({
+      where: { id },
+    });
+
+    if (!machine) {
+      throw new NotFoundException(`Machine with ID ${id} not found`);
+    }
+
+    return this.prisma.cassette.findMany({
+      where: { machineId: id },
+      include: {
+        cassetteType: true,
+      },
     });
   }
 }

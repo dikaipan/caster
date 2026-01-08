@@ -1,0 +1,88 @@
+
+> hcm-backend@0.1.0 test:e2e
+> jest --config ./test/jest-e2e.json repairs
+
+[33m[HCM-Backend][39m [33m36572[39m 1/2/2026, 2:40:59 PM [33m   WARN[39m [33m[{
+  "context": "SecurityLogger",
+  "timestamp": "2026-01-02T07:40:59.716Z",
+  "event": "LOGIN_ATTEMPT",
+  "username": "admin_r_1767339659244842",
+  "ip": "::ffff:127.0.0.1",
+  "action": "LOGIN",
+  "status": "SUCCESS"
+}][39m [33m[SECURITY] LOGIN_ATTEMPT[39m [33m+0ms[39m
+  console.error
+    Step 3 Failed: 400 {
+      "message": "Cannot transition repair ticket from ON_PROGRESS to COMPLETED. Allowed transitions from ON_PROGRESS: COMPLETED, SCRAPPED.",
+      "error": "Bad Request",
+      "statusCode": 400
+    }
+
+    [0m [90m 207 |[39m
+     [90m 208 |[39m         [36mif[39m (res[33m.[39mstatus [33m!==[39m [35m201[39m) {
+    [31m[1m>[22m[39m[90m 209 |[39m             console[33m.[39merror([32m'Step 3 Failed:'[39m[33m,[39m res[33m.[39mstatus[33m,[39m [33mJSON[39m[33m.[39mstringify(res[33m.[39mbody[33m,[39m [36mnull[39m[33m,[39m [35m2[39m))[33m;[39m
+     [90m     |[39m                     [31m[1m^[22m[39m
+     [90m 210 |[39m         }
+     [90m 211 |[39m         expect(res[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m 212 |[39m         expect(res[33m.[39mbody[33m.[39mstatus)[33m.[39mtoBe([33mRepairTicketStatus[39m[33m.[39m[33mCOMPLETED[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (repairs.e2e-spec.ts:209:21)
+
+  console.log
+    🔌 Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+  console.log
+    🔌 Database disconnected
+
+      at Proxy.onModuleDestroy (../src/prisma/prisma.service.ts:73:13)
+          at async Promise.all (index 0)
+
+FAIL test/repairs.e2e-spec.ts (8.27 s)
+  Repairs Integration (e2e)
+    √ 1. Admin should Create Repair Tickets (Bulk from Problem Ticket) (75 ms)
+    √ 2. Admin should Take Ticket (26 ms)
+    × 3. Admin should Complete Repair (49 ms)
+    × 4. Status Sync Check: Problem Ticket should be RESOLVED (7 ms)
+
+  ● Repairs Integration (e2e) › 3. Admin should Complete Repair
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 400
+
+    [0m [90m 209 |[39m             console[33m.[39merror([32m'Step 3 Failed:'[39m[33m,[39m res[33m.[39mstatus[33m,[39m [33mJSON[39m[33m.[39mstringify(res[33m.[39mbody[33m,[39m [36mnull[39m[33m,[39m [35m2[39m))[33m;[39m
+     [90m 210 |[39m         }
+    [31m[1m>[22m[39m[90m 211 |[39m         expect(res[33m.[39mstatus)[33m.[39mtoBe([35m201[39m)[33m;[39m
+     [90m     |[39m                            [31m[1m^[22m[39m
+     [90m 212 |[39m         expect(res[33m.[39mbody[33m.[39mstatus)[33m.[39mtoBe([33mRepairTicketStatus[39m[33m.[39m[33mCOMPLETED[39m)[33m;[39m
+     [90m 213 |[39m     })[33m;[39m
+     [90m 214 |[39m[0m
+
+      at Object.<anonymous> (repairs.e2e-spec.ts:211:28)
+
+  ● Repairs Integration (e2e) › 4. Status Sync Check: Problem Ticket should be RESOLVED
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "RESOLVED"
+    Received: "IN_PROGRESS"
+
+    [0m [90m 218 |[39m             where[33m:[39m { id[33m:[39m ticketId }
+     [90m 219 |[39m         })[33m;[39m
+    [31m[1m>[22m[39m[90m 220 |[39m         expect(updatedTicket[33m?[39m[33m.[39mstatus)[33m.[39mtoBe([33mProblemTicketStatus[39m[33m.[39m[33mRESOLVED[39m)[33m;[39m
+     [90m     |[39m                                       [31m[1m^[22m[39m
+     [90m 221 |[39m     })[33m;[39m
+     [90m 222 |[39m })[33m;[39m
+     [90m 223 |[39m[0m
+
+      at Object.<anonymous> (repairs.e2e-spec.ts:220:39)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 2 passed, 4 total
+Snapshots:   0 total
+Time:        8.849 s, estimated 12 s
+Ran all test suites matching /repairs/i.

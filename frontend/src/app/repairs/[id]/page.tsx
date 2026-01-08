@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   ArrowLeft,
+  ArrowRight,
   Package,
   Clock,
   User,
@@ -41,6 +42,8 @@ import {
   Shield,
   Calendar,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { CASSETTE_PARTS, getPartsForMachineType } from '@/config/cassette-parts';
 
 export default function RepairDetailPage() {
   const router = useRouter();
@@ -53,14 +56,15 @@ export default function RepairDetailPage() {
   const [takingTicket, setTakingTicket] = useState(false);
   const [repair, setRepair] = useState<any>(null);
   const [activeForm, setActiveForm] = useState<'none' | 'diagnosing' | 'repair' | 'complete'>('none');
-  
+
   // Form fields
   const [repairActionTaken, setRepairActionTaken] = useState('');
-  const [partsReplaced, setPartsReplaced] = useState('');
+  const [selectedParts, setSelectedParts] = useState<string[]>([]);
+  const [otherParts, setOtherParts] = useState(''); // For non-standard parts
   const [notes, setNotes] = useState('');
   const [qcPassed, setQcPassed] = useState<boolean | null>(null);
   const [showCompleteRepairDialog, setShowCompleteRepairDialog] = useState(false);
-  
+
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   useEffect(() => {
@@ -84,9 +88,44 @@ export default function RepairDetailPage() {
       try {
         const response = await api.get(`/repairs/${repairId}`);
         const data = response.data;
+        console.log('Repair data:', {
+          id: data.id,
+          status: data.status,
+          receivedAtRc: data.receivedAtRc,
+          hasReceivedAtRc: !!data.receivedAtRc
+        });
         setRepair(data);
         setRepairActionTaken(data.repairActionTaken || '');
-        setPartsReplaced(Array.isArray(data.partsReplaced) ? data.partsReplaced.join(', ') : data.partsReplaced || '');
+
+        // Handle partsReplaced - convert dari array of names ke array of IDs
+        if (data.partsReplaced) {
+          if (Array.isArray(data.partsReplaced)) {
+            const machineType = data.cassette?.cassetteType?.machineType;
+            if (machineType && (machineType === 'SR' || machineType === 'VS')) {
+              const allParts = [
+                ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].outer,
+                ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].inner
+              ];
+
+              // Match part names to IDs
+              const matchedIds = data.partsReplaced
+                .map((partName: string) => {
+                  const found = allParts.find((p: any) => p.name === partName);
+                  return found?.id;
+                })
+                .filter((id: any): id is string => !!id);
+
+              setSelectedParts(matchedIds.length > 0 ? matchedIds : []);
+            } else {
+              setSelectedParts([]);
+            }
+          } else {
+            setSelectedParts([]);
+          }
+        } else {
+          setSelectedParts([]);
+        }
+
         setNotes(data.notes || '');
         setQcPassed(data.qcPassed);
 
@@ -94,17 +133,22 @@ export default function RepairDetailPage() {
         if (data.cassette?.id) {
           try {
             const deliveriesResponse = await api.get(`/tickets?cassetteId=${data.cassette.id}`);
-            const tickets = deliveriesResponse.data?.tickets || deliveriesResponse.data || [];
+            // API returns { data: [...], pagination: {...} } structure
+            const tickets = Array.isArray(deliveriesResponse.data?.data)
+              ? deliveriesResponse.data.data
+              : Array.isArray(deliveriesResponse.data)
+                ? deliveriesResponse.data
+                : [];
             const replacementTicket = tickets.find((t: any) => {
               if (t.cassetteDetails && t.cassetteDetails.length > 0) {
-                return t.cassetteDetails.some((detail: any) => 
-                  detail.cassetteId === data.cassette.id && 
+                return t.cassetteDetails.some((detail: any) =>
+                  detail.cassetteId === data.cassette.id &&
                   detail.requestReplacement === true
                 );
               }
               return false;
             });
-            
+
             if (replacementTicket) {
               setTicket(replacementTicket);
               setHasReplacementRequest(true);
@@ -126,20 +170,20 @@ export default function RepairDetailPage() {
     }
   }, [isAuthenticated, repairId]);
 
-  // Auto-buka form sesuai status saat data sudah ter-load dan tiket milik user ini
+  // Reset activeForm to 'none' when repair data changes to ensure user goes through flow from start
   useEffect(() => {
-    if (!repair || !user) return;
-    if (activeForm !== 'none') return;
-
-    const assignedToMe = repair.repairedBy === user.id;
-    if (!assignedToMe) return;
-
-    if (repair.status === 'DIAGNOSING') {
-      setActiveForm('diagnosing');
-    } else if (repair.status === 'ON_PROGRESS') {
-      setActiveForm('repair');
+    if (repair) {
+      // Only auto-set form if status is COMPLETED (to show completed view)
+      // Otherwise, always start from step 0 (Identifikasi Kaset)
+      if (repair.status === 'COMPLETED') {
+        setActiveForm('none');
+      } else {
+        // Reset to none to force user to start from step 0
+        setActiveForm('none');
+      }
     }
-  }, [repair, user, activeForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repair?.id]); // Only reset when repair ID changes, not on every status change
 
   const handleTakeTicket = async () => {
     try {
@@ -149,9 +193,9 @@ export default function RepairDetailPage() {
       setMessage({ type: 'success', text: 'Ticket assigned to you successfully!' });
     } catch (error: any) {
       console.error('Error taking ticket:', error);
-      setMessage({ 
-        type: 'error', 
-        text: error.response?.data?.message || 'Failed to take ticket' 
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.message || 'Failed to take ticket'
       });
     } finally {
       setTakingTicket(false);
@@ -206,11 +250,31 @@ export default function RepairDetailPage() {
     setSubmitting(true);
 
     try {
-      const partsArray = partsReplaced.trim() ? partsReplaced.split(',').map(p => p.trim()).filter(p => p) : undefined;
-      
+      const machineType = repair?.cassette?.cassetteType?.machineType;
+      let partsArray: string[] = [];
+
+      // Add standard parts from checklist
+      if (machineType && (machineType === 'SR' || machineType === 'VS') && selectedParts.length > 0) {
+        partsArray = selectedParts.map(id => {
+          const allParts = [
+            ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].outer,
+            ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].inner
+          ];
+          const part = allParts.find((p: any) => p.id === id);
+          return part?.name || id;
+        });
+      }
+
+      // Add other parts (custom input)
+      if (otherParts.trim()) {
+        const customParts = otherParts.split(',').map(p => p.trim()).filter(p => p);
+        partsArray = [...partsArray, ...customParts];
+      }
+
       await api.patch(`/repairs/${repairId}`, {
         repairActionTaken: repairActionTaken.trim() || undefined,
-        partsReplaced: partsArray,
+        partsReplaced: partsArray.length > 0 ? partsArray : undefined,
+        otherPartsReplaced: otherParts.trim() || undefined,
         notes: notes.trim() || undefined,
       });
 
@@ -227,7 +291,7 @@ export default function RepairDetailPage() {
 
   const handleComplete = async () => {
     setMessage(null);
-    
+
     if (qcPassed === null) {
       setMessage({ type: 'error', text: 'Pilih status QC terlebih dahulu!' });
       return;
@@ -246,16 +310,35 @@ export default function RepairDetailPage() {
     setShowCompleteRepairDialog(false);
 
     try {
-      const partsArray = partsReplaced.trim() ? partsReplaced.split(',').map(p => p.trim()).filter(p => p) : undefined;
-      
+      const machineType = repair?.cassette?.cassetteType?.machineType;
+      let partsArray: string[] = [];
+
+      // Add standard parts from checklist
+      if (machineType && (machineType === 'SR' || machineType === 'VS') && selectedParts.length > 0) {
+        partsArray = selectedParts.map(id => {
+          const allParts = [
+            ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].outer,
+            ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].inner
+          ];
+          const part = allParts.find((p: any) => p.id === id);
+          return part?.name || id;
+        });
+      }
+
+      // Add other parts (custom input)
+      if (otherParts.trim()) {
+        const customParts = otherParts.split(',').map(p => p.trim()).filter(p => p);
+        partsArray = [...partsArray, ...customParts];
+      }
+
       await api.post(`/repairs/${repairId}/complete`, {
         repairActionTaken: repairActionTaken.trim(),
-        partsReplaced: partsArray,
+        partsReplaced: partsArray.length > 0 ? partsArray : undefined,
         qcPassed,
       });
 
       setMessage({ type: 'success', text: `✅ Repair selesai! QC ${qcPassed ? 'Passed' : 'Failed'}` });
-      
+
       // Refresh data
       const refreshResponse = await api.get(`/repairs/${repairId}`);
       setRepair(refreshResponse.data);
@@ -326,15 +409,25 @@ export default function RepairDetailPage() {
     { key: 'QC', label: 'QC & Selesai', icon: CheckCircle2 },
   ];
 
+  // Determine wizard step based on activeForm, not repair status
+  // This ensures user always goes through flow from step 0 (Identifikasi Kaset)
   let currentWizardStep = 0;
-  if (repair.status === 'RECEIVED') {
-    currentWizardStep = 0;
-  } else if (repair.status === 'DIAGNOSING') {
-    currentWizardStep = 1;
-  } else if (repair.status === 'ON_PROGRESS') {
-    currentWizardStep = activeForm === 'complete' ? 3 : 2;
-  } else if (repair.status === 'COMPLETED') {
+  if (repair.status === 'COMPLETED') {
+    // If completed, show step 3 (QC & Selesai) view
     currentWizardStep = 3;
+  } else if (activeForm === 'complete') {
+    // If user is in complete form, show step 3
+    currentWizardStep = 3;
+  } else if (activeForm === 'repair') {
+    // If user is in repair form, show step 2
+    currentWizardStep = 2;
+  } else if (activeForm === 'diagnosing') {
+    // If user is in diagnosing form, show step 1
+    currentWizardStep = 1;
+  } else {
+    // Default: show step 0 (Identifikasi Kaset)
+    // This ensures user always starts from step 0, regardless of repair status
+    currentWizardStep = 0;
   }
 
   const isAssignedToMe = repair.repairedBy === user?.id;
@@ -342,43 +435,22 @@ export default function RepairDetailPage() {
 
   return (
     <PageLayout>
-      <div className="max-w-5xl mx-auto">
-        {/* Back Button */}
-        <div className="mb-6">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => {
-              const page = searchParams.get('page');
-              if (page) {
-                router.push(`/repairs?page=${page}`);
-              } else {
-                router.push('/repairs');
-              }
-            }} 
-            className="mb-4 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Kembali
-          </Button>
-        </div>
-
+      <div className="w-full max-w-6xl mx-auto">
         {/* Pesan error / sukses */}
         {message && (
           <div
-            className={`mb-6 p-4 rounded-lg border-2 ${
-              message.type === 'error'
-                ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
-                : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
-            }`}
+            className={`mb-6 p-4 rounded-lg border-2 ${message.type === 'error'
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+              }`}
           >
             {message.text}
           </div>
         )}
 
         {/* Progress Wizard - Step Indicator */}
-        <div className="mb-8 bg-white dark:bg-[#1e293b] rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between gap-3 relative">
+        <div className="mb-4 bg-white dark:bg-[#1e293b] rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-2 relative">
             {wizardSteps.map((step, index) => {
               const isActive = index === currentWizardStep;
               const isCompleted = index < currentWizardStep || repair.status === 'COMPLETED';
@@ -388,37 +460,34 @@ export default function RepairDetailPage() {
                 <div key={step.key} className="flex-1 flex flex-col items-center relative z-10">
                   {/* Connector line */}
                   {index < wizardSteps.length - 1 && (
-                    <div className="absolute top-8 left-1/2 w-full h-0.5 -z-10">
+                    <div className="absolute top-6 left-1/2 w-full h-px -z-10">
                       <div
-                        className={`h-full transition-all ${
-                          isCompleted || (isActive && index < currentWizardStep)
-                            ? 'bg-teal-500 dark:bg-teal-400'
-                            : 'bg-slate-300 dark:bg-slate-600'
-                        }`}
+                        className={`h-full transition-all ${isCompleted || (isActive && index < currentWizardStep)
+                          ? 'bg-teal-500 dark:bg-teal-400'
+                          : 'bg-slate-200 dark:bg-slate-600'
+                          }`}
                       />
                     </div>
                   )}
-                  
+
                   <div
-                    className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
-                      isActive
-                        ? 'bg-gradient-to-br from-teal-500 to-teal-600 dark:from-teal-400 dark:to-teal-600 shadow-lg shadow-teal-500/50 dark:shadow-teal-500/50 scale-110'
-                        : isCompleted
+                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isActive
+                      ? 'bg-teal-500 dark:bg-teal-500'
+                      : isCompleted
                         ? 'bg-teal-500 dark:bg-teal-500'
-                        : 'bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600'
-                    }`}
+                        : 'bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600'
+                      }`}
                   >
-                    <StepIcon className={`h-7 w-7 ${isActive || isCompleted ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
+                    <StepIcon className={`h-5 w-5 ${isActive || isCompleted ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
                   </div>
-                  
+
                   <p
-                    className={`mt-3 text-sm font-semibold text-center transition-all ${
-                      isActive
-                        ? 'text-teal-600 dark:text-teal-300'
-                        : isCompleted
+                    className={`mt-2 text-xs font-medium text-center transition-all ${isActive
+                      ? 'text-teal-600 dark:text-teal-400'
+                      : isCompleted
                         ? 'text-teal-600 dark:text-teal-400'
-                        : 'text-slate-600 dark:text-slate-400'
-                    }`}
+                        : 'text-slate-500 dark:text-slate-400'
+                      }`}
                   >
                     {step.label}
                   </p>
@@ -429,83 +498,80 @@ export default function RepairDetailPage() {
         </div>
 
         {/* Wizard Content Area */}
-        <div className="border-4 border-teal-500 dark:border-teal-500 rounded-3xl p-8 bg-white dark:bg-[#1e293b] shadow-2xl">
-          <div className="flex flex-col md:flex-row items-start gap-4 mb-6">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 shadow-lg">
-              <Package className="h-8 w-8 text-white" />
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 bg-white dark:bg-[#1e293b]">
+          <div className="flex flex-col md:flex-row items-start gap-2.5 mb-2.5">
+            <div className="p-1.5 rounded-md bg-teal-500 dark:bg-teal-500">
+              <Package className="h-4 w-4 text-white" />
             </div>
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white mb-0.5">
                 {wizardSteps[currentWizardStep].label}
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 text-sm mb-3">
+              <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm mb-2">
                 {currentWizardStep === 0 && 'Informasi kaset yang akan diperbaiki'}
                 {currentWizardStep === 1 && 'Catat temuan dan diagnosa masalah pada kaset'}
                 {currentWizardStep === 2 && 'Update progress perbaikan dan parts yang diganti'}
                 {currentWizardStep === 3 && 'Quality Control dan penyelesaian repair'}
               </p>
-              
+
               {/* Cassette Info Badge */}
               <div className="flex flex-wrap items-center gap-2">
-                <div className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg border-2 border-teal-300 dark:border-teal-500/50 shadow-md">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                <div className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-md border border-teal-200 dark:border-teal-500/50">
+                  <div className="flex items-center gap-1.5">
+                    <Package className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
                     <div>
-                      <p className="text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-wide">Serial Number</p>
-                      <p className="text-sm font-mono font-bold text-teal-600 dark:text-teal-400">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Serial Number</p>
+                      <p className="text-sm font-mono font-semibold text-teal-600 dark:text-teal-400">
                         {repair.cassette?.serialNumber || 'N/A'}
                       </p>
                     </div>
                   </div>
                 </div>
-                
+
                 {repair.cassette?.cassetteType?.machineType && (
-                  <div className={`px-3 py-2 rounded-lg border-2 shadow-md ${
-                    repair.cassette.cassetteType.machineType === 'VS' 
-                      ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-500/50' 
-                      : 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-500/50'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <Wrench className={`h-4 w-4 ${
-                        repair.cassette.cassetteType.machineType === 'VS' 
-                          ? 'text-purple-600 dark:text-purple-400' 
-                          : 'text-orange-600 dark:text-orange-400'
-                      }`} />
+                  <div className={`px-2.5 py-1.5 rounded-md border ${repair.cassette.cassetteType.machineType === 'VS'
+                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-500/50'
+                    : 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-500/50'
+                    }`}>
+                    <div className="flex items-center gap-1.5">
+                      <Wrench className={`h-3.5 w-3.5 ${repair.cassette.cassetteType.machineType === 'VS'
+                        ? 'text-purple-600 dark:text-purple-400'
+                        : 'text-orange-600 dark:text-orange-400'
+                        }`} />
                       <div>
-                        <p className="text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-wide">Mesin</p>
-                        <p className={`text-sm font-bold ${
-                          repair.cassette.cassetteType.machineType === 'VS' 
-                            ? 'text-purple-700 dark:text-purple-300' 
-                            : 'text-orange-700 dark:text-orange-300'
-                        }`}>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Mesin</p>
+                        <p className={`text-sm font-semibold ${repair.cassette.cassetteType.machineType === 'VS'
+                          ? 'text-purple-700 dark:text-purple-300'
+                          : 'text-orange-700 dark:text-orange-300'
+                          }`}>
                           {repair.cassette.cassetteType.machineType}
                         </p>
                       </div>
                     </div>
                   </div>
                 )}
-                
+
                 {repair.cassette?.cassetteType && (
-                  <div className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <div className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                       <div>
-                        <p className="text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-wide">Type</p>
-                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Type</p>
+                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
                           {repair.cassette.cassetteType.typeCode}
                         </p>
                       </div>
                     </div>
                   </div>
                 )}
-                
+
                 {repair.cassette?.customerBank && (
-                  <div className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-300 dark:border-slate-700">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <div className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                       <div>
-                        <p className="text-[10px] text-slate-600 dark:text-slate-400 uppercase tracking-wide">Bank</p>
-                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide">Bank</p>
+                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
                           {repair.cassette.customerBank.bankName}
                         </p>
                       </div>
@@ -516,13 +582,14 @@ export default function RepairDetailPage() {
             </div>
           </div>
 
-          <div className="space-y-6">
+
+          <div className="space-y-2.5">
             {/* Step 1: Identifikasi Kaset */}
             {currentWizardStep === 0 && (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
                       <InfoBlock icon={Package} iconColor="text-teal-600 dark:text-teal-400" title="CASSETTE" isDark>
                         <InfoItem label="SN" value={repair.cassette?.serialNumber || 'N/A'} mono isDark />
                         {repair.cassette?.cassetteType && (
@@ -548,9 +615,9 @@ export default function RepairDetailPage() {
                           value={
                             repair.receivedAtRc
                               ? new Date(repair.receivedAtRc).toLocaleDateString('id-ID', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                })
+                                day: '2-digit',
+                                month: 'short',
+                              })
                               : 'N/A'
                           }
                           isDark
@@ -561,8 +628,8 @@ export default function RepairDetailPage() {
                             repair.qcPassed === null
                               ? '⏳ Pending'
                               : repair.qcPassed
-                              ? '✅ Pass'
-                              : '❌ Fail'
+                                ? '✅ Pass'
+                                : '❌ Fail'
                           }
                           isDark
                         />
@@ -571,8 +638,8 @@ export default function RepairDetailPage() {
 
                     {/* Warranty Information - Only show if repair is completed and has warranty */}
                     {repair.status === 'COMPLETED' && repair.qcPassed && repair.warrantyType && repair.warrantyEndDate && (
-                      <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-2 mb-4">
+                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 mb-3">
                           <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                           <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold uppercase">Warranty Information</p>
                         </div>
@@ -581,23 +648,21 @@ export default function RepairDetailPage() {
                           const now = new Date();
                           const isUnderWarranty = endDate >= now;
                           const warrantyTypeLabel = repair.warrantyType === 'MA' ? 'Maintenance Agreement' :
-                                                   repair.warrantyType === 'MS' ? 'Manage Service' :
-                                                   repair.warrantyType === 'IN_WARRANTY' ? 'In Warranty' :
-                                                   repair.warrantyType === 'OUT_WARRANTY' ? 'Out Warranty' :
-                                                   repair.warrantyType;
-                          
+                            repair.warrantyType === 'MS' ? 'Manage Service' :
+                              repair.warrantyType === 'IN_WARRANTY' ? 'In Warranty' :
+                                repair.warrantyType === 'OUT_WARRANTY' ? 'Out Warranty' :
+                                  repair.warrantyType;
+
                           return (
-                            <div className="space-y-3">
-                              <div className={`p-4 rounded-lg border-2 ${
-                                isUnderWarranty 
-                                  ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-500' 
-                                  : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-500'
-                              }`}>
+                            <div className="space-y-2.5">
+                              <div className={`p-3 rounded-lg border-2 ${isUnderWarranty
+                                ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-500'
+                                : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-500'
+                                }`}>
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
-                                    <Shield className={`h-5 w-5 ${
-                                      isUnderWarranty ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                                    }`} />
+                                    <Shield className={`h-5 w-5 ${isUnderWarranty ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                      }`} />
                                     <p className="text-sm font-semibold text-slate-900 dark:text-white">
                                       {isUnderWarranty ? '✅ Masih Dalam Garansi' : '❌ Garansi Sudah Berakhir'}
                                     </p>
@@ -611,7 +676,7 @@ export default function RepairDetailPage() {
                                   </Badge>
                                 </div>
                                 <p className="text-xs text-slate-700 dark:text-slate-300 mb-3">
-                                  {isUnderWarranty 
+                                  {isUnderWarranty
                                     ? 'Service ini masih dalam periode garansi. Tidak ada biaya yang dikenakan.'
                                     : 'Service ini sudah di luar periode garansi. Akan dikenakan biaya sesuai tarif.'
                                   }
@@ -653,33 +718,33 @@ export default function RepairDetailPage() {
                 </Card>
 
                 {/* Action buttons for step 1 */}
-                {repair.status === 'RECEIVED' && (
-                  <div className="flex flex-col gap-3">
-                    {/* Show info if ticket is assigned to someone else */}
-                    {repair.repairedBy && !isAssignedToMe && (
-                      <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-1">
-                              Ticket Sudah Diambil
-                            </p>
-                            <p className="text-sm text-amber-800 dark:text-amber-300">
-                              Ticket ini sudah diambil oleh <span className="font-bold">{repair.repairer?.fullName || 'User lain'}</span>. 
-                              Anda tidak dapat mengambil ticket yang sudah di-assign ke user lain.
-                            </p>
-                          </div>
+                <div className="flex flex-col gap-3">
+                  {/* Show info if ticket is assigned to someone else (only for RECEIVED status) */}
+                  {repair.status === 'RECEIVED' && repair.repairedBy && !isAssignedToMe && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-1">
+                            Ticket Sudah Diambil
+                          </p>
+                          <p className="text-sm text-amber-800 dark:text-amber-300">
+                            Ticket ini sudah diambil oleh <span className="font-bold">{repair.repairer?.fullName || 'User lain'}</span>.
+                            Anda tidak dapat mengambil ticket yang sudah di-assign ke user lain.
+                          </p>
                         </div>
                       </div>
-                    )}
-                    
-                    {/* Action buttons */}
-                    <div className="flex gap-3 justify-end">
-                      {canTakeTicket && !isAssignedToMe && (
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3 justify-end">
+                    {repair.status === 'RECEIVED' && canTakeTicket && !isAssignedToMe && (
+                      <>
                         <Button
                           onClick={handleTakeTicket}
                           disabled={takingTicket}
-                          className="bg-orange-600 dark:bg-orange-600 hover:bg-orange-700 dark:hover:bg-orange-700 text-white px-8"
+                          className="bg-orange-600 dark:bg-orange-600 hover:bg-orange-700 dark:hover:bg-orange-700 text-white w-full sm:w-auto px-4 sm:px-8"
                           size="lg"
                         >
                           {takingTicket ? (
@@ -694,58 +759,105 @@ export default function RepairDetailPage() {
                             </>
                           )}
                         </Button>
-                      )}
-                      {isAssignedToMe && (
                         <Button
-                          onClick={handleStartDiagnosing}
-                          disabled={submitting}
-                          className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white px-8"
+                          onClick={() => setActiveForm('diagnosing')}
+                          className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white w-full sm:w-auto px-4 sm:px-8"
                           size="lg"
                         >
-                          {submitting ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              Lanjut ke Diagnosa Masalah
-                              <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
-                            </>
-                          )}
+                          Lanjut ke Diagnosa Masalah
+                          <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
                         </Button>
-                      )}
-                    </div>
+                      </>
+                    )}
+                    {repair.status === 'RECEIVED' && isAssignedToMe && (
+                      <Button
+                        onClick={handleStartDiagnosing}
+                        disabled={submitting}
+                        className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white w-full sm:w-auto px-4 sm:px-8"
+                        size="lg"
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            Lanjut ke Diagnosa Masalah
+                            <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {/* Navigation button - show if status is not RECEIVED and not COMPLETED */}
+                    {/* Also update status to DIAGNOSING to capture waiting time */}
+                    {repair.status !== 'RECEIVED' && repair.status !== 'COMPLETED' && (
+                      <Button
+                        onClick={async () => {
+                          // If status is not DIAGNOSING yet, update it to capture diagnosingStartAt
+                          if (repair.status !== 'DIAGNOSING') {
+                            try {
+                              setSubmitting(true);
+                              await api.patch(`/repairs/${repairId}`, {
+                                status: 'DIAGNOSING',
+                              });
+                              const response = await api.get(`/repairs/${repairId}`);
+                              setRepair(response.data);
+                            } catch (err: any) {
+                              console.error('Error updating status:', err);
+                            } finally {
+                              setSubmitting(false);
+                            }
+                          }
+                          setActiveForm('diagnosing');
+                        }}
+                        disabled={submitting}
+                        className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white w-full sm:w-auto px-4 sm:px-8"
+                        size="lg"
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            Lanjut ke Diagnosa Masalah
+                            <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             )}
 
             {/* Step 2: Diagnosa */}
             {currentWizardStep === 1 && (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                  <CardContent className="p-6">
-                    <div className="space-y-4">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-2.5">
                       <div>
-                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-3">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-2">
                           TEMUAN DIAGNOSA / FINDINGS
                         </label>
                         <Textarea
                           placeholder="Jelaskan masalah yang ditemukan saat diagnosa kaset..."
                           value={notes}
                           onChange={(e) => setNotes(e.target.value)}
-                          rows={6}
+                          rows={5}
                           className="text-sm bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-500"
                         />
-                        <p className="text-xs text-slate-600 dark:text-slate-500 mt-2">
+                        <p className="text-xs text-slate-600 dark:text-slate-500 mt-1.5">
                           Catat semua temuan secara detail untuk membantu proses repair
                         </p>
                       </div>
 
                       {repair.reportedIssue && (
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-2">REPORTED ISSUE</p>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-1.5">REPORTED ISSUE</p>
                           <p className="text-sm text-slate-800 dark:text-slate-300">{repair.reportedIssue}</p>
                         </div>
                       )}
@@ -753,11 +865,11 @@ export default function RepairDetailPage() {
                   </CardContent>
                 </Card>
 
-                <div className="flex gap-3 justify-end">
+                <div className="flex flex-col sm:flex-row gap-3 justify-end">
                   <Button
                     onClick={handleStartRepair}
                     disabled={submitting}
-                    className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white px-8"
+                    className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white w-full sm:w-auto px-4 sm:px-8"
                     size="lg"
                   >
                     {submitting ? (
@@ -778,40 +890,177 @@ export default function RepairDetailPage() {
 
             {/* Step 3: Perbaikan */}
             {currentWizardStep === 2 && (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                  <CardContent className="p-6">
-                    <div className="space-y-4">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-2.5">
                       <div>
-                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-3">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-2">
                           REPAIR ACTION TAKEN <span className="text-red-600 dark:text-red-400">*</span>
                         </label>
                         <Textarea
                           placeholder="Jelaskan tindakan perbaikan yang dilakukan secara detail..."
                           value={repairActionTaken}
                           onChange={(e) => setRepairActionTaken(e.target.value)}
-                          rows={5}
+                          rows={4}
                           className="text-sm bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-500"
                         />
                       </div>
 
                       <div>
-                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-3">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-2">
                           PARTS REPLACED
                         </label>
+
+                        {(() => {
+                          const machineType = repair?.cassette?.cassetteType?.machineType as 'SR' | 'VS' | undefined;
+                          const partsConfig = getPartsForMachineType(machineType);
+
+                          if (!machineType || (machineType !== 'SR' && machineType !== 'VS')) {
+                            return (
+                              <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                                <p className="text-sm text-slate-600 dark:text-slate-400 mb-1.5">
+                                  Tipe cassette tidak dikenali. Silakan input parts secara manual.
+                                </p>
+                                <Input
+                                  placeholder="Contoh: Sensor Belt SB-100, Roller RK-50 (pisahkan dengan koma)"
+                                  value={selectedParts.join(', ')}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    setSelectedParts(value ? [value] : []);
+                                  }}
+                                  className="text-sm bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-500"
+                                />
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="space-y-2.5">
+                              {/* Outer Parts */}
+                              {Array.isArray(partsConfig.outer) && partsConfig.outer.length > 0 && (
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                                    <Package className="h-4 w-4" />
+                                    OUTER UNIT
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                    {Array.isArray(partsConfig.outer) && partsConfig.outer.map((part) => (
+                                      <div key={part.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                          id={part.id}
+                                          checked={selectedParts.includes(part.id)}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setSelectedParts([...selectedParts, part.id]);
+                                            } else {
+                                              setSelectedParts(selectedParts.filter(id => id !== part.id));
+                                            }
+                                          }}
+                                          className="border-slate-300 dark:border-slate-600"
+                                        />
+                                        <label
+                                          htmlFor={part.id}
+                                          className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer flex-1"
+                                        >
+                                          {part.name}
+                                        </label>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Inner Parts */}
+                              {Array.isArray(partsConfig.inner) && partsConfig.inner.length > 0 && (
+                                <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                                    <Wrench className="h-4 w-4" />
+                                    INNER UNIT
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                    {Array.isArray(partsConfig.inner) && partsConfig.inner.map((part) => (
+                                      <div key={part.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                          id={part.id}
+                                          checked={selectedParts.includes(part.id)}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setSelectedParts([...selectedParts, part.id]);
+                                            } else {
+                                              setSelectedParts(selectedParts.filter(id => id !== part.id));
+                                            }
+                                          }}
+                                          className="border-slate-300 dark:border-slate-600"
+                                        />
+                                        <label
+                                          htmlFor={part.id}
+                                          className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer flex-1"
+                                        >
+                                          {part.name}
+                                        </label>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Selected Parts Summary */}
+                              {selectedParts.length > 0 && (
+                                <div className="p-2.5 bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-lg">
+                                  <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-1.5">
+                                    PARTS TERPILIH ({selectedParts.length}):
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {selectedParts.map((partId) => {
+                                      const allParts = [
+                                        ...(Array.isArray(partsConfig.outer) ? partsConfig.outer : []),
+                                        ...(Array.isArray(partsConfig.inner) ? partsConfig.inner : [])
+                                      ];
+                                      const part = allParts.find(p => p.id === partId);
+                                      return part ? (
+                                        <Badge key={partId} variant="outline" className="text-xs">
+                                          {part.name}
+                                        </Badge>
+                                      ) : null;
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              <p className="text-xs text-slate-600 dark:text-slate-500">
+                                Pilih parts yang diganti dari daftar di atas. Opsional - kosongkan jika tidak ada parts yang diganti.
+                              </p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Other Parts - Custom Input */}
+                      <div>
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-2">
+                          PARTS LAINNYA (OPSIONAL)
+                        </label>
                         <Input
-                          placeholder="Contoh: Sensor Belt SB-100, Roller RK-50 (pisahkan dengan koma)"
-                          value={partsReplaced}
-                          onChange={(e) => setPartsReplaced(e.target.value)}
+                          placeholder="Parts lain yang tidak ada di daftar (pisahkan dengan koma). Contoh: Sensor XYZ, Bracket ABC"
+                          value={otherParts}
+                          onChange={(e) => setOtherParts(e.target.value)}
                           className="text-sm bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200 placeholder:text-slate-500 dark:placeholder:text-slate-500"
                         />
-                        <p className="text-xs text-slate-600 dark:text-slate-500 mt-2">
-                          Opsional - Kosongkan jika tidak ada parts yang diganti
+                        {otherParts.trim() && (
+                          <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                            <p className="text-xs text-amber-700 dark:text-amber-300">
+                              ✏️ Parts tambahan: {otherParts.split(',').map(p => p.trim()).filter(p => p).join(', ')}
+                            </p>
+                          </div>
+                        )}
+                        <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                          Masukkan parts yang tidak ada di checklist standar. Pisahkan dengan koma.
                         </p>
                       </div>
 
                       <div>
-                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-3">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-2">
                           CATATAN TAMBAHAN
                         </label>
                         <Textarea
@@ -826,12 +1075,12 @@ export default function RepairDetailPage() {
                   </CardContent>
                 </Card>
 
-                <div className="flex gap-3 justify-between">
+                <div className="flex flex-col sm:flex-row gap-3 justify-between">
                   <Button
                     onClick={handleSaveProgress}
                     disabled={submitting}
                     variant="outline"
-                    className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 w-full sm:w-auto"
                   >
                     {submitting ? (
                       <>
@@ -849,7 +1098,7 @@ export default function RepairDetailPage() {
                   <Button
                     onClick={() => setActiveForm('complete')}
                     disabled={submitting || !repairActionTaken.trim()}
-                    className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white px-8"
+                    className="bg-gradient-to-r from-teal-500 to-teal-600 dark:from-teal-500 dark:to-teal-600 hover:from-teal-600 hover:to-teal-700 dark:hover:from-teal-600 dark:hover:to-teal-700 text-white w-full sm:w-auto px-4 sm:px-8"
                     size="lg"
                   >
                     Lanjut ke QC & Selesai
@@ -861,31 +1110,51 @@ export default function RepairDetailPage() {
 
             {/* Step 4: QC & Selesai */}
             {currentWizardStep === 3 && repair.status !== 'COMPLETED' && (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                  <CardContent className="p-6">
-                    <div className="space-y-4">
-                      <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
-                        <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-2">REPAIR ACTION</p>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-2.5">
+                      <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                        <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-1.5">REPAIR ACTION</p>
                         <p className="text-sm text-slate-800 dark:text-slate-200">{repairActionTaken || 'Belum diisi'}</p>
                       </div>
 
-                      {partsReplaced && (
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-2">PARTS REPLACED</p>
-                          <p className="text-sm text-slate-800 dark:text-slate-200">{partsReplaced}</p>
-                        </div>
-                      )}
+                      {selectedParts.length > 0 && (() => {
+                        const machineType = repair?.cassette?.cassetteType?.machineType;
+                        if (!machineType || (machineType !== 'SR' && machineType !== 'VS')) {
+                          return null;
+                        }
+                        const allParts = [
+                          ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].outer,
+                          ...CASSETTE_PARTS[machineType as 'SR' | 'VS'].inner
+                        ];
+                        const selectedPartNames = selectedParts
+                          .map((id: any) => allParts.find((p: any) => p.id === id)?.name)
+                          .filter((name): name is string => !!name);
+
+                        return (
+                          <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                            <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-1.5">PARTS REPLACED</p>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedPartNames.map((name, idx) => (
+                                <Badge key={idx} variant="outline" className="text-xs">
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       <div>
-                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-3">
+                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 block mb-2">
                           STATUS QC <span className="text-red-600 dark:text-red-400">*</span>
                         </label>
                         <Select
                           value={qcPassed === null ? '' : qcPassed.toString()}
                           onValueChange={(value) => setQcPassed(value === 'true')}
                         >
-                          <SelectTrigger className="h-14 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200">
+                          <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-200">
                             <SelectValue placeholder="Pilih hasil Quality Control..." />
                           </SelectTrigger>
                           <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
@@ -906,16 +1175,15 @@ export default function RepairDetailPage() {
                       </div>
 
                       {qcPassed !== null && (
-                        <div className={`p-4 rounded-lg border-2 ${
-                          qcPassed 
-                            ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-500' 
-                            : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-500'
-                        }`}>
+                        <div className={`p-4 rounded-lg border-2 ${qcPassed
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-500'
+                          : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-500'
+                          }`}>
                           <p className="text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
                             {qcPassed ? '✅ Kaset Lolos QC' : '❌ Kaset Tidak Lolos QC'}
                           </p>
                           <p className="text-xs text-slate-700 dark:text-slate-400">
-                            {qcPassed 
+                            {qcPassed
                               ? 'Kaset sudah diperbaiki dan lolos QC. Status kaset sekarang: READY_FOR_PICKUP (siap di-pickup di RC). Status SO akan berubah menjadi RESOLVED. Setelah Pengelola konfirmasi pickup di RC, status kaset akan menjadi OK dan siap digunakan kembali.'
                               : 'Kaset akan ditandai sebagai SCRAPPED dan tidak dapat digunakan lagi.'
                             }
@@ -926,23 +1194,48 @@ export default function RepairDetailPage() {
                   </CardContent>
                 </Card>
 
-                <div className="flex gap-3 justify-between">
+                <div className="flex flex-col sm:flex-row gap-3 justify-between">
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
+                      // If status is not ON_PROGRESS yet, update it to capture repairStartAt
+                      if (repair.status !== 'ON_PROGRESS' && repair.status !== 'COMPLETED') {
+                        try {
+                          setSubmitting(true);
+                          await api.patch(`/repairs/${repairId}`, {
+                            status: 'ON_PROGRESS',
+                          });
+                          const response = await api.get(`/repairs/${repairId}`);
+                          setRepair(response.data);
+                        } catch (err: any) {
+                          console.error('Error updating status:', err);
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      }
                       setActiveForm('repair');
                       setQcPassed(null);
                     }}
+                    disabled={submitting}
                     variant="outline"
-                    className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 w-full sm:w-auto"
                   >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Kembali ke Perbaikan
+                    {submitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowLeft className="h-4 w-4 mr-2" />
+                        Kembali ke Perbaikan
+                      </>
+                    )}
                   </Button>
 
                   <Button
                     onClick={handleComplete}
                     disabled={submitting || qcPassed === null || !repairActionTaken.trim()}
-                    className="bg-gradient-to-r from-green-500 to-green-600 dark:from-green-500 dark:to-green-600 hover:from-green-600 hover:to-green-700 dark:hover:from-green-600 dark:hover:to-green-700 text-white px-8"
+                    className="bg-gradient-to-r from-green-500 to-green-600 dark:from-green-500 dark:to-green-600 hover:from-green-600 hover:to-green-700 dark:hover:from-green-600 dark:hover:to-green-700 text-white w-full sm:w-auto px-4 sm:px-8"
                     size="lg"
                   >
                     {submitting ? (
@@ -963,28 +1256,28 @@ export default function RepairDetailPage() {
 
             {/* Repair Completed */}
             {repair.status === 'COMPLETED' && (
-              <div className="space-y-4">
-                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-green-500 dark:border-green-500 border-2">
-                  <CardContent className="p-8">
-                    <div className="text-center mb-6">
-                      <CheckCircle2 className="h-20 w-20 text-green-600 dark:text-green-400 mx-auto mb-4" />
-                      <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Repair Selesai!</h3>
-                      <p className="text-slate-700 dark:text-slate-300">
+              <div className="space-y-2.5">
+                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-green-500 dark:border-green-500 border">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="text-center mb-2.5">
+                      <CheckCircle2 className="h-12 w-12 text-green-600 dark:text-green-400 mx-auto mb-2" />
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1.5">Repair Selesai!</h3>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
                         QC Status: {repair.qcPassed ? '✅ Passed' : '❌ Failed'}
                       </p>
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {repair.repairActionTaken && (
-                        <div className="p-4 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-2">REPAIR ACTION</p>
+                        <div className="p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-1.5">REPAIR ACTION</p>
                           <p className="text-sm text-slate-800 dark:text-slate-200">{repair.repairActionTaken}</p>
                         </div>
                       )}
 
                       {repair.partsReplaced && (
-                        <div className="p-4 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-2">PARTS REPLACED</p>
+                        <div className="p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-1.5">PARTS REPLACED</p>
                           <p className="text-sm text-slate-800 dark:text-slate-200">
                             {Array.isArray(repair.partsReplaced)
                               ? repair.partsReplaced.join(', ')
@@ -994,36 +1287,34 @@ export default function RepairDetailPage() {
                       )}
 
                       {repair.notes && (
-                        <div className="p-4 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
-                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-2">NOTES</p>
+                        <div className="p-3 bg-white/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">
+                          <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mb-1.5">NOTES</p>
                           <p className="text-sm text-slate-800 dark:text-slate-200">{repair.notes}</p>
                         </div>
                       )}
 
                       {/* Warranty Information - Only show if QC passed and warranty exists */}
                       {repair.qcPassed && repair.warrantyType && repair.warrantyEndDate && (
-                        <div className="p-4 rounded-lg border-2">
+                        <div className="p-2.5 rounded-lg border">
                           {(() => {
                             const endDate = new Date(repair.warrantyEndDate);
                             const now = new Date();
                             const isUnderWarranty = endDate >= now;
                             const warrantyTypeLabel = repair.warrantyType === 'MA' ? 'Maintenance Agreement' :
-                                                     repair.warrantyType === 'MS' ? 'Manage Service' :
-                                                     repair.warrantyType === 'IN_WARRANTY' ? 'In Warranty' :
-                                                     repair.warrantyType === 'OUT_WARRANTY' ? 'Out Warranty' :
-                                                     repair.warrantyType;
-                            
+                              repair.warrantyType === 'MS' ? 'Manage Service' :
+                                repair.warrantyType === 'IN_WARRANTY' ? 'In Warranty' :
+                                  repair.warrantyType === 'OUT_WARRANTY' ? 'Out Warranty' :
+                                    repair.warrantyType;
+
                             return (
-                              <div className={`${
-                                isUnderWarranty 
-                                  ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-500' 
-                                  : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-500'
-                              }`}>
-                                <div className="flex items-center justify-between mb-3">
+                              <div className={`${isUnderWarranty
+                                ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-500'
+                                : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-500'
+                                }`}>
+                                <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
-                                    <Shield className={`h-5 w-5 ${
-                                      isUnderWarranty ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                                    }`} />
+                                    <Shield className={`h-5 w-5 ${isUnderWarranty ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                                      }`} />
                                     <p className="text-sm font-semibold text-slate-900 dark:text-white">
                                       {isUnderWarranty ? '✅ Masih Dalam Garansi' : '❌ Garansi Sudah Berakhir'}
                                     </p>
@@ -1036,13 +1327,13 @@ export default function RepairDetailPage() {
                                     {isUnderWarranty ? 'GRATIS' : 'BERBAYAR'}
                                   </Badge>
                                 </div>
-                                <p className="text-xs text-slate-700 dark:text-slate-300 mb-3">
-                                  {isUnderWarranty 
+                                <p className="text-xs text-slate-700 dark:text-slate-300 mb-2">
+                                  {isUnderWarranty
                                     ? 'Service ini masih dalam periode garansi. Tidak ada biaya yang dikenakan.'
                                     : 'Service ini sudah di luar periode garansi. Akan dikenakan biaya sesuai tarif.'
                                   }
                                 </p>
-                                <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-300 dark:border-slate-700">
+                                <div className="grid grid-cols-2 gap-2.5 mt-2 pt-2 border-t border-slate-300 dark:border-slate-700">
                                   <div>
                                     <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Warranty Type</p>
                                     <p className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -1067,22 +1358,6 @@ export default function RepairDetailPage() {
                           })()}
                         </div>
                       )}
-                    </div>
-
-                    <div className={`mt-6 p-4 rounded-lg border-2 ${
-                      repair.qcPassed 
-                        ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-500' 
-                        : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-500'
-                    }`}>
-                      <p className="text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
-                        {repair.qcPassed ? '📦 Langkah Selanjutnya:' : '⚠️ Status Kaset:'}
-                      </p>
-                      <p className="text-xs text-slate-700 dark:text-slate-300">
-                        {repair.qcPassed 
-                          ? 'Kaset sudah diperbaiki dan lolos QC. Status kaset sekarang: READY_FOR_PICKUP (siap di-pickup di RC). Status SO akan berubah menjadi RESOLVED. Setelah Pengelola konfirmasi pickup di RC, status kaset akan menjadi OK dan siap digunakan kembali.'
-                          : 'Kaset telah ditandai sebagai SCRAPPED dan tidak dapat digunakan lagi.'
-                        }
-                      </p>
                     </div>
 
                     {/* Replacement Request Info */}
@@ -1111,7 +1386,7 @@ export default function RepairDetailPage() {
                     )}
 
                     <div className="mt-6 flex gap-3">
-                      <Button 
+                      <Button
                         onClick={() => {
                           const page = searchParams.get('page');
                           if (page) {
@@ -1119,7 +1394,7 @@ export default function RepairDetailPage() {
                           } else {
                             router.push('/repairs');
                           }
-                        }} 
+                        }}
                         variant="outline"
                         className="flex-1 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                       >
@@ -1141,97 +1416,94 @@ export default function RepairDetailPage() {
       </div>
 
       {/* Confirm Complete Repair Dialog */}
-        <Dialog open={showCompleteRepairDialog} onOpenChange={setShowCompleteRepairDialog}>
-          <DialogContent className="w-[calc(100%-2rem)] max-w-[400px] sm:max-w-[500px] mx-auto rounded-3xl sm:rounded-lg p-4 sm:p-6">
-            <DialogHeader className="px-0">
-              <DialogTitle className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
-                <CheckCircle2 className="h-5 w-5" />
-                Konfirmasi Selesai Repair
-              </DialogTitle>
-              <DialogDescription>
-                Apakah Anda yakin ingin menyelesaikan repair ini?
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4 py-4 px-0">
-              {/* QC Status Info */}
-              <div className={`rounded-xl p-3 sm:p-4 border ${
-                qcPassed 
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
-                  : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-              }`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    QC Status:
-                  </span>
-                  {qcPassed ? (
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                        <CheckCircle2 className="h-3 w-3 text-white" />
-                      </div>
-                      <span className="text-sm font-bold text-green-700 dark:text-green-300">
-                        Passed
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                        <XCircle className="h-3 w-3 text-white" />
-                      </div>
-                      <span className="text-sm font-bold text-red-700 dark:text-red-300">
-                        Failed
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <p className={`text-sm ${
-                  qcPassed 
-                    ? 'text-green-800 dark:text-green-300' 
-                    : 'text-red-800 dark:text-red-300'
-                }`}>
-                  {qcPassed 
-                    ? 'Kaset akan dikembalikan ke pengelola dalam keadaan OK.'
-                    : 'Kaset akan di-mark sebagai SCRAPPED.'}
-                </p>
-              </div>
-            </div>
+      <Dialog open={showCompleteRepairDialog} onOpenChange={setShowCompleteRepairDialog}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-[400px] sm:max-w-[500px] mx-auto rounded-3xl sm:rounded-lg p-4 sm:p-6">
+          <DialogHeader className="px-0">
+            <DialogTitle className="flex items-center gap-2 text-teal-600 dark:text-teal-400">
+              <CheckCircle2 className="h-5 w-5" />
+              Konfirmasi Selesai Repair
+            </DialogTitle>
+            <DialogDescription>
+              Apakah Anda yakin ingin menyelesaikan repair ini?
+            </DialogDescription>
+          </DialogHeader>
 
-            <DialogFooter className="px-0 gap-2 sm:gap-0 flex-col sm:flex-row">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowCompleteRepairDialog(false)}
-                disabled={submitting}
-                className="w-full sm:w-auto rounded-xl sm:rounded-lg"
-              >
-                Batal
-              </Button>
-              <Button 
-                onClick={handleConfirmCompleteRepair}
-                disabled={submitting}
-                className={`w-full sm:w-auto rounded-xl sm:rounded-lg ${
-                  qcPassed
-                    ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
-                    : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
-                }`}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Memproses...
-                  </>
+          <div className="space-y-4 py-4 px-0">
+            {/* QC Status Info */}
+            <div className={`rounded-xl p-3 sm:p-4 border ${qcPassed
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+              : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+              }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  QC Status:
+                </span>
+                {qcPassed ? (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                      <CheckCircle2 className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-sm font-bold text-green-700 dark:text-green-300">
+                      Passed
+                    </span>
+                  </div>
                 ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Konfirmasi
-                  </>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                      <XCircle className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-sm font-bold text-red-700 dark:text-red-300">
+                      Failed
+                    </span>
+                  </div>
                 )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </PageLayout>
-    );
-  }
+              </div>
+              <p className={`text-sm ${qcPassed
+                ? 'text-green-800 dark:text-green-300'
+                : 'text-red-800 dark:text-red-300'
+                }`}>
+                {qcPassed
+                  ? 'Kaset akan dikembalikan ke pengelola dalam keadaan OK.'
+                  : 'Kaset akan di-mark sebagai SCRAPPED.'}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="px-0 gap-2 sm:gap-0 flex-col sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={() => setShowCompleteRepairDialog(false)}
+              disabled={submitting}
+              className="w-full sm:w-auto rounded-xl sm:rounded-lg"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleConfirmCompleteRepair}
+              disabled={submitting}
+              className={`w-full sm:w-auto rounded-xl sm:rounded-lg ${qcPassed
+                ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
+                : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
+                }`}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Konfirmasi
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PageLayout>
+  );
+}
 
 // Helper Components
 const InfoBlock = ({ icon: Icon, iconColor, title, children, isDark = false }: any) => (

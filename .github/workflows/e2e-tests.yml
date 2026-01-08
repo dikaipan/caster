@@ -1,0 +1,106 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: hcm_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Setup environment variables
+        working-directory: backend
+        run: |
+          echo "DATABASE_URL=mysql://root:test_password@localhost:3306/hcm_test" > .env
+          echo "JWT_SECRET=test_jwt_secret_key_for_e2e_tests" >> .env
+          echo "JWT_REFRESH_SECRET=test_refresh_secret_key_for_e2e_tests" >> .env
+          echo "NODE_ENV=test" >> .env
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Run database migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Run E2E tests
+        working-directory: backend
+        run: npm run test:e2e:ci
+        env:
+          DATABASE_URL: mysql://root:test_password@localhost:3306/hcm_test
+          NODE_ENV: test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: backend/test-results/
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage/
+
+      - name: Comment test results on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## 🧪 E2E Test Results\n\n';
+            
+            try {
+              const coverage = JSON.parse(fs.readFileSync('backend/coverage/coverage-summary.json', 'utf8'));
+              const total = coverage.total;
+              
+              comment += '### Coverage Summary\n\n';
+              comment += `- **Statements**: ${total.statements.pct}%\n`;
+              comment += `- **Branches**: ${total.branches.pct}%\n`;
+              comment += `- **Functions**: ${total.functions.pct}%\n`;
+              comment += `- **Lines**: ${total.lines.pct}%\n`;
+            } catch (error) {
+              comment += '⚠️ Coverage report not available\n';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

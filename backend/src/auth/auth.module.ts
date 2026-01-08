@@ -7,11 +7,14 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { SecurityLoggerService } from '../common/services/security-logger.service';
+import { TwoFactorAuthService } from './two-factor-auth.service';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     PassportModule,
     ConfigModule,
+    AuditModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -23,8 +26,7 @@ import { SecurityLoggerService } from '../common/services/security-logger.servic
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, LocalStrategy, SecurityLoggerService],
+  providers: [AuthService, JwtStrategy, LocalStrategy, SecurityLoggerService, TwoFactorAuthService],
   exports: [AuthService],
 })
-export class AuthModule {}
-
+export class AuthModule { }

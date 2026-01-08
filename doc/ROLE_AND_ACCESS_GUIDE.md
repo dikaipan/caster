@@ -243,8 +243,8 @@ User dari vendor/service provider yang bertanggung jawab untuk maintenance dan s
 
 ---
 
-### 3. TECHNICIAN
-**Deskripsi:** Technician vendor yang melakukan maintenance di lapangan. Akses dibatasi berdasarkan assigned branches.
+### 3. SUPERVISOR
+**Deskripsi:** Supervisor vendor yang melakukan maintenance di lapangan. Akses bisa dibatasi berdasarkan assigned branches.
 
 **Permission Flags:**
 - `canCreateTickets`: Bisa membuat ticket (default: true)
@@ -331,30 +331,28 @@ User dari vendor/service provider yang bertanggung jawab untuk maintenance dan s
 
 ### Vendor Users
 
-| Fitur | ADMIN | SUPERVISOR | TECHNICIAN |
+| Fitur | ADMIN | SUPERVISOR |
 |-------|-------|------------|------------|
 | **User Management** |
-| Create Vendor Users | ✅ | ❌ | ❌ |
-| View Vendor Users | ✅ | ❌ | ❌ |
-| Update Vendor Users | ✅ | ❌ | ❌ |
-| Delete Vendor Users | ✅ | ❌ | ❌ |
+| Create Vendor Users | ✅ | ❌ |
+| View Vendor Users | ✅ | ❌ |
+| Update Vendor Users | ✅ | ❌ |
+| Delete Vendor Users | ✅ | ❌ |
 | **Bank Management** |
-| View Banks | ✅ (assigned) | ✅ (assigned) | ✅ (assigned branches) |
+| View Banks | ✅ (assigned) | ✅ (assigned) |
 | **Machine Management** |
-| View Machines | ✅ (assigned) | ✅ (assigned) | ✅ (assigned branches) |
-| Update Machines | ❌ | ❌ | ❌ |
+| View Machines | ✅ (assigned) | ✅ (assigned) |
+| Update Machines | ❌ | ❌ |
 | **Cassette Management** |
-| View Cassettes | ✅ (assigned) | ✅ (assigned) | ✅ (assigned branches) |
-| Swap Cassettes | ✅ | ✅ | ✅ |
-| Mark Broken | ✅ | ✅ | ✅ |
+| View Cassettes | ✅ (assigned) | ✅ (assigned) |
+| Mark Broken | ✅ | ✅ |
 | **Ticket Management** |
-| Create Tickets | ✅ | ✅ | ✅* |
-| View Tickets | ✅ (vendor) | ✅ (vendor) | ✅ (assigned branches) |
-| Create Delivery | ✅ | ✅ | ✅ |
-| Receive Return | ✅ | ✅ | ✅ |
-| Close Tickets | ❌ | ❌ | ✅* |
+| Create Tickets | ✅ | ✅* |
+| View Tickets | ✅ (vendor) | ✅ (vendor) |
+| Create Delivery | ✅ | ✅ |
+| Close Tickets | ❌ | ✅* |
 | **Repair Management** |
-| View Repairs | ❌ | ❌ | ❌ |
+| View Repairs | ❌ | ❌ |
 
 *Tergantung permission flags (`canCreateTickets`, `canCloseTickets`)
 
@@ -441,7 +439,7 @@ User dari vendor/service provider yang bertanggung jawab untuk maintenance dan s
 3. **RC_STAFF** untuk staff operasional yang hanya perlu update status repair dan ticket
 4. **Vendor ADMIN** untuk admin vendor yang perlu manage user di vendor mereka
 5. **Vendor SUPERVISOR** untuk supervisor yang perlu monitoring tanpa manage user
-6. **Vendor TECHNICIAN** dengan `assignedBranches` untuk membatasi akses ke area tertentu
+6. **Vendor SUPERVISOR** dengan `assignedBranches` untuk membatasi akses ke area tertentu (opsional)
 
 ---
 

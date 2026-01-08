@@ -125,7 +125,7 @@ export default function EditMachineDialog({ open, onOpenChange, onSuccess, machi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
             <Edit className="h-6 w-6 text-[#2563EB] dark:text-teal-400" />

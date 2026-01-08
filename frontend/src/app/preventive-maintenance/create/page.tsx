@@ -354,11 +354,11 @@ export default function CreatePMPage() {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     }
-    // Redirect Pengelola users - PM feature is temporarily disabled for Pengelola
-    if (!isLoading && isAuthenticated && isPengelola) {
-      router.push('/tickets');
+    // PM feature is disabled - redirect all users
+    if (!isLoading && isAuthenticated) {
+      router.push('/service-orders/create');
     }
-  }, [isAuthenticated, isLoading, router, isPengelola]);
+  }, [isAuthenticated, isLoading, router]);
 
   if (isLoading || !isAuthenticated) {
     return (

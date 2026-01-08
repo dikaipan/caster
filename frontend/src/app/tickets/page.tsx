@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import api from '@/lib/api';
@@ -39,7 +39,7 @@ import { markTicketsAsViewed, isTicketViewed, markTicketAsViewed } from '@/lib/v
 import { useTickets } from '@/hooks/useTickets';
 import { useDebounce } from 'use-debounce';
 
-export default function TicketsPage() {
+function TicketsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, loadUser } = useAuthStore();
@@ -85,7 +85,7 @@ export default function TicketsPage() {
   }, [debouncedSearchTerm, selectedStatus, selectedPriority, itemsPerPage]);
 
   // Use React Query untuk fetch tickets dengan automatic caching
-  const { data: ticketsData, isLoading: loading, error, refetch } = useTickets({
+  const { data: ticketsData, isLoading: loading, error, refetch, isFetching } = useTickets({
     page: currentPage,
     limit: itemsPerPage,
     status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
@@ -96,12 +96,12 @@ export default function TicketsPage() {
   // Extract tickets and pagination from response
   const tickets = useMemo(() => {
     if (!ticketsData) return [];
-    
+
     // Handle both old format (array) and new format (object with data & pagination)
     if (Array.isArray(ticketsData)) {
       return ticketsData;
     }
-    
+
     return ticketsData?.data || [];
   }, [ticketsData]);
 
@@ -122,7 +122,7 @@ export default function TicketsPage() {
   // Handle errors
   const fetchError = useMemo(() => {
     if (!error) return null;
-    
+
     if ((error as any).response) {
       const status = (error as any).response.status;
       if (status === 401) {
@@ -136,7 +136,7 @@ export default function TicketsPage() {
     } else if ((error as any).request) {
       return 'Tidak dapat terhubung ke server. Pastikan backend server berjalan.';
     }
-    
+
     return 'Terjadi kesalahan saat memuat data tickets.';
   }, [error, router]);
 
@@ -253,19 +253,19 @@ export default function TicketsPage() {
     received: repairOrders.filter(t => t.status === 'RECEIVED').length,
     inProgress: repairOrders.filter(t => t.status === 'IN_PROGRESS').length,
     resolved: repairOrders.filter(t => t.status === 'RESOLVED').length,
-    returnShipped: repairOrders.filter(t => t.status === 'RETURN_SHIPPED').length,
     // closed: repairOrders.filter(t => t.status === 'CLOSED').length, // Removed - CLOSED only in history
   }), [repairOrders]);
 
   const getStatusBadge = (status: string) => {
     const configs: Record<string, { label: string; variant: string; icon: any }> = {
       OPEN: { label: 'Open', variant: 'bg-[#2563EB] text-white', icon: AlertCircle },
+      PENDING_APPROVAL: { label: 'Menunggu Approval', variant: 'bg-orange-500 text-white', icon: Clock },
+      APPROVED_ON_SITE: { label: 'On-Site Approved', variant: 'bg-teal-500 text-white', icon: CheckCircle2 },
       IN_DELIVERY: { label: 'Kirim RC', variant: 'bg-amber-500 text-white', icon: Package },
       RECEIVED: { label: 'Terima RC', variant: 'bg-[#C5000F] text-white', icon: Inbox },
       IN_PROGRESS: { label: 'Repair', variant: 'bg-yellow-500 text-white', icon: Wrench },
-      RESOLVED: { label: 'Selesai', variant: 'bg-green-500 text-white', icon: CheckCircle2 },
-      RETURN_SHIPPED: { label: 'Kirim Pengelola', variant: 'bg-purple-500 text-white', icon: TruckIcon },
-      CLOSED: { label: 'Tutup', variant: 'bg-gray-500 text-white', icon: XCircle },
+      RESOLVED: { label: 'Ready for Pickup', variant: 'bg-green-500 text-white', icon: CheckCircle2 },
+      CLOSED: { label: 'Tutup', variant: 'bg-gray-500 text-white', icon: CheckCircle2 },
     };
     return configs[status] || configs.OPEN;
   };
@@ -407,112 +407,117 @@ export default function TicketsPage() {
         </TabsList>
 
         <TabsContent value="tickets" className="mt-0">
+          {/* Auto-refresh indicator */}
+          {isFetching && !loading && (
+            <div className="mb-2 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Memperbarui data...</span>
+            </div>
+          )}
           {/* Compact Status Cards */}
           <div className="grid grid-cols-4 md:grid-cols-7 gap-2 mb-4">
             {[
               { key: 'ALL', label: 'Total', count: statusSummary.total, color: 'gray', icon: FileText },
-          { key: 'IN_DELIVERY', label: 'Kirim', count: statusSummary.inDelivery, color: 'cyan', icon: Package },
-          { key: 'RECEIVED', label: 'Terima', count: statusSummary.received, color: 'blue', icon: Inbox },
-          { key: 'IN_PROGRESS', label: 'Repair', count: statusSummary.inProgress, color: 'yellow', icon: Wrench },
-          { key: 'RESOLVED', label: 'Selesai', count: statusSummary.resolved, color: 'green', icon: CheckCircle2 },
-          { key: 'RETURN_SHIPPED', label: 'Kembali', count: statusSummary.returnShipped, color: 'purple', icon: TruckIcon },
-          // CLOSED tickets removed from active SO view - they should only appear in history
-        ].map(({ key, label, count, color, icon: Icon }) => {
-          const isSelected = selectedStatus === key;
-          const colorClasses = {
-            gray: isSelected ? 'border-gray-500 dark:border-gray-400 bg-gray-50 dark:bg-gray-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600',
-            cyan: isSelected ? 'border-cyan-500 dark:border-cyan-400 bg-cyan-50 dark:bg-cyan-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-cyan-300 dark:hover:border-cyan-800',
-            blue: isSelected ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-800',
-            yellow: isSelected ? 'border-yellow-500 dark:border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-yellow-300 dark:hover:border-yellow-800',
-            green: isSelected ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-green-300 dark:hover:border-green-800',
-            purple: isSelected ? 'border-purple-500 dark:border-purple-400 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-800',
-          };
-          const textColorClasses = {
-            gray: 'text-gray-700 dark:text-gray-300',
-            cyan: 'text-cyan-700 dark:text-cyan-300',
-            blue: 'text-blue-700 dark:text-blue-300',
-            yellow: 'text-yellow-700 dark:text-yellow-300',
-            green: 'text-green-700 dark:text-green-300',
-            purple: 'text-purple-700 dark:text-purple-300',
-          };
-          const iconColorClasses = {
-            gray: 'text-gray-500 dark:text-gray-400',
-            cyan: 'text-cyan-500 dark:text-cyan-400',
-            blue: 'text-blue-500 dark:text-blue-400',
-            yellow: 'text-yellow-500 dark:text-yellow-400',
-            green: 'text-green-500 dark:text-green-400',
-            purple: 'text-purple-500 dark:text-purple-400',
-          };
-          return (
-            <button
-              key={key}
-              onClick={() => setSelectedStatus(selectedStatus === key ? 'ALL' : key)}
-              className={`p-3 rounded-lg border-2 transition-all text-left ${
-                isSelected
-                  ? `${colorClasses[color as keyof typeof colorClasses]} shadow-md`
-                  : `${colorClasses[color as keyof typeof colorClasses]} bg-white dark:bg-slate-800`
-              }`}
-            >
-              <Icon className={`h-4 w-4 ${iconColorClasses[color as keyof typeof iconColorClasses]} mb-1`} />
-              <p className="text-xs text-gray-600 dark:text-slate-400 font-medium">{label}</p>
-              <p className={`text-lg font-bold ${textColorClasses[color as keyof typeof textColorClasses]}`}>{count}</p>
-            </button>
-          );
-        })}
+              { key: 'IN_DELIVERY', label: 'Kirim', count: statusSummary.inDelivery, color: 'cyan', icon: Package },
+              { key: 'RECEIVED', label: 'Terima', count: statusSummary.received, color: 'blue', icon: Inbox },
+              { key: 'IN_PROGRESS', label: 'Repair', count: statusSummary.inProgress, color: 'yellow', icon: Wrench },
+              { key: 'RESOLVED', label: 'Ready for Pickup', count: statusSummary.resolved, color: 'green', icon: CheckCircle2 },
+              // CLOSED tickets removed from active SO view - they should only appear in history
+            ].map(({ key, label, count, color, icon: Icon }) => {
+              const isSelected = selectedStatus === key;
+              const colorClasses = {
+                gray: isSelected ? 'border-gray-500 dark:border-gray-400 bg-gray-50 dark:bg-gray-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600',
+                cyan: isSelected ? 'border-cyan-500 dark:border-cyan-400 bg-cyan-50 dark:bg-cyan-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-cyan-300 dark:hover:border-cyan-800',
+                blue: isSelected ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-800',
+                yellow: isSelected ? 'border-yellow-500 dark:border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-yellow-300 dark:hover:border-yellow-800',
+                green: isSelected ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-green-300 dark:hover:border-green-800',
+                purple: isSelected ? 'border-purple-500 dark:border-purple-400 bg-purple-50 dark:bg-purple-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-800',
+              };
+              const textColorClasses = {
+                gray: 'text-gray-700 dark:text-gray-300',
+                cyan: 'text-cyan-700 dark:text-cyan-300',
+                blue: 'text-blue-700 dark:text-blue-300',
+                yellow: 'text-yellow-700 dark:text-yellow-300',
+                green: 'text-green-700 dark:text-green-300',
+                purple: 'text-purple-700 dark:text-purple-300',
+              };
+              const iconColorClasses = {
+                gray: 'text-gray-500 dark:text-gray-400',
+                cyan: 'text-cyan-500 dark:text-cyan-400',
+                blue: 'text-blue-500 dark:text-blue-400',
+                yellow: 'text-yellow-500 dark:text-yellow-400',
+                green: 'text-green-500 dark:text-green-400',
+                purple: 'text-purple-500 dark:text-purple-400',
+              };
+              return (
+                <button
+                  key={key}
+                  onClick={() => setSelectedStatus(selectedStatus === key ? 'ALL' : key)}
+                  className={`p-3 rounded-lg border-2 transition-all text-left ${isSelected
+                    ? `${colorClasses[color as keyof typeof colorClasses]} shadow-md`
+                    : `${colorClasses[color as keyof typeof colorClasses]} bg-white dark:bg-slate-800`
+                    }`}
+                >
+                  <Icon className={`h-4 w-4 ${iconColorClasses[color as keyof typeof iconColorClasses]} mb-1`} />
+                  <p className="text-xs text-gray-600 dark:text-slate-400 font-medium">{label}</p>
+                  <p className={`text-lg font-bold ${textColorClasses[color as keyof typeof textColorClasses]}`}>{count}</p>
+                </button>
+              );
+            })}
           </div>
 
           {/* Search & Filter */}
           <Card className="mb-4">
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex-1 w-full sm:max-w-md relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-              <Input
-                placeholder="Cari RO number, cassette SN, machine SN..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600 dark:text-slate-400 mr-1">
-                {total} RO
-              </span>
-              <Select value={selectedPriority} onValueChange={setSelectedPriority}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Prioritas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Semua</SelectItem>
-                  <SelectItem value="CRITICAL">Kritis</SelectItem>
-                  <SelectItem value="HIGH">Tinggi</SelectItem>
-                  <SelectItem value="MEDIUM">Sedang</SelectItem>
-                  <SelectItem value="LOW">Rendah</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSearchTerm('');
-                  setSelectedStatus('ALL');
-                  setSelectedPriority('ALL');
-                }}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reset
-              </Button>
-              {isHitachi && (
-                <Link href="/repairs">
-                  <Button variant="outline">
-                    <Wrench className="h-4 w-4 mr-2" />
-                    Repairs
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <div className="flex-1 w-full sm:max-w-md relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+                  <Input
+                    placeholder="Cari RO number, cassette SN, machine SN..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 dark:text-slate-400 mr-1">
+                    {total} RO
+                  </span>
+                  <Select value={selectedPriority} onValueChange={setSelectedPriority}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="Prioritas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Semua</SelectItem>
+                      <SelectItem value="CRITICAL">Kritis</SelectItem>
+                      <SelectItem value="HIGH">Tinggi</SelectItem>
+                      <SelectItem value="MEDIUM">Sedang</SelectItem>
+                      <SelectItem value="LOW">Rendah</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSelectedStatus('ALL');
+                      setSelectedPriority('ALL');
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reset
                   </Button>
-                </Link>
-              )}
-            </div>
-          </div>
-        </CardContent>
+                  {isHitachi && (
+                    <Link href="/repairs">
+                      <Button variant="outline">
+                        <Wrench className="h-4 w-4 mr-2" />
+                        Repairs
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </CardContent>
           </Card>
 
           {/* Compact Table */}
@@ -584,31 +589,68 @@ export default function TicketsPage() {
                                       {ticket.title}
                                     </p>
                                     <span className={`text-xs font-bold ${getPriorityColor(ticket.priority)}`}>
-                                      {ticket.priority === 'CRITICAL' ? '🔴' : 
-                                       ticket.priority === 'HIGH' ? '🟠' : 
-                                       ticket.priority === 'MEDIUM' ? '🟡' : '🟢'}
+                                      {ticket.priority === 'CRITICAL' ? '🔴' :
+                                        ticket.priority === 'HIGH' ? '🟠' :
+                                          ticket.priority === 'MEDIUM' ? '🟡' : '🟢'}
                                     </span>
                                   </div>
                                 </div>
                               </td>
                               <td className="p-3">
-                                <Badge className={`${statusBadge.variant} text-[10px] px-2 py-0.5 gap-1`}>
-                                  <StatusIcon className="h-3 w-3" />
-                                  {statusBadge.label}
-                                </Badge>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Badge className={`${statusBadge.variant} text-[10px] px-2 py-0.5 gap-1`}>
+                                    <StatusIcon className="h-3 w-3" />
+                                    {statusBadge.label}
+                                  </Badge>
+                                  {ticket.repairLocation === 'ON_SITE' && (
+                                    <Badge className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-700 text-[10px] px-2 py-0.5 gap-1">
+                                      <Wrench className="h-3 w-3" />
+                                      On-Site
+                                    </Badge>
+                                  )}
+                                </div>
                               </td>
                               <td className="p-3">
                                 <div className="flex items-center gap-2">
                                   <Package className="h-3 w-3 text-purple-500 dark:text-purple-400 flex-shrink-0" />
                                   <div className="min-w-0">
-                                    <p className="font-mono text-xs font-medium text-gray-900 dark:text-slate-100 truncate">
-                                      {ticket.cassette?.serialNumber || 'N/A'}
-                                    </p>
-                                    {ticket.cassette?.cassetteType && (
-                                      <p className="text-[10px] text-gray-500 dark:text-slate-400 truncate">
-                                        {ticket.cassette.cassetteType.typeCode}
-                                      </p>
-                                    )}
+                                    {(() => {
+                                      // Handle multi-cassette SOs: prefer cassetteDetails if available
+                                      const cassetteDetails = (ticket.cassetteDetails || []).filter(
+                                        (d: any) => d.cassette
+                                      );
+                                      const cassetteList =
+                                        cassetteDetails.length > 0
+                                          ? cassetteDetails.map((d: any) => d.cassette)
+                                          : ticket.cassette
+                                          ? [ticket.cassette]
+                                          : [];
+
+                                      const primaryCassette = cassetteList[0];
+                                      const cassetteCount = cassetteList.length;
+
+                                      if (!primaryCassette) {
+                                        return (
+                                          <>
+                                            <p className="font-mono text-xs font-medium text-gray-500 dark:text-slate-400">
+                                              N/A
+                                            </p>
+                                          </>
+                                        );
+                                      }
+
+                                      return (
+                                        <>
+                                          <p className="font-mono text-xs font-medium text-gray-900 dark:text-slate-100 truncate">
+                                            {primaryCassette.serialNumber}
+                                          </p>
+                                          <p className="text-[10px] text-gray-500 dark:text-slate-400 truncate">
+                                            {primaryCassette.cassetteType?.typeCode || 'N/A'}
+                                            {cassetteCount > 1 && ` • ${cassetteCount} kaset`}
+                                          </p>
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                               </td>
@@ -639,7 +681,7 @@ export default function TicketsPage() {
                                 </div>
                               </td>
                               <td className="p-3 text-center">
-                                <Link 
+                                <Link
                                   href={`/tickets/${ticket.id}`}
                                   onClick={() => markTicketAsViewed(ticket.id)}
                                 >
@@ -657,32 +699,32 @@ export default function TicketsPage() {
                 </div>
               )}
 
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-slate-700">
-                      <p className="text-sm text-gray-600 dark:text-slate-400">
-                        Halaman <span className="font-medium text-gray-900 dark:text-slate-100">{currentPage}</span> dari <span className="font-medium text-gray-900 dark:text-slate-100">{totalPages}</span> • Total <span className="font-medium text-gray-900 dark:text-slate-100">{total}</span> RO
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                          disabled={currentPage === 1}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                          disabled={currentPage === totalPages}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-slate-700">
+                  <p className="text-sm text-gray-600 dark:text-slate-400">
+                    Halaman <span className="font-medium text-gray-900 dark:text-slate-100">{currentPage}</span> dari <span className="font-medium text-gray-900 dark:text-slate-100">{totalPages}</span> • Total <span className="font-medium text-gray-900 dark:text-slate-100">{total}</span> RO
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -691,6 +733,13 @@ export default function TicketsPage() {
         {/* PM Tasks Tab - DISABLED TEMPORARILY */}
 
         <TabsContent value="replacement" className="mt-0">
+          {/* Auto-refresh indicator */}
+          {isFetching && !loading && (
+            <div className="mb-2 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Memperbarui data...</span>
+            </div>
+          )}
           {/* Replacement Request Status Cards */}
           <div className="grid grid-cols-4 md:grid-cols-6 gap-2 mb-4">
             {[
@@ -698,7 +747,7 @@ export default function TicketsPage() {
               { key: 'IN_DELIVERY', label: 'Kirim', count: replacementStatusSummary.inDelivery, color: 'cyan', icon: Package },
               { key: 'RECEIVED', label: 'Terima', count: replacementStatusSummary.received, color: 'blue', icon: Inbox },
               { key: 'IN_PROGRESS', label: 'Repair', count: replacementStatusSummary.inProgress, color: 'yellow', icon: Wrench },
-              { key: 'RESOLVED', label: 'Selesai', count: replacementStatusSummary.resolved, color: 'green', icon: CheckCircle2 },
+              { key: 'RESOLVED', label: 'Ready for Pickup', count: replacementStatusSummary.resolved, color: 'green', icon: CheckCircle2 },
               // CLOSED tickets removed from active replacement requests view - they should only appear in history
             ].map(({ key, label, count, color, icon: Icon }) => {
               const isSelected = selectedStatus === key;
@@ -727,11 +776,10 @@ export default function TicketsPage() {
                 <button
                   key={key}
                   onClick={() => setSelectedStatus(selectedStatus === key ? 'ALL' : key)}
-                  className={`p-3 rounded-lg border-2 transition-all text-left ${
-                    isSelected
-                      ? `${colorClasses[color as keyof typeof colorClasses]} shadow-md`
-                      : `${colorClasses[color as keyof typeof colorClasses]} bg-white dark:bg-slate-800`
-                  }`}
+                  className={`p-3 rounded-lg border-2 transition-all text-left ${isSelected
+                    ? `${colorClasses[color as keyof typeof colorClasses]} shadow-md`
+                    : `${colorClasses[color as keyof typeof colorClasses]} bg-white dark:bg-slate-800`
+                    }`}
                 >
                   <Icon className={`h-4 w-4 ${iconColorClasses[color as keyof typeof iconColorClasses]} mb-1`} />
                   <p className="text-xs text-gray-600 dark:text-slate-400 font-medium">{label}</p>
@@ -820,7 +868,7 @@ export default function TicketsPage() {
                           const isNew = !isTicketViewed(ticket.id);
                           // Get cassettes with replacement request
                           const replacementCassettes = ticket.cassetteDetails?.filter((d: any) => d.requestReplacement === true) || [];
-                          
+
                           return (
                             <tr key={ticket.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/30 transition-colors">
                               <td className="p-3">
@@ -909,7 +957,7 @@ export default function TicketsPage() {
                                 </div>
                               </td>
                               <td className="p-3 text-center">
-                                <Link 
+                                <Link
                                   href={`/tickets/${ticket.id}`}
                                   onClick={() => markTicketAsViewed(ticket.id)}
                                 >
@@ -958,6 +1006,14 @@ export default function TicketsPage() {
         </TabsContent>
       </Tabs>
     </PageLayout>
+  );
+}
+
+export default function TicketsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-12 w-12 animate-spin text-[#2563EB]" /></div>}>
+      <TicketsPageContent />
+    </Suspense>
   );
 }
 

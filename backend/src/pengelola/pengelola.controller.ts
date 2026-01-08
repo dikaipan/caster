@@ -21,7 +21,7 @@ import { Roles, AllowUserTypes, UserType } from '../common/decorators/roles.deco
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class PengelolaController {
-  constructor(private readonly pengelolaService: PengelolaService) {}
+  constructor(private readonly pengelolaService: PengelolaService) { }
 
   @Get()
   @ApiOperation({ summary: 'Get all pengelola' })
@@ -51,8 +51,8 @@ export class PengelolaController {
   @AllowUserTypes(UserType.HITACHI)
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Create new pengelola (Super Admin only)' })
-  create(@Body() createPengelolaDto: CreatePengelolaDto) {
-    return this.pengelolaService.create(createPengelolaDto);
+  create(@Body() createPengelolaDto: CreatePengelolaDto, @Request() req) {
+    return this.pengelolaService.create(createPengelolaDto, req.user.id, req.user.userType);
   }
 
   @Post(':id/users')

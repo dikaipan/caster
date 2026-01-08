@@ -64,51 +64,51 @@ async function analyzeCSVFile(csvFilePath?: string) {
     for (const record of records) {
       // Check if this row has SN Mesin (try different possible column names)
       const machineSN = String(
-        record['SN Mesin'] || 
-        record['SN_Mesin'] || 
-        record['SNMesin'] || 
+        record['SN Mesin'] ||
+        record['SN_Mesin'] ||
+        record['SNMesin'] ||
         record['SN MESIN'] ||
         record['sn_mesin'] ||
         record['snMesin'] ||
         ''
       ).trim();
-      
+
       if (machineSN) {
         // New machine found, update current
         currentMachineSN = machineSN;
       }
-      
+
       // Skip if we don't have a current machine SN yet
       if (!currentMachineSN) continue;
-      
+
       // Skip if this row doesn't have any cassette data
       const mainCassette = String(
-        record['SN Kaset'] || 
-        record['SN_Kaset'] || 
-        record['SNKaset'] || 
+        record['SN Kaset'] ||
+        record['SN_Kaset'] ||
+        record['SNKaset'] ||
         record['SN KASET'] ||
         record['sn_kaset'] ||
         record['snKaset'] ||
         ''
       ).trim();
-      
+
       const backupCassette = String(
-        record['SN Kaset Cadangan'] || 
-        record['SN_Kaset_Cadangan'] || 
-        record['SNKasetCadangan'] || 
+        record['SN Kaset Cadangan'] ||
+        record['SN_Kaset_Cadangan'] ||
+        record['SNKasetCadangan'] ||
         record['SN KASET CADANGAN'] ||
         record['sn_kaset_cadangan'] ||
         record['snKasetCadangan'] ||
         ''
       ).trim();
-      
+
       if (!mainCassette && !backupCassette) continue;
-      
+
       // Add SN Mesin to record if it's missing (for grouping)
       if (!record['SN Mesin'] && !record['SN_Mesin'] && !record['SNMesin']) {
         record['SN Mesin'] = currentMachineSN;
       }
-      
+
       if (!machineGroups.has(currentMachineSN)) {
         machineGroups.set(currentMachineSN, []);
       }
@@ -129,28 +129,28 @@ async function analyzeCSVFile(csvFilePath?: string) {
     }> = [];
     const machinesWithIssues: typeof analyses = [];
 
-    for (const [machineSN, records] of machineGroups.entries()) {
+    for (const [machineSN, records] of Array.from(machineGroups.entries())) {
       let mainCassettes = 0;
       let backupCassettes = 0;
 
       for (const record of records) {
         const main = String(
-          record['SN Kaset'] || 
-          record['SN_Kaset'] || 
-          record['SNKaset'] || 
+          record['SN Kaset'] ||
+          record['SN_Kaset'] ||
+          record['SNKaset'] ||
           record['SN KASET'] ||
           record['sn_kaset'] ||
           ''
         ).trim();
         const backup = String(
-          record['SN Kaset Cadangan'] || 
-          record['SN_Kaset_Cadangan'] || 
-          record['SNKasetCadangan'] || 
+          record['SN Kaset Cadangan'] ||
+          record['SN_Kaset_Cadangan'] ||
+          record['SNKasetCadangan'] ||
           record['SN KASET CADANGAN'] ||
           record['sn_kaset_cadangan'] ||
           ''
         ).trim();
-        
+
         if (main) mainCassettes++;
         if (backup) backupCassettes++;
       }

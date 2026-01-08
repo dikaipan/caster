@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsEmail, IsOptional, IsEnum } from 'class-validator';
 import { HitachiUserRole, HitachiUserDepartment, OrganizationStatus } from '@prisma/client';
+import { IsStrongPassword } from '../../common/validators/password.validator';
 
 export class UpdateHitachiUserDto {
   @ApiPropertyOptional({ example: 'rcstaff1' })
@@ -13,9 +14,13 @@ export class UpdateHitachiUserDto {
   @IsOptional()
   email?: string;
 
-  @ApiPropertyOptional({ example: 'password123' })
+  @ApiPropertyOptional({ 
+    example: 'SecurePass123!',
+    description: 'Password must be at least 8 characters with uppercase, lowercase, number, and special character. Only validated if provided.'
+  })
   @IsString()
   @IsOptional()
+  @IsStrongPassword()
   password?: string;
 
   @ApiPropertyOptional({ example: 'John Doe' })

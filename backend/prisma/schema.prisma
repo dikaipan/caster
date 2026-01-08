@@ -8,21 +8,24 @@ datasource db {
 }
 
 model CustomerBank {
-  id                   String                    @id @default(uuid()) @db.Char(36)
-  bankCode             String                    @unique @map("bank_code") @db.VarChar(20)
-  bankName             String                    @map("bank_name") @db.VarChar(255)
-  status               OrganizationStatus        @default(ACTIVE)
-  useMachines          Boolean                   @default(true) @map("use_machines") // Apakah bank ini menggunakan mesin? (BNI=true, BRI=false)
-  primaryContactName   String?                   @map("primary_contact_name") @db.VarChar(255)
-  primaryContactEmail  String?                   @map("primary_contact_email") @db.VarChar(255)
-  primaryContactPhone  String?                   @map("primary_contact_phone") @db.VarChar(50)
-  createdAt            DateTime                  @default(now()) @map("created_at")
-  updatedAt            DateTime                  @updatedAt @map("updated_at")
-  pengelolaAssignments BankPengelolaAssignment[]
-  cassettes            Cassette[]
-  machines             Machine[]
+  id                     String                    @id @default(uuid()) @db.Char(36)
+  bankCode               String                    @unique @map("bank_code") @db.VarChar(50)
+  bankName               String                    @map("bank_name") @db.VarChar(255)
+  status                 OrganizationStatus        @default(ACTIVE)
+  primaryContactName     String?                   @map("primary_contact_name") @db.VarChar(255)
+  primaryContactEmail    String?                   @map("primary_contact_email") @db.VarChar(255)
+  primaryContactPhone    String?                   @map("primary_contact_phone") @db.VarChar(50)
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+  useMachines            Boolean                   @default(true) @map("use_machines")
+  pengelolaAssignments   BankPengelolaAssignment[]
+  cassettes              Cassette[]
+  machines               Machine[]
   warrantyConfigurations WarrantyConfiguration[]
+  users                  BankUser[]
 
+  @@index([bankName])
+  @@index([primaryContactEmail])
   @@map("customers_banks")
 }
 
@@ -47,6 +50,7 @@ model Pengelola {
   machines                   Machine[]
   users                      PengelolaUser[]
 
+  @@index([companyName])
   @@map("pengelola")
 }
 
@@ -58,7 +62,7 @@ model BankPengelolaAssignment {
   contractStartDate      DateTime?          @map("contract_start_date") @db.Date
   contractEndDate        DateTime?          @map("contract_end_date") @db.Date
   serviceScope           String?            @map("service_scope")
-  assignedBranches       Json?              @map("assigned_branches")
+  assignedBranches       String?            @map("assigned_branches") @db.LongText
   slaResponseTimeHours   Int?               @map("sla_response_time_hours")
   slaResolutionTimeHours Int?               @map("sla_resolution_time_hours")
   status                 OrganizationStatus @default(ACTIVE)
@@ -69,68 +73,112 @@ model BankPengelolaAssignment {
   pengelola              Pengelola          @relation(fields: [pengelolaId], references: [id], onDelete: Cascade)
 
   @@unique([customerBankId, pengelolaId])
+  @@index([customerBankId])
+  @@index([pengelolaId])
+  @@index([status])
+  @@index([customerBankId, status])
   @@map("bank_pengelola_assignments")
 }
 
 model PengelolaUser {
-  id                 String                  @id @default(uuid()) @db.Char(36)
-  pengelolaId        String                  @map("pengelola_id") @db.Char(36)
-  username           String                  @unique @db.VarChar(100)
-  email              String                  @unique @db.VarChar(255)
-  passwordHash       String                  @map("password_hash") @db.VarChar(255)
-  fullName           String                  @map("full_name") @db.VarChar(255)
-  phone              String?                 @db.VarChar(50)
-  whatsappNumber     String?                 @map("whatsapp_number") @db.VarChar(50)
-  role               PengelolaUserRole       @default(TECHNICIAN)
-  employeeId         String?                 @map("employee_id") @db.VarChar(100)
-  canCreateTickets   Boolean                 @default(true) @map("can_create_tickets")
-  canCloseTickets    Boolean                 @default(false) @map("can_close_tickets")
-  canManageMachines  Boolean                 @default(false) @map("can_manage_machines")
-  assignedBranches   Json?                   @map("assigned_branches")
-  status             OrganizationStatus      @default(ACTIVE)
-  lastLogin          DateTime?               @map("last_login")
-  createdAt          DateTime                @default(now()) @map("created_at")
-  updatedAt          DateTime                @updatedAt @map("updated_at")
-  cassetteDeliveries CassetteDelivery[]
-  receivedReturns    CassetteReturn[]        @relation("ReturnReceiver")
-  pengelolaPickupConfirmations CassetteReturn[] @relation("PengelolaPickupConfirmer")
-  problemTickets     ProblemTicket[]
-  requestedPMs       PreventiveMaintenance[] @relation("PMRequesterPengelola")
-  pengelola          Pengelola               @relation(fields: [pengelolaId], references: [id], onDelete: Cascade)
+  id                   String                  @id @default(uuid()) @db.Char(36)
+  pengelolaId          String                  @map("pengelola_id") @db.Char(36)
+  username             String                  @unique @db.VarChar(100)
+  email                String                  @unique @db.VarChar(255)
+  passwordHash         String                  @map("password_hash") @db.VarChar(255)
+  fullName             String                  @map("full_name") @db.VarChar(255)
+  phone                String?                 @db.VarChar(50)
+  whatsappNumber       String?                 @map("whatsapp_number") @db.VarChar(50)
+  role                 PengelolaUserRole       @default(SUPERVISOR)
+  employeeId           String?                 @map("employee_id") @db.VarChar(100)
+  canCreateTickets     Boolean                 @default(true) @map("can_create_tickets")
+  canCloseTickets      Boolean                 @default(false) @map("can_close_tickets")
+  canManageMachines    Boolean                 @default(false) @map("can_manage_machines")
+  assignedBranches     String?                 @map("assigned_branches") @db.LongText
+  status               OrganizationStatus      @default(ACTIVE)
+  lastLogin            DateTime?               @map("last_login")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
+  cassetteDeliveries   CassetteDelivery[]
+  receivedReturns      CassetteReturn[]        @relation("ReturnReceiver")
+  pengelola            Pengelola               @relation(fields: [pengelolaId], references: [id], onDelete: Cascade)
+  requestedPMs         PreventiveMaintenance[] @relation("PMRequesterPengelola")
+  problemTickets       ProblemTicket[]
+  twoFactorSecret      String?                 @map("two_factor_secret") @db.VarChar(255)
+  twoFactorEnabled     Boolean                 @default(false) @map("two_factor_enabled")
+  twoFactorBackupCodes String?                 @map("two_factor_backup_codes") @db.Text
 
+  @@index([pengelolaId])
+  @@index([status])
+  @@index([role])
+  @@index([pengelolaId, status])
+  @@index([fullName])
   @@map("pengelola_users")
 }
 
 model HitachiUser {
-  id                 String                  @id @default(uuid()) @db.Char(36)
-  username           String                  @unique @db.VarChar(100)
-  email              String                  @unique @db.VarChar(255)
-  passwordHash       String                  @map("password_hash") @db.VarChar(255)
-  fullName           String                  @map("full_name") @db.VarChar(255)
-  role               HitachiUserRole         @default(RC_STAFF)
-  department         HitachiUserDepartment   @default(REPAIR_CENTER)
-  status             OrganizationStatus      @default(ACTIVE)
-  lastLogin          DateTime?               @map("last_login")
-  createdAt          DateTime                @default(now()) @map("created_at")
-  updatedAt          DateTime                @updatedAt @map("updated_at")
-  receivedDeliveries CassetteDelivery[]      @relation("DeliveryReceiver")
-  sentReturns        CassetteReturn[]        @relation("ReturnSender")
-  rcPickupConfirmations CassetteReturn[]    @relation("RCPickupConfirmer")
-  repairTickets      RepairTicket[]
-  assignedPMs        PreventiveMaintenance[] @relation("PMEngineer")
-  requestedPMs       PreventiveMaintenance[] @relation("PMRequesterHitachi")
-  cancelledPMs       PreventiveMaintenance[] @relation("PMCanceller")
-  completedPMs       PreventiveMaintenance[] @relation("PMCompleter")
-  deletedPMs         PreventiveMaintenance[] @relation("PMDeleter")
-  deletedRepairTickets RepairTicket[]       @relation("RepairTicketDeleter")
+  id                    String                  @id @default(uuid()) @db.Char(36)
+  username              String                  @unique @db.VarChar(100)
+  email                 String                  @unique @db.VarChar(255)
+  passwordHash          String                  @map("password_hash") @db.VarChar(255)
+  fullName              String                  @map("full_name") @db.VarChar(255)
+  role                  HitachiUserRole         @default(RC_STAFF)
+  department            HitachiUserDepartment   @default(REPAIR_CENTER)
+  status                OrganizationStatus      @default(ACTIVE)
+  lastLogin             DateTime?               @map("last_login")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  receivedDeliveries    CassetteDelivery[]      @relation("DeliveryReceiver")
+  rcPickupConfirmations CassetteReturn[]        @relation("RCPickupConfirmer")
+  sentReturns           CassetteReturn[]        @relation("ReturnSender")
+  assignedPMs           PreventiveMaintenance[] @relation("PMEngineer")
+  cancelledPMs          PreventiveMaintenance[] @relation("PMCanceller")
+  completedPMs          PreventiveMaintenance[] @relation("PMCompleter")
+  deletedPMs            PreventiveMaintenance[] @relation("PMDeleter")
+  requestedPMs          PreventiveMaintenance[] @relation("PMRequesterHitachi")
+  deletedRepairTickets  RepairTicket[]          @relation("RepairTicketDeleter")
+  repairTickets         RepairTicket[]
+  twoFactorSecret       String?                 @map("two_factor_secret") @db.VarChar(255)
+  twoFactorEnabled      Boolean                 @default(false) @map("two_factor_enabled")
+  twoFactorBackupCodes  String?                 @map("two_factor_backup_codes") @db.Text
 
+  @@index([status])
+  @@index([role])
+  @@index([fullName])
   @@map("hitachi_users")
+}
+
+model BankUser {
+  id                   String             @id @default(uuid()) @db.Char(36)
+  customerBankId       String             @map("customer_bank_id") @db.Char(36)
+  username             String             @unique @db.VarChar(100)
+  email                String             @unique @db.VarChar(255)
+  passwordHash         String             @map("password_hash") @db.VarChar(255)
+  fullName             String             @map("full_name") @db.VarChar(255)
+  phone                String?            @db.VarChar(50)
+  role                 BankUserRole       @default(VIEWER)
+  status               OrganizationStatus @default(ACTIVE)
+  lastLogin            DateTime?          @map("last_login")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  customerBank         CustomerBank       @relation(fields: [customerBankId], references: [id], onDelete: Cascade)
+  twoFactorSecret      String?            @map("two_factor_secret") @db.VarChar(255)
+  twoFactorEnabled     Boolean            @default(false) @map("two_factor_enabled")
+  twoFactorBackupCodes String?            @map("two_factor_backup_codes") @db.Text
+
+  @@index([customerBankId])
+  @@index([status])
+  @@index([username])
+  @@index([email])
+  @@index([customerBankId, status])
+  @@index([fullName])
+  @@map("bank_users")
 }
 
 model Machine {
   id                       String                     @id @default(uuid()) @db.Char(36)
   customerBankId           String                     @map("customer_bank_id") @db.Char(36)
-  pengelolaId              String                     @map("pengelola_id") @db.Char(36)
+  pengelolaId              String?                    @map("pengelola_id") @db.Char(36)
   machineCode              String                     @unique @map("machine_code") @db.VarChar(100)
   modelName                String                     @map("model_name") @db.VarChar(255)
   serialNumberManufacturer String                     @map("serial_number_manufacturer") @db.VarChar(255)
@@ -144,21 +192,23 @@ model Machine {
   notes                    String?
   createdAt                DateTime                   @default(now()) @map("created_at")
   updatedAt                DateTime                   @updatedAt @map("updated_at")
+  cassettes                Cassette[]
   identifierHistory        MachineIdentifierHistory[]
   customerBank             CustomerBank               @relation(fields: [customerBankId], references: [id])
-  pengelola                Pengelola                  @relation(fields: [pengelolaId], references: [id])
+  pengelola                Pengelola?                 @relation(fields: [pengelolaId], references: [id])
   problemTickets           ProblemTicket[]
-  cassettes                Cassette[]
 
-  @@index([customerBankId]) // Filter by bank
-  @@index([pengelolaId]) // Filter by pengelola
-  @@index([status]) // Filter by status
-  @@index([branchCode]) // Filter by branch
-  @@index([customerBankId, status]) // Composite: bank + status
-  @@index([pengelolaId, status]) // Composite: pengelola + status
-  @@index([createdAt]) // Sorting by date
-  @@index([serialNumberManufacturer]) // Search by serial number
-  @@index([machineCode]) // Search by machine code
+  @@index([customerBankId])
+  @@index([pengelolaId])
+  @@index([status])
+  @@index([branchCode])
+  @@index([customerBankId, status])
+  @@index([pengelolaId, status])
+  @@index([createdAt])
+  @@index([serialNumberManufacturer])
+  @@index([machineCode])
+  @@index([city])
+  @@index([currentWsid])
   @@map("machines")
 }
 
@@ -173,13 +223,17 @@ model MachineIdentifierHistory {
   changedAt      DateTime       @default(now()) @map("changed_at")
   machine        Machine        @relation(fields: [machineId], references: [id], onDelete: Cascade)
 
+  @@index([machineId])
+  @@index([identifierType])
+  @@index([changedAt])
+  @@index([machineId, changedAt])
   @@map("machine_identifier_history")
 }
 
 model CassetteType {
   id          String           @id @default(uuid()) @db.Char(36)
   typeCode    CassetteTypeCode @unique @map("type_code")
-  machineType String           @map("machine_type") @db.VarChar(100) // SR or VS - machine compatibility
+  machineType String           @map("machine_type") @db.VarChar(100)
   description String?
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
@@ -197,8 +251,9 @@ model Cassette {
   usageType             CassetteUsageType?     @map("usage_type")
   machineId             String?                @map("machine_id") @db.Char(36)
   notes                 String?
-  replacedCassetteId    String?                @map("replaced_cassette_id") @db.Char(36) // NEW: Track replacement - kaset baru menggantikan kaset ini
-  replacementTicketId   String?                @map("replacement_ticket_id") @db.Char(36) // NEW: Link to replacement ticket
+  replacedCassetteId    String?                @map("replaced_cassette_id") @db.Char(36)
+  replacementTicketId   String?                @map("replacement_ticket_id") @db.Char(36)
+  markedBrokenBy        String?                @map("marked_broken_by") @db.Char(36)
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @updatedAt @map("updated_at")
   deliveries            CassetteDelivery[]
@@ -206,120 +261,129 @@ model Cassette {
   cassetteType          CassetteType           @relation(fields: [cassetteTypeId], references: [id])
   customerBank          CustomerBank           @relation(fields: [customerBankId], references: [id])
   machine               Machine?               @relation(fields: [machineId], references: [id])
+  replacedCassette      Cassette?              @relation("CassetteReplacement", fields: [replacedCassetteId], references: [id])
+  replacementFor        Cassette[]             @relation("CassetteReplacement")
+  replacementTicket     ProblemTicket?         @relation("ReplacementTicket", fields: [replacementTicketId], references: [id])
+  pmCassetteDetails     PMCassetteDetail[]
   problemTickets        ProblemTicket[]        @relation("CassetteProblemTickets")
   repairTickets         RepairTicket[]
-  ticketCassetteDetails TicketCassetteDetail[] // NEW: Details when included in multi-cassette tickets
-  pmCassetteDetails     PMCassetteDetail[] // NEW: Details when included in preventive maintenance
-  replacedCassette      Cassette?              @relation("CassetteReplacement", fields: [replacedCassetteId], references: [id]) // NEW: Kaset yang diganti
-  replacementFor        Cassette[]             @relation("CassetteReplacement") // NEW: Kaset-kaset yang menggantikan kaset ini
-  replacementTicket     ProblemTicket?         @relation("ReplacementTicket", fields: [replacementTicketId], references: [id]) // NEW: Ticket replacement
+  ticketCassetteDetails TicketCassetteDetail[]
 
-  // Indexes for performance with large datasets (10k+ cassettes)
-  @@index([customerBankId]) // Filter by bank
-  @@index([machineId]) // Filter by machine
-  @@index([status]) // Filter by status
-  @@index([cassetteTypeId]) // Filter by type
-  @@index([customerBankId, status]) // Composite: bank + status (for filtering cassettes by bank and status)
-  @@index([machineId, status]) // Composite: machine + status
-  @@index([createdAt]) // Sorting by date
-  @@index([replacedCassetteId]) // NEW: Find replacement cassettes
-  @@index([replacementTicketId]) // NEW: Find cassettes by replacement ticket
+  @@index([customerBankId])
+  @@index([machineId])
+  @@index([status])
+  @@index([cassetteTypeId])
+  @@index([customerBankId, status])
+  @@index([machineId, status])
+  @@index([createdAt])
+  @@index([replacedCassetteId])
+  @@index([replacementTicketId])
   @@map("cassettes")
 }
 
 model RepairTicket {
-  id                String                    @id @default(uuid()) @db.Char(36)
-  cassetteId        String                    @map("cassette_id") @db.Char(36)
-  reportedIssue     String                    @map("reported_issue")
-  receivedAtRc      DateTime                  @map("received_at_rc")
-  repairedBy        String?                   @map("repaired_by") @db.Char(36)
-  repairActionTaken String?                   @map("repair_action_taken")
-  partsReplaced     Json?                     @map("parts_replaced")
-  qcPassed          Boolean?                  @map("qc_passed")
-  completedAt       DateTime?                 @map("completed_at")
-  status            RepairTicketStatus        @default(RECEIVED)
-  type              PreventiveMaintenanceType @default(ROUTINE)
-  notes             String?
-  // Warranty fields
-  warrantyType         WarrantyType?          @map("warranty_type")
-  warrantyPeriodDays   Int?                   @map("warranty_period_days")
-  warrantyStartDate    DateTime?              @map("warranty_start_date")
-  warrantyEndDate      DateTime?              @map("warranty_end_date")
-  warrantyClaimed      Boolean                @default(false) @map("warranty_claimed")
-  warrantyClaimCount   Int                    @default(0) @map("warranty_claim_count")
-  isWarrantyRepair     Boolean                @default(false) @map("is_warranty_repair")
-  originalRepairId     String?                @map("original_repair_id") @db.Char(36)
-  warrantyClaimReason  String?                @map("warranty_claim_reason")
-  deletedAt            DateTime?               @map("deleted_at") // Soft delete timestamp
-  deletedBy            String?                 @map("deleted_by") @db.Char(36) // User who deleted the repair ticket
-  createdAt         DateTime                  @default(now()) @map("created_at")
-  updatedAt         DateTime                  @updatedAt @map("updated_at")
-  cassette          Cassette                  @relation(fields: [cassetteId], references: [id])
-  repairer          HitachiUser?              @relation(fields: [repairedBy], references: [id])
-  originalRepair    RepairTicket?             @relation("WarrantyClaim", fields: [originalRepairId], references: [id])
-  warrantyClaims    RepairTicket[]            @relation("WarrantyClaim")
-  deleter            HitachiUser?              @relation("RepairTicketDeleter", fields: [deletedBy], references: [id])
+  id                  String                    @id @default(uuid()) @db.Char(36)
+  cassetteId          String                    @map("cassette_id") @db.Char(36)
+  soTicketId          String?                   @map("so_ticket_id") @db.Char(36)
+  reportedIssue       String                    @map("reported_issue")
+  receivedAtRc        DateTime                  @map("received_at_rc")
+  repairedBy          String?                   @map("repaired_by") @db.Char(36)
+  repairActionTaken   String?                   @map("repair_action_taken")
+  partsReplaced       String?                   @map("parts_replaced") @db.LongText
+  qcPassed            Boolean?                  @map("qc_passed")
+  completedAt         DateTime?                 @map("completed_at")
+  diagnosingStartAt   DateTime?                 @map("diagnosing_start_at")
+  repairStartAt       DateTime?                 @map("repair_start_at")
+  otherPartsReplaced  String?                   @map("other_parts_replaced") @db.LongText
+  status              RepairTicketStatus        @default(RECEIVED)
+  type                PreventiveMaintenanceType @default(ROUTINE)
+  notes               String?
+  warrantyType        WarrantyType?             @map("warranty_type")
+  warrantyPeriodDays  Int?                      @map("warranty_period_days")
+  warrantyStartDate   DateTime?                 @map("warranty_start_date")
+  warrantyEndDate     DateTime?                 @map("warranty_end_date")
+  warrantyClaimed     Boolean                   @default(false) @map("warranty_claimed")
+  warrantyClaimCount  Int                       @default(0) @map("warranty_claim_count")
+  isWarrantyRepair    Boolean                   @default(false) @map("is_warranty_repair")
+  originalRepairId    String?                   @map("original_repair_id") @db.Char(36)
+  warrantyClaimReason String?                   @map("warranty_claim_reason")
+  deletedAt           DateTime?                 @map("deleted_at")
+  deletedBy           String?                   @map("deleted_by") @db.Char(36)
+  createdAt           DateTime                  @default(now()) @map("created_at")
+  updatedAt           DateTime                  @updatedAt @map("updated_at")
+  cassette            Cassette                  @relation(fields: [cassetteId], references: [id])
+  soTicket            ProblemTicket?            @relation("RepairToSOTicket", fields: [soTicketId], references: [id])
+  deleter             HitachiUser?              @relation("RepairTicketDeleter", fields: [deletedBy], references: [id])
+  originalRepair      RepairTicket?             @relation("WarrantyClaim", fields: [originalRepairId], references: [id])
+  warrantyClaims      RepairTicket[]            @relation("WarrantyClaim")
+  repairer            HitachiUser?              @relation(fields: [repairedBy], references: [id])
 
-  // Indexes for performance
-  @@index([cassetteId, status]) // Cassette repair history
-  @@index([receivedAtRc]) // Date sorting
-  @@index([status]) // Filter by status
-  @@index([repairedBy]) // Filter by repairer
-  @@index([qcPassed]) // Filter by QC status
-  @@index([completedAt]) // Date filtering
-  @@index([createdAt]) // Sorting by creation date
-  @@index([status, receivedAtRc]) // Composite: status + date
-  @@index([warrantyType]) // Filter by warranty type
-  @@index([warrantyEndDate]) // Filter by warranty expiration
-  @@index([isWarrantyRepair]) // Filter warranty repairs
-  @@index([originalRepairId]) // Find warranty claims
-  @@index([deletedAt]) // Filter soft-deleted repair tickets
+  @@index([soTicketId])
+  @@index([cassetteId, status])
+  @@index([receivedAtRc])
+  @@index([status])
+  @@index([repairedBy])
+  @@index([qcPassed])
+  @@index([completedAt])
+  @@index([createdAt])
+  @@index([status, receivedAtRc])
+  @@index([warrantyType])
+  @@index([warrantyEndDate])
+  @@index([isWarrantyRepair])
+  @@index([originalRepairId])
+  @@index([deletedAt])
+  @@index([deletedBy], map: "repair_tickets_deleted_by_fkey")
   @@map("repair_tickets")
 }
 
 model ProblemTicket {
   id                   String                 @id @default(uuid()) @db.Char(36)
   ticketNumber         String                 @unique @map("ticket_number") @db.VarChar(50)
-  cassetteId           String?                @map("cassette_id") @db.Char(36) // Keep for backward compatibility (primary cassette)
+  cassetteId           String?                @map("cassette_id") @db.Char(36)
   machineId            String?                @map("machine_id") @db.Char(36)
   reportedBy           String                 @map("reported_by") @db.Char(36)
   title                String                 @db.VarChar(255)
   description          String
   priority             ProblemTicketPriority  @default(MEDIUM)
   status               ProblemTicketStatus    @default(OPEN)
-  affectedComponents   Json?                  @map("affected_components")
+  affectedComponents   String?                @map("affected_components") @db.LongText
   resolutionNotes      String?                @map("resolution_notes")
   wsid                 String?                @map("wsid") @db.VarChar(100)
   errorCode            String?                @map("error_code") @db.VarChar(50)
   deliveryMethod       String?                @map("delivery_method") @db.VarChar(50)
   courierService       String?                @map("courier_service") @db.VarChar(255)
   trackingNumber       String?                @map("tracking_number") @db.VarChar(100)
+  repairLocation       String?                @map("repair_location") @db.VarChar(50)
   reportedAt           DateTime               @default(now()) @map("reported_at")
   resolvedAt           DateTime?              @map("resolved_at")
   closedAt             DateTime?              @map("closed_at")
-  deletedAt            DateTime?              @map("deleted_at") // Soft delete timestamp
-  deletedBy            String?                @map("deleted_by") @db.Char(36) // User who deleted the ticket
+  deletedAt            DateTime?              @map("deleted_at")
+  deletedBy            String?                @map("deleted_by") @db.Char(36)
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
   cassetteDelivery     CassetteDelivery?
   cassetteReturn       CassetteReturn?
+  replacementCassettes Cassette[]             @relation("ReplacementTicket")
   cassette             Cassette?              @relation("CassetteProblemTickets", fields: [cassetteId], references: [id])
   machine              Machine?               @relation(fields: [machineId], references: [id])
   reporter             PengelolaUser          @relation(fields: [reportedBy], references: [id])
-  cassetteDetails      TicketCassetteDetail[] // NEW: Multiple cassettes per ticket
-  replacementCassettes Cassette[]             @relation("ReplacementTicket") // NEW: Cassettes created as replacement
+  cassetteDetails      TicketCassetteDetail[]
+  repairs              RepairTicket[]         @relation("RepairToSOTicket")
 
-  // Indexes for performance
-  @@index([cassetteId, status]) // Check active tickets by cassette
-  @@index([machineId, status]) // Machine tickets
-  @@index([reportedBy]) // User tickets
-  @@index([createdAt]) // Recent tickets
-  @@index([status]) // Filter by status
-  @@index([reportedAt]) // Date filtering
+  @@index([cassetteId, status])
+  @@index([machineId, status])
+  @@index([reportedBy])
+  @@index([createdAt])
+  @@index([status])
+  @@index([reportedAt])
+  @@index([deletedAt])
+  @@index([closedAt])
+  @@index([resolvedAt])
+  @@index([status, reportedAt])
+  @@index([reportedBy, status])
   @@map("problem_tickets")
 }
 
-// NEW MODEL: Junction table untuk detail per cassette dalam 1 ticket
 model TicketCassetteDetail {
   id                 String                @id @default(uuid()) @db.Char(36)
   ticketId           String                @map("ticket_id") @db.Char(36)
@@ -327,18 +391,20 @@ model TicketCassetteDetail {
   title              String                @db.VarChar(255)
   description        String
   priority           ProblemTicketPriority @default(MEDIUM)
-  affectedComponents Json?                 @map("affected_components")
+  affectedComponents String?               @map("affected_components") @db.LongText
   wsid               String?               @map("wsid") @db.VarChar(100)
   errorCode          String?               @map("error_code") @db.VarChar(50)
   requestReplacement Boolean               @default(false) @map("request_replacement")
   replacementReason  String?               @map("replacement_reason")
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
-  ticket             ProblemTicket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   cassette           Cassette              @relation(fields: [cassetteId], references: [id])
+  ticket             ProblemTicket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
-  @@unique([ticketId, cassetteId]) // Prevent duplicate cassette in same ticket
-  @@index([cassetteId]) // Find tickets by cassette
+  @@unique([ticketId, cassetteId])
+  @@index([ticketId])
+  @@index([cassetteId])
+  @@index([ticketId, cassetteId])
   @@map("ticket_cassette_details")
 }
 
@@ -368,6 +434,13 @@ model CassetteDelivery {
   sender             PengelolaUser @relation(fields: [sentBy], references: [id])
   ticket             ProblemTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
+  @@index([ticketId])
+  @@index([cassetteId])
+  @@index([sentBy])
+  @@index([receivedBy])
+  @@index([shippedDate])
+  @@index([receivedAtRc])
+  @@index([cassetteId, shippedDate])
   @@map("cassette_deliveries")
 }
 
@@ -383,24 +456,25 @@ model CassetteReturn {
   receivedAtPengelola DateTime?      @map("received_at_pengelola")
   receivedBy          String?        @map("received_by") @db.Char(36)
   notes               String?
-  signature           String?        @map("signature") @db.Text // Digital signature (base64 encoded image) - DEPRECATED: use rcSignature or pengelolaSignature
-  // RC Confirmation (RC staff confirms handover)
-  confirmedByRc       String?         @map("confirmed_by_rc") @db.Char(36)
-  rcSignature        String?        @map("rc_signature") @db.Text // RC staff signature (base64 encoded image)
-  rcConfirmedAt       DateTime?      @map("rc_confirmed_at")
-  // Pengelola Confirmation (Pengelola confirms receipt)
-  confirmedByPengelola String?       @map("confirmed_by_pengelola") @db.Char(36)
-  pengelolaSignature  String?        @map("pengelola_signature") @db.Text // Pengelola signature (base64 encoded image)
-  pengelolaConfirmedAt DateTime?     @map("pengelola_confirmed_at")
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
+  confirmedByRc       String?        @map("confirmed_by_rc") @db.Char(36)
+  rcConfirmedAt       DateTime?      @map("rc_confirmed_at")
+  rcSignature         String?        @map("rc_signature") @db.Text
   cassette            Cassette       @relation(fields: [cassetteId], references: [id])
+  rcConfirmer         HitachiUser?   @relation("RCPickupConfirmer", fields: [confirmedByRc], references: [id])
   receiver            PengelolaUser? @relation("ReturnReceiver", fields: [receivedBy], references: [id])
   sender              HitachiUser    @relation("ReturnSender", fields: [sentBy], references: [id])
-  rcConfirmer         HitachiUser?   @relation("RCPickupConfirmer", fields: [confirmedByRc], references: [id])
-  pengelolaConfirmer  PengelolaUser? @relation("PengelolaPickupConfirmer", fields: [confirmedByPengelola], references: [id])
   ticket              ProblemTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
+  @@index([ticketId])
+  @@index([cassetteId])
+  @@index([sentBy])
+  @@index([receivedBy])
+  @@index([shippedDate])
+  @@index([receivedAtPengelola])
+  @@index([cassetteId, shippedDate])
+  @@index([confirmedByRc], map: "cassette_returns_confirmed_by_rc_fkey")
   @@map("cassette_returns")
 }
 
@@ -411,23 +485,23 @@ model PreventiveMaintenance {
   location             PreventiveMaintenanceLocation @default(PENGELOLA_LOCATION)
   status               PreventiveMaintenanceStatus   @default(SCHEDULED)
   scheduledDate        DateTime                      @map("scheduled_date")
-  scheduledTime        String?                       @map("scheduled_time") @db.VarChar(10) // e.g., "09:00-12:00"
+  scheduledTime        String?                       @map("scheduled_time") @db.VarChar(10)
   actualStartDate      DateTime?                     @map("actual_start_date")
   actualEndDate        DateTime?                     @map("actual_end_date")
-  duration             Int? // Duration in minutes
+  duration             Int?
   title                String                        @db.VarChar(255)
   description          String?
-  checklist            Json? // Array of checklist items
-  findings             String? // Findings during PM
+  checklist            String?                       @db.LongText
+  findings             String?
   actionsTaken         String?                       @map("actions_taken")
-  partsReplaced        Json?                         @map("parts_replaced") // Array of parts
-  recommendations      String? // Recommendations for next PM
+  partsReplaced        String?                       @map("parts_replaced") @db.LongText
+  recommendations      String?
   nextPmDate           DateTime?                     @map("next_pm_date")
-  nextPmInterval       Int?                          @map("next_pm_interval") // Days until next PM
+  nextPmInterval       Int?                          @map("next_pm_interval")
   assignedEngineer     String?                       @map("assigned_engineer") @db.Char(36)
   requestedByPengelola String?                       @map("requested_by_pengelola") @db.Char(36)
   requestedByHitachi   String?                       @map("requested_by_hitachi") @db.Char(36)
-  requestedByType      String?                       @map("requested_by_type") @db.VarChar(20) // "PENGELOLA" or "HITACHI" or "BANK"
+  requestedByType      String?                       @map("requested_by_type") @db.VarChar(20)
   contactName          String?                       @map("contact_name") @db.VarChar(255)
   contactPhone         String?                       @map("contact_phone") @db.VarChar(50)
   locationAddress      String?                       @map("location_address")
@@ -440,52 +514,106 @@ model PreventiveMaintenance {
   cancelledAt          DateTime?                     @map("cancelled_at")
   completedBy          String?                       @map("completed_by") @db.Char(36)
   completedAt          DateTime?                     @map("completed_at")
-  deletedAt            DateTime?                     @map("deleted_at") // Soft delete timestamp
-  deletedBy            String?                       @map("deleted_by") @db.Char(36) // User who deleted the PM
+  deletedAt            DateTime?                     @map("deleted_at")
+  deletedBy            String?                       @map("deleted_by") @db.Char(36)
   createdAt            DateTime                      @default(now()) @map("created_at")
   updatedAt            DateTime                      @updatedAt @map("updated_at")
-  cassetteDetails      PMCassetteDetail[] // Multiple cassettes per PM
+  cassetteDetails      PMCassetteDetail[]
   engineer             HitachiUser?                  @relation("PMEngineer", fields: [assignedEngineer], references: [id])
-  requesterPengelola   PengelolaUser?                @relation("PMRequesterPengelola", fields: [requestedByPengelola], references: [id])
-  requesterHitachi     HitachiUser?                  @relation("PMRequesterHitachi", fields: [requestedByHitachi], references: [id])
   canceller            HitachiUser?                  @relation("PMCanceller", fields: [cancelledBy], references: [id])
   completer            HitachiUser?                  @relation("PMCompleter", fields: [completedBy], references: [id])
   deleter              HitachiUser?                  @relation("PMDeleter", fields: [deletedBy], references: [id])
+  requesterHitachi     HitachiUser?                  @relation("PMRequesterHitachi", fields: [requestedByHitachi], references: [id])
+  requesterPengelola   PengelolaUser?                @relation("PMRequesterPengelola", fields: [requestedByPengelola], references: [id])
 
-  @@index([status]) // Filter by status
-  @@index([scheduledDate]) // Date sorting and filtering
-  @@index([assignedEngineer]) // Filter by engineer
-  @@index([requestedByPengelola]) // Filter by pengelola requester
-  @@index([requestedByHitachi]) // Filter by hitachi requester
-  @@index([type]) // Filter by PM type
-  @@index([location]) // Filter by location
-  @@index([status, scheduledDate]) // Composite: status + date
-  @@index([createdAt]) // Sorting by creation date
-  @@index([pmNumber]) // Search by PM number
-  @@index([deletedAt]) // Filter soft-deleted PMs
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([assignedEngineer])
+  @@index([requestedByPengelola])
+  @@index([requestedByHitachi])
+  @@index([type])
+  @@index([location])
+  @@index([status, scheduledDate])
+  @@index([createdAt])
+  @@index([pmNumber])
+  @@index([deletedAt])
+  @@index([cancelledBy], map: "preventive_maintenances_cancelled_by_fkey")
+  @@index([completedBy], map: "preventive_maintenances_completed_by_fkey")
+  @@index([deletedBy], map: "preventive_maintenances_deleted_by_fkey")
   @@map("preventive_maintenances")
 }
 
-// Junction table untuk multiple cassettes dalam 1 PM
 model PMCassetteDetail {
   id            String                @id @default(uuid()) @db.Char(36)
   pmId          String                @map("pm_id") @db.Char(36)
   cassetteId    String                @map("cassette_id") @db.Char(36)
-  checklist     Json? // Per-cassette checklist
-  findings      String? // Per-cassette findings
-  actionsTaken  String?               @map("actions_taken") // Per-cassette actions
-  partsReplaced Json?                 @map("parts_replaced") // Per-cassette parts
-  status        String?               @db.VarChar(50) // "OK", "NEEDS_REPAIR", "REPLACED", etc.
+  checklist     String?               @db.LongText
+  findings      String?
+  actionsTaken  String?               @map("actions_taken")
+  partsReplaced String?               @map("parts_replaced") @db.LongText
+  status        String?               @db.VarChar(50)
   notes         String?
   createdAt     DateTime              @default(now()) @map("created_at")
   updatedAt     DateTime              @updatedAt @map("updated_at")
-  pm            PreventiveMaintenance @relation(fields: [pmId], references: [id], onDelete: Cascade)
   cassette      Cassette              @relation(fields: [cassetteId], references: [id])
+  pm            PreventiveMaintenance @relation(fields: [pmId], references: [id], onDelete: Cascade)
 
-  @@unique([pmId, cassetteId]) // Prevent duplicate cassette in same PM
-  @@index([cassetteId, status]) // Active PM tasks by cassette
-  @@index([pmId]) // PM details lookup
+  @@unique([pmId, cassetteId])
+  @@index([cassetteId, status])
+  @@index([pmId])
   @@map("pm_cassette_details")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Char(36)
+  token     String    @unique @db.VarChar(500)
+  userId    String    @map("user_id") @db.Char(36)
+  userType  String    @map("user_type") @db.VarChar(50)
+  expiresAt DateTime  @map("expires_at")
+  revoked   Boolean   @default(false)
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, userType])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model WarrantyConfiguration {
+  id                    String       @id @default(uuid()) @db.Char(36)
+  customerBankId        String       @map("customer_bank_id") @db.Char(36)
+  warrantyType          WarrantyType @map("warranty_type")
+  warrantyPeriodDays    Int          @map("warranty_period_days")
+  maxWarrantyClaims     Int?         @default(1) @map("max_warranty_claims")
+  unlimitedClaims       Boolean      @default(false) @map("unlimited_claims")
+  warrantyExtensionDays Int?         @map("warranty_extension_days")
+  requiresApproval      Boolean      @default(false) @map("requires_approval")
+  autoApproveFirstClaim Boolean      @default(true) @map("auto_approve_first_claim")
+  freeRepairOnWarranty  Boolean      @default(false) @map("free_repair_on_warranty")
+  notes                 String?
+  isActive              Boolean      @default(true) @map("is_active")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  customerBank          CustomerBank @relation(fields: [customerBankId], references: [id], onDelete: Cascade)
+
+  @@unique([customerBankId, warrantyType])
+  @@index([customerBankId])
+  @@index([warrantyType])
+  @@index([isActive])
+  @@map("warranty_configurations")
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid()) @db.Char(36)
+  key         String   @unique @db.VarChar(100)
+  value       String   @db.LongText
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_configs")
 }
 
 enum OrganizationStatus {
@@ -502,7 +630,6 @@ enum MachineStatus {
 }
 
 enum PengelolaUserRole {
-  TECHNICIAN
   SUPERVISOR
   ADMIN
 }
@@ -517,6 +644,10 @@ enum HitachiUserDepartment {
   MANAGEMENT
   REPAIR_CENTER
   LOGISTICS
+}
+
+enum BankUserRole {
+  VIEWER
 }
 
 enum CassetteTypeCode {
@@ -550,11 +681,12 @@ enum RepairTicketStatus {
 
 enum ProblemTicketStatus {
   OPEN
+  PENDING_APPROVAL
+  APPROVED_ON_SITE
   IN_DELIVERY
   RECEIVED
   IN_PROGRESS
   RESOLVED
-  RETURN_SHIPPED
   CLOSED
 }
 
@@ -600,52 +732,25 @@ enum WarrantyType {
   OUT_WARRANTY
 }
 
-// Security: Refresh Token for JWT session management
-model RefreshToken {
-  id        String   @id @default(uuid()) @db.Char(36)
-  token     String   @unique @db.VarChar(500)
-  userId    String   @map("user_id") @db.Char(36)
-  userType  String   @map("user_type") @db.VarChar(50) // 'HITACHI' or 'PENGELOLA'
-  expiresAt DateTime @map("expires_at")
-  revoked   Boolean  @default(false)
-  revokedAt DateTime? @map("revoked_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Char(36)
+  entityType String   @map("entity_type") @db.VarChar(50)
+  entityId   String   @map("entity_id") @db.Char(36)
+  action     String   @db.VarChar(50)
+  userId     String   @map("user_id") @db.Char(36)
+  userType   String   @map("user_type") @db.VarChar(20)
+  oldValue   String?  @map("old_value") @db.LongText
+  newValue   String?  @map("new_value") @db.LongText
+  changes    String?  @db.LongText
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  metadata   String?  @db.LongText
+  createdAt  DateTime @default(now()) @map("created_at")
 
+  @@index([entityType, entityId])
   @@index([userId, userType])
-  @@index([token])
-  @@index([expiresAt])
-  @@map("refresh_tokens")
+  @@index([action])
+  @@index([createdAt])
+  @@index([entityType, action, createdAt])
+  @@map("audit_logs")
 }
-
-model WarrantyConfiguration {
-  id                    String        @id @default(uuid()) @db.Char(36)
-  customerBankId        String        @map("customer_bank_id") @db.Char(36)
-  warrantyType          WarrantyType  @map("warranty_type")
-  
-  // Konfigurasi periode garansi (dalam hari)
-  warrantyPeriodDays    Int           @map("warranty_period_days") // Default: 30, 60, 90, dll
-  maxWarrantyClaims      Int?          @default(1) @map("max_warranty_claims") // Maksimal claim per repair (null jika unlimited)
-  unlimitedClaims        Boolean       @default(false) @map("unlimited_claims") // Unlimited claims selama warranty aktif
-  warrantyExtensionDays Int?          @map("warranty_extension_days") // Extension jika claim garansi
-  
-  // Kondisi khusus
-  requiresApproval      Boolean       @default(false) @map("requires_approval") // Perlu approval untuk claim
-  autoApproveFirstClaim Boolean       @default(true) @map("auto_approve_first_claim")
-  freeRepairOnWarranty  Boolean       @default(false) @map("free_repair_on_warranty") // Repair gratis jika dalam garansi
-  
-  // Notes dan metadata
-  notes                 String?
-  isActive              Boolean       @default(true) @map("is_active")
-  createdAt             DateTime      @default(now()) @map("created_at")
-  updatedAt             DateTime      @updatedAt @map("updated_at")
-  
-  customerBank          CustomerBank  @relation(fields: [customerBankId], references: [id], onDelete: Cascade)
-  
-  @@unique([customerBankId, warrantyType])
-  @@index([customerBankId])
-  @@index([warrantyType])
-  @@index([isActive])
-  @@map("warranty_configurations")
-}
-
